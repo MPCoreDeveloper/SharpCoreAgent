@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SharpCoreAgent.Application</RootNamespace>
+    <AssemblyName>SharpCoreAgent.Application</AssemblyName>
+    <Description>The agent loop, prompt policy, budgets and the in-memory session aggregate. Speaks only to Domain ports.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+  </ItemGroup>
+
+  <!--
+    No PackageReference for Microsoft.Extensions.Logging.Abstractions: on net11.0 the assemblies come
+    from the shared framework (an explicit reference is pruned with NU1510). Logging goes through
+    LoggerMessage.Define delegates, so the [LoggerMessage] source generator is not needed either.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

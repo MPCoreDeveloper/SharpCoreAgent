@@ -1,0 +1,114 @@
+﻿using SharpCoreAgent.Application;
+using SharpCoreAgent.Domain;
+using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Model;
+using SharpCoreAgent.Infrastructure.Providers;
+
+namespace SharpCoreAgent.DependencyInjection;
+
+/// <summary>
+/// Everything a host decides before the agent exists: which model to talk to, where the tools may
+/// work, and how much the turn may spend.
+/// </summary>
+/// <remarks>
+/// The record is the single input of <see cref="ServiceCollectionExtensions.AddSharpCoreAgent(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{SharpCoreAgentOptions})"/>. It holds
+/// no credential: a provider is named by key, and the key's value is read from the environment at the
+/// moment a request is sent. That is what lets the CLI print this object, log it, or build it from
+/// command-line arguments without ever handling a secret.
+/// <para>
+/// Defaults match <c>contracts/cli.md</c> so a host that configures nothing still behaves like
+/// <c>sharpcoreagent run "…"</c> with no options.
+/// </para>
+/// </remarks>
+public sealed record SharpCoreAgentOptions
+{
+    /// <summary>Gets the provider key. Default <c>deepseek</c>.</summary>
+    public string Provider { get; init; } = ModelCatalog.DefaultProvider;
+
+    /// <summary>Gets the model identifier, or <see langword="null"/> for the provider's default.</summary>
+    public string? ModelId { get; init; }
+
+    /// <summary>Gets the directory the tools are confined to. Default the current directory.</summary>
+    public string WorkspaceRoot { get; init; } = Directory.GetCurrentDirectory();
+
+    /// <summary>Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.</summary>
+    public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;
+
+    /// <summary>Gets the per-turn model round-trip ceiling. Default 24.</summary>
+    public int MaxIterations { get; init; } = 24;
+
+    /// <summary>Gets the per-request output token ceiling. Default 8 000.</summary>
+    public int MaxOutputTokensPerTurn { get; init; } = 8_000;
+
+    /// <summary>Gets the session-wide token budget. Default 250 000.</summary>
+    public long MaxTotalTokens { get; init; } = 250_000;
+
+    /// <summary>Gets the largest tool result the model is handed. Default 24 000 characters.</summary>
+    public int MaxToolResultChars { get; init; } = 24_000;
+
+    /// <summary>Gets the sampling temperature. Default 0.2.</summary>
+    public double Temperature { get; init; } = 0.2;
+
+    /// <summary>Gets the endpoint for the <c>openai-compatible</c> provider, when one is used.</summary>
+    public string? BaseUrl { get; init; }
+
+    /// <summary>Gets the HTTP timeout for one provider request. Default five minutes.</summary>
+    public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Gets the system prompt override; <see langword="null"/> keeps the built-in one.</summary>
+    public string? SystemPrompt { get; init; }
+
+    /// <summary>Gets the descriptor for <see cref="Provider"/> and <see cref="ModelId"/>.</summary>
+    /// <exception cref="ArgumentException">The provider is not one this build serves.</exception>
+    public ModelDescriptor Descriptor => ModelCatalog.DescriptorFor(Provider, ModelId);
+
+    /// <summary>
+    /// Opens the workspace the tools are confined to.
+    /// </summary>
+    /// <returns>The normalised workspace.</returns>
+    /// <exception cref="DirectoryNotFoundException">The directory does not exist.</exception>
+    public Workspace CreateWorkspace() => Workspace.Create(WorkspaceRoot);
+
+    /// <summary>
+    /// Projects these settings onto the loop's budgets.
+    /// </summary>
+    /// <returns>The validated agent options.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A budget is outside its documented range.</exception>
+    public AgentOptions ToAgentOptions()
+    {
+        var defaults = new AgentOptions();
+        return new AgentOptions
+        {
+            MaxIterations = MaxIterations,
+            MaxOutputTokensPerTurn = MaxOutputTokensPerTurn,
+            MaxTotalTokens = MaxTotalTokens,
+            MaxToolResultChars = MaxToolResultChars,
+            Temperature = Temperature,
+            Approval = Approval,
+            SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt) ? defaults.SystemPrompt : SystemPrompt,
+        }.Validate();
+    }
+}
+
+/// <summary>
+/// Refuses every destructive tool call.
+/// </summary>
+/// <remarks>
+/// The container registers this so it is always resolvable, and so the failure mode of a host that
+/// forgets to plug in a real approver is "the write did not happen" rather than "the agent wrote to
+/// the wrong directory unattended". A host replaces it by registering its own
+/// <see cref="IToolApprover"/> after <see cref="ServiceCollectionExtensions.AddSharpCoreAgent(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{SharpCoreAgentOptions})"/>.
+/// </remarks>
+public sealed class DenyAllApprover : IToolApprover
+{
+    /// <summary>Gets the shared instance.</summary>
+    public static DenyAllApprover Instance { get; } = new();
+
+    private DenyAllApprover()
+    {
+    }
+
+    /// <inheritdoc />
+    public ValueTask<ApprovalOutcome> DecideAsync(ToolApprovalRequest request, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(ApprovalOutcome.Denied);
+}

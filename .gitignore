@@ -1,0 +1,18 @@
+## Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.user
+*.suo
+.vs/
+
+## Agent transcripts: they contain prompts, tool output and file contents, and they are per-machine.
+.sharpcoreagent/
+
+## Local credentials. The product reads keys from the environment; this is only a safety net for a
+## developer who insisted on a file.
+*.env
+.env
+secrets.json
+appsettings.Local.json

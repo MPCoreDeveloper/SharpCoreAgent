@@ -1,0 +1,58 @@
+<Project>
+
+  <!--
+    Shared build defaults for every library under src/.
+
+    Scoped to src/ on purpose: MSBuild stops walking upward at the first Directory.Build.props it
+    finds, so tests/ keeps its own settings (no XML docs, no snapshot analyzer) untouched.
+
+    One target framework, net11.0, with C# 15 and runtime-async. The product ships a single runtime,
+    so there is no second leg to keep in sync; a net10.0 leg would double build time to serve callers
+    this CLI does not have.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Features>$(Features);runtime-async=on</Features>
+
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- A nullable warning is a promise the API does not keep, so it fails the build. -->
+    <WarningsAsErrors>nullable;RS0016;RS0017</WarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+    <Product>SharpCoreAgent</Product>
+    <Company>MPCoreDeveloper</Company>
+    <Authors>MPCoreDeveloper</Authors>
+    <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!--
+      The logo and the README travel inside every package, so nuget.org shows the same identity the
+      repository does. Both are packed from the repository root rather than copied into src/. The
+      package icon is the 512x512 PNG: NuGet refuses an icon larger than one megabyte, and the source
+      artwork the README shows is a 1.6 MB JPEG.
+    -->
+    <PackageIcon>SharpCoreAgent-icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreAgent</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreAgent</PackageProjectUrl>
+  </PropertyGroup>
+
+  <!--
+    Packed only for projects that actually ship a package: the CLI sets IsPackable=false, so it never
+    pays for files it would not publish.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)..\assets\SharpCoreAgent-icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

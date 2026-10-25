@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SharpCoreAgent.Domain</RootNamespace>
+    <AssemblyName>SharpCoreAgent.Domain</AssemblyName>
+    <Description>The SharpCoreAgent vocabulary: messages, tools, model descriptors, events and reports. No I/O, no HTTP, no file system mutation, no vendor SDK.</Description>
+  </PropertyGroup>
+
+  <!--
+    SharpCoreAgent.Domain is the only assembly in this feature that ships an approved-API snapshot.
+    The other four assemblies are deliberately excluded (see plan.md, Constitution Check deviation):
+    their surfaces churn while the agent loop is being shaped, and a snapshot on a moving target
+    teaches the team to regenerate the file instead of reading it.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

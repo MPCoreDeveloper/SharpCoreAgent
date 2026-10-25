@@ -1,0 +1,54 @@
+<Project>
+
+  <!--
+    One place for every package version in the repository.
+
+    Central package management keeps the version out of the project files: a project says what it
+    needs, this file says which version satisfies it. That is what stops two projects from agreeing
+    on a package name and disagreeing on its major version, the failure mode that only shows up as
+    a runtime MissingMethodException much later.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <!-- One version for the six SharpCoreDB packages; see the comment on their rows below. -->
+    <SharpCoreDBVersion>2.1.0-RC.3</SharpCoreDBVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DI, HTTP and logging: the only Microsoft.Extensions packages the product needs. -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+
+    <!--
+      SharpCoreDB 2.1.0-RC.3: the storage engine behind the code-evidence index (feature 002).
+      One version for all six packages, because a mixed set would pit a vector column written by
+      .VectorSearch against a planner from a different build. The packages are net11.0-only, which is
+      the only framework this repository targets.
+
+      They are not on nuget.org yet, so nuget.config points a `sharpcoredb-local` folder source at the
+      sibling repository's artifacts folder and maps `SharpCoreDB*` to it.
+    -->
+    <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Search" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Graph" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Graph.Advanced" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.HybridSearch" Version="$(SharpCoreDBVersion)" />
+
+    <!--
+      The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
+      PrivateAssets="all" keeps it out of every package and out of a consumer's build.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
+
+    <!-- xUnit v3 on the Microsoft.Testing.Platform: the same test stack as the sibling repositories. -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+  </ItemGroup>
+
+</Project>

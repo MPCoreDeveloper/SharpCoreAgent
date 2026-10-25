@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SharpCoreAgent.Cli</RootNamespace>
+    <AssemblyName>sharpcoreagent</AssemblyName>
+    <Description>The command line: argument parsing, console rendering, approval prompts and exit codes.</Description>
+    <!-- The process is the deliverable; nothing references it, so it never needs an API snapshot. -->
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Infrastructure\SharpCoreAgent.Infrastructure.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.DependencyInjection\SharpCoreAgent.DependencyInjection.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

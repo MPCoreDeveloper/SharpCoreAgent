@@ -1,0 +1,9 @@
+# Normalise text on commit so a Windows checkout and a Linux checkout produce the same blob, and keep
+# the binary assets truly binary.
+* text=auto eol=lf
+*.slnx text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.jpg binary
+*.png binary
+*.ico binary

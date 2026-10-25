@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Features>$(Features);runtime-async=on</Features>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Test names are documentation; CS1591 on every helper would be noise. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Infrastructure\SharpCoreAgent.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.DependencyInjection\SharpCoreAgent.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Cli\SharpCoreAgent.Cli.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Indexing\SharpCoreAgent.Indexing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Testing.Platform" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

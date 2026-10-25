@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SharpCoreAgent.Infrastructure</RootNamespace>
+    <AssemblyName>SharpCoreAgent.Infrastructure</AssemblyName>
+    <Description>HTTP transport, OpenAI-compatible wire mapping, provider adapters, the six workspace tools and the JSON session store.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <!--
+      Logging abstractions come from the net11.0 shared framework; an explicit package reference only
+      earns NU1510.
+    -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

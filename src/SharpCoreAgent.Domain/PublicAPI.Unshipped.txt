@@ -1,0 +1,738 @@
+#nullable enable
+abstract SharpCoreAgent.Domain.Agents.AgentEvent.<Clone>$() -> SharpCoreAgent.Domain.Agents.AgentEvent!
+abstract SharpCoreAgent.Domain.Model.ChatStreamEvent.<Clone>$() -> SharpCoreAgent.Domain.Model.ChatStreamEvent!
+const SharpCoreAgent.Domain.Index.CodeQuery.AnyKind = "any" -> string!
+const SharpCoreAgent.Domain.Index.CodeQuery.DefaultHops = 1 -> int
+const SharpCoreAgent.Domain.Index.CodeQuery.DefaultK = 8 -> int
+const SharpCoreAgent.Domain.Index.CodeQuery.MaxHops = 3 -> int
+const SharpCoreAgent.Domain.Index.CodeQuery.MaxK = 12 -> int
+override sealed SharpCoreAgent.Domain.Agents.AgentTextDelta.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Agents.ToolFinished.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Agents.ToolRequested.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Agents.TurnFinished.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Agents.TurnStarted.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Model.StreamCompleted.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Model.TextDelta.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Model.ThinkingDelta.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
+override SharpCoreAgent.Domain.Agents.AgentEvent.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.AgentEvent.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.AgentEvent.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.AgentReport.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.AgentReport.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.AgentReport.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.AgentTextDelta.<Clone>$() -> SharpCoreAgent.Domain.Agents.AgentTextDelta!
+override SharpCoreAgent.Domain.Agents.AgentTextDelta.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.AgentTextDelta.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.AgentTextDelta.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.AgentThinkingDelta.<Clone>$() -> SharpCoreAgent.Domain.Agents.AgentThinkingDelta!
+override SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.AgentThinkingDelta.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.AgentThinkingDelta.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.ToolApprovalRequest.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.ToolApprovalRequest.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.ToolFinished.<Clone>$() -> SharpCoreAgent.Domain.Agents.ToolFinished!
+override SharpCoreAgent.Domain.Agents.ToolFinished.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.ToolFinished.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.ToolFinished.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.ToolRequested.<Clone>$() -> SharpCoreAgent.Domain.Agents.ToolRequested!
+override SharpCoreAgent.Domain.Agents.ToolRequested.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.ToolRequested.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.ToolRequested.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.TurnFinished.<Clone>$() -> SharpCoreAgent.Domain.Agents.TurnFinished!
+override SharpCoreAgent.Domain.Agents.TurnFinished.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.TurnFinished.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.TurnFinished.ToString() -> string!
+override SharpCoreAgent.Domain.Agents.TurnStarted.<Clone>$() -> SharpCoreAgent.Domain.Agents.TurnStarted!
+override SharpCoreAgent.Domain.Agents.TurnStarted.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.TurnStarted.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.TurnStarted.ToString() -> string!
+override SharpCoreAgent.Domain.Conversation.ChatMessage.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Conversation.ChatMessage.GetHashCode() -> int
+override SharpCoreAgent.Domain.Conversation.ChatMessage.ToString() -> string!
+override SharpCoreAgent.Domain.Conversation.ToolCall.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Conversation.ToolCall.GetHashCode() -> int
+override SharpCoreAgent.Domain.Conversation.ToolCall.ToString() -> string!
+override SharpCoreAgent.Domain.Index.CodeEvidence.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.CodeEvidence.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.CodeEvidence.ToString() -> string!
+override SharpCoreAgent.Domain.Index.CodeQuery.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.CodeQuery.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.CodeQuery.ToString() -> string!
+override SharpCoreAgent.Domain.Index.CodeSymbolRef.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.CodeSymbolRef.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.CodeSymbolRef.ToString() -> string!
+override SharpCoreAgent.Domain.Index.IndexBuildReport.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.IndexBuildReport.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.IndexBuildReport.ToString() -> string!
+override SharpCoreAgent.Domain.Index.IndexStatus.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.IndexStatus.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.IndexStatus.ToString() -> string!
+override SharpCoreAgent.Domain.Index.IndexVerification.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.IndexVerification.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.IndexVerification.ToString() -> string!
+override SharpCoreAgent.Domain.Model.ChatRequest.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.ChatRequest.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.ChatRequest.ToString() -> string!
+override SharpCoreAgent.Domain.Model.ChatResponse.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.ChatResponse.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.ChatResponse.ToString() -> string!
+override SharpCoreAgent.Domain.Model.ChatStreamEvent.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.ChatStreamEvent.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.ChatStreamEvent.ToString() -> string!
+override SharpCoreAgent.Domain.Model.ModelDescriptor.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.ModelDescriptor.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.ModelDescriptor.ToString() -> string!
+override SharpCoreAgent.Domain.Model.StreamCompleted.<Clone>$() -> SharpCoreAgent.Domain.Model.StreamCompleted!
+override SharpCoreAgent.Domain.Model.StreamCompleted.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.StreamCompleted.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.StreamCompleted.ToString() -> string!
+override SharpCoreAgent.Domain.Model.TextDelta.<Clone>$() -> SharpCoreAgent.Domain.Model.TextDelta!
+override SharpCoreAgent.Domain.Model.TextDelta.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.TextDelta.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.TextDelta.ToString() -> string!
+override SharpCoreAgent.Domain.Model.ThinkingDelta.<Clone>$() -> SharpCoreAgent.Domain.Model.ThinkingDelta!
+override SharpCoreAgent.Domain.Model.ThinkingDelta.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.ThinkingDelta.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.ThinkingDelta.ToString() -> string!
+override SharpCoreAgent.Domain.Model.TokenUsage.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.TokenUsage.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.TokenUsage.ToString() -> string!
+override SharpCoreAgent.Domain.Sessions.ModelUsage.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Sessions.ModelUsage.GetHashCode() -> int
+override SharpCoreAgent.Domain.Sessions.ModelUsage.ToString() -> string!
+override SharpCoreAgent.Domain.Sessions.SessionSnapshot.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Sessions.SessionSnapshot.GetHashCode() -> int
+override SharpCoreAgent.Domain.Sessions.SessionSnapshot.ToString() -> string!
+override SharpCoreAgent.Domain.Tools.ToolDefinition.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Tools.ToolDefinition.GetHashCode() -> int
+override SharpCoreAgent.Domain.Tools.ToolDefinition.ToString() -> string!
+override SharpCoreAgent.Domain.Tools.ToolEffect.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Tools.ToolEffect.GetHashCode() -> int
+override SharpCoreAgent.Domain.Tools.ToolEffect.ToString() -> string!
+override SharpCoreAgent.Domain.Tools.ToolInvocationContext.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Tools.ToolInvocationContext.GetHashCode() -> int
+override SharpCoreAgent.Domain.Tools.ToolInvocationContext.ToString() -> string!
+override SharpCoreAgent.Domain.Tools.ToolResult.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Tools.ToolResult.GetHashCode() -> int
+override SharpCoreAgent.Domain.Tools.ToolResult.ToString() -> string!
+override SharpCoreAgent.Domain.Workspace.ToString() -> string!
+SharpCoreAgent.Domain.Agents.AgentEvent
+SharpCoreAgent.Domain.Agents.AgentEvent.AgentEvent() -> void
+SharpCoreAgent.Domain.Agents.AgentEvent.AgentEvent(SharpCoreAgent.Domain.Agents.AgentEvent! original) -> void
+SharpCoreAgent.Domain.Agents.AgentOutcome
+SharpCoreAgent.Domain.Agents.AgentOutcome.BudgetExhausted = 1 -> SharpCoreAgent.Domain.Agents.AgentOutcome
+SharpCoreAgent.Domain.Agents.AgentOutcome.Cancelled = 2 -> SharpCoreAgent.Domain.Agents.AgentOutcome
+SharpCoreAgent.Domain.Agents.AgentOutcome.Completed = 0 -> SharpCoreAgent.Domain.Agents.AgentOutcome
+SharpCoreAgent.Domain.Agents.AgentOutcome.Failed = 3 -> SharpCoreAgent.Domain.Agents.AgentOutcome
+SharpCoreAgent.Domain.Agents.AgentReport
+SharpCoreAgent.Domain.Agents.AgentReport.<Clone>$() -> SharpCoreAgent.Domain.Agents.AgentReport!
+SharpCoreAgent.Domain.Agents.AgentReport.AgentReport() -> void
+SharpCoreAgent.Domain.Agents.AgentReport.CommandsRun.get -> System.Collections.Generic.IReadOnlyList<string!>!
+SharpCoreAgent.Domain.Agents.AgentReport.Detail.get -> string?
+SharpCoreAgent.Domain.Agents.AgentReport.Detail.init -> void
+SharpCoreAgent.Domain.Agents.AgentReport.Equals(SharpCoreAgent.Domain.Agents.AgentReport? other) -> bool
+SharpCoreAgent.Domain.Agents.AgentReport.FilesTouched.get -> System.Collections.Generic.IReadOnlyList<string!>!
+SharpCoreAgent.Domain.Agents.AgentReport.FinalText.get -> string?
+SharpCoreAgent.Domain.Agents.AgentReport.FinalText.init -> void
+SharpCoreAgent.Domain.Agents.AgentReport.Iterations.get -> int
+SharpCoreAgent.Domain.Agents.AgentReport.Iterations.init -> void
+SharpCoreAgent.Domain.Agents.AgentReport.ModelId.get -> string!
+SharpCoreAgent.Domain.Agents.AgentReport.ModelId.init -> void
+SharpCoreAgent.Domain.Agents.AgentReport.Outcome.get -> SharpCoreAgent.Domain.Agents.AgentOutcome
+SharpCoreAgent.Domain.Agents.AgentReport.Outcome.init -> void
+SharpCoreAgent.Domain.Agents.AgentReport.Succeeded.get -> bool
+SharpCoreAgent.Domain.Agents.AgentReport.ToolResults.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Tools.ToolResult!>!
+SharpCoreAgent.Domain.Agents.AgentReport.ToolResults.init -> void
+SharpCoreAgent.Domain.Agents.AgentReport.Usage.get -> SharpCoreAgent.Domain.Model.TokenUsage!
+SharpCoreAgent.Domain.Agents.AgentReport.Usage.init -> void
+SharpCoreAgent.Domain.Agents.AgentTextDelta
+SharpCoreAgent.Domain.Agents.AgentTextDelta.AgentTextDelta(string! Text) -> void
+SharpCoreAgent.Domain.Agents.AgentTextDelta.Deconstruct(out string! Text) -> void
+SharpCoreAgent.Domain.Agents.AgentTextDelta.Equals(SharpCoreAgent.Domain.Agents.AgentTextDelta? other) -> bool
+SharpCoreAgent.Domain.Agents.AgentTextDelta.Text.get -> string!
+SharpCoreAgent.Domain.Agents.AgentTextDelta.Text.init -> void
+SharpCoreAgent.Domain.Agents.AgentThinkingDelta
+SharpCoreAgent.Domain.Agents.AgentThinkingDelta.AgentThinkingDelta(string! Text) -> void
+SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Deconstruct(out string! Text) -> void
+SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Equals(SharpCoreAgent.Domain.Agents.AgentThinkingDelta? other) -> bool
+SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Text.get -> string!
+SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Text.init -> void
+SharpCoreAgent.Domain.Agents.ApprovalMode
+SharpCoreAgent.Domain.Agents.ApprovalMode.AllowAll = 2 -> SharpCoreAgent.Domain.Agents.ApprovalMode
+SharpCoreAgent.Domain.Agents.ApprovalMode.Ask = 1 -> SharpCoreAgent.Domain.Agents.ApprovalMode
+SharpCoreAgent.Domain.Agents.ApprovalMode.ReadOnly = 0 -> SharpCoreAgent.Domain.Agents.ApprovalMode
+SharpCoreAgent.Domain.Agents.ApprovalOutcome
+SharpCoreAgent.Domain.Agents.ApprovalOutcome.Approved = 0 -> SharpCoreAgent.Domain.Agents.ApprovalOutcome
+SharpCoreAgent.Domain.Agents.ApprovalOutcome.Denied = 1 -> SharpCoreAgent.Domain.Agents.ApprovalOutcome
+SharpCoreAgent.Domain.Agents.IAgentObserver
+SharpCoreAgent.Domain.Agents.IAgentObserver.OnEventAsync(SharpCoreAgent.Domain.Agents.AgentEvent! agentEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SharpCoreAgent.Domain.Agents.IToolApprover
+SharpCoreAgent.Domain.Agents.IToolApprover.DecideAsync(SharpCoreAgent.Domain.Agents.ToolApprovalRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Agents.ApprovalOutcome>
+SharpCoreAgent.Domain.Agents.NullAgentObserver
+SharpCoreAgent.Domain.Agents.NullAgentObserver.OnEventAsync(SharpCoreAgent.Domain.Agents.AgentEvent! agentEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.<Clone>$() -> SharpCoreAgent.Domain.Agents.ToolApprovalRequest!
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.ArgumentsJson.get -> string!
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.ArgumentsJson.init -> void
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Deconstruct(out string! ToolName, out SharpCoreAgent.Domain.Tools.ToolSafety Safety, out string! Summary, out string! ArgumentsJson) -> void
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Equals(SharpCoreAgent.Domain.Agents.ToolApprovalRequest? other) -> bool
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Safety.get -> SharpCoreAgent.Domain.Tools.ToolSafety
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Safety.init -> void
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Summary.get -> string!
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Summary.init -> void
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.ToolApprovalRequest(string! ToolName, SharpCoreAgent.Domain.Tools.ToolSafety Safety, string! Summary, string! ArgumentsJson) -> void
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.ToolName.get -> string!
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.ToolName.init -> void
+SharpCoreAgent.Domain.Agents.ToolFinished
+SharpCoreAgent.Domain.Agents.ToolFinished.CallId.get -> string!
+SharpCoreAgent.Domain.Agents.ToolFinished.CallId.init -> void
+SharpCoreAgent.Domain.Agents.ToolFinished.Deconstruct(out string! CallId, out string! ToolName, out bool IsError, out string! Summary) -> void
+SharpCoreAgent.Domain.Agents.ToolFinished.Equals(SharpCoreAgent.Domain.Agents.ToolFinished? other) -> bool
+SharpCoreAgent.Domain.Agents.ToolFinished.IsError.get -> bool
+SharpCoreAgent.Domain.Agents.ToolFinished.IsError.init -> void
+SharpCoreAgent.Domain.Agents.ToolFinished.Summary.get -> string!
+SharpCoreAgent.Domain.Agents.ToolFinished.Summary.init -> void
+SharpCoreAgent.Domain.Agents.ToolFinished.ToolFinished(string! CallId, string! ToolName, bool IsError, string! Summary) -> void
+SharpCoreAgent.Domain.Agents.ToolFinished.ToolName.get -> string!
+SharpCoreAgent.Domain.Agents.ToolFinished.ToolName.init -> void
+SharpCoreAgent.Domain.Agents.ToolRequested
+SharpCoreAgent.Domain.Agents.ToolRequested.ArgumentsJson.get -> string!
+SharpCoreAgent.Domain.Agents.ToolRequested.ArgumentsJson.init -> void
+SharpCoreAgent.Domain.Agents.ToolRequested.CallId.get -> string!
+SharpCoreAgent.Domain.Agents.ToolRequested.CallId.init -> void
+SharpCoreAgent.Domain.Agents.ToolRequested.Deconstruct(out string! CallId, out string! ToolName, out string! ArgumentsJson) -> void
+SharpCoreAgent.Domain.Agents.ToolRequested.Equals(SharpCoreAgent.Domain.Agents.ToolRequested? other) -> bool
+SharpCoreAgent.Domain.Agents.ToolRequested.ToolName.get -> string!
+SharpCoreAgent.Domain.Agents.ToolRequested.ToolName.init -> void
+SharpCoreAgent.Domain.Agents.ToolRequested.ToolRequested(string! CallId, string! ToolName, string! ArgumentsJson) -> void
+SharpCoreAgent.Domain.Agents.TurnFinished
+SharpCoreAgent.Domain.Agents.TurnFinished.Deconstruct(out SharpCoreAgent.Domain.Agents.AgentReport! Report) -> void
+SharpCoreAgent.Domain.Agents.TurnFinished.Equals(SharpCoreAgent.Domain.Agents.TurnFinished? other) -> bool
+SharpCoreAgent.Domain.Agents.TurnFinished.Report.get -> SharpCoreAgent.Domain.Agents.AgentReport!
+SharpCoreAgent.Domain.Agents.TurnFinished.Report.init -> void
+SharpCoreAgent.Domain.Agents.TurnFinished.TurnFinished(SharpCoreAgent.Domain.Agents.AgentReport! Report) -> void
+SharpCoreAgent.Domain.Agents.TurnStarted
+SharpCoreAgent.Domain.Agents.TurnStarted.Deconstruct(out string! ModelId) -> void
+SharpCoreAgent.Domain.Agents.TurnStarted.Equals(SharpCoreAgent.Domain.Agents.TurnStarted? other) -> bool
+SharpCoreAgent.Domain.Agents.TurnStarted.ModelId.get -> string!
+SharpCoreAgent.Domain.Agents.TurnStarted.ModelId.init -> void
+SharpCoreAgent.Domain.Agents.TurnStarted.TurnStarted(string! ModelId) -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage
+SharpCoreAgent.Domain.Conversation.ChatMessage.<Clone>$() -> SharpCoreAgent.Domain.Conversation.ChatMessage!
+SharpCoreAgent.Domain.Conversation.ChatMessage.ChatMessage() -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage.Content.get -> string!
+SharpCoreAgent.Domain.Conversation.ChatMessage.Content.init -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage.Equals(SharpCoreAgent.Domain.Conversation.ChatMessage? other) -> bool
+SharpCoreAgent.Domain.Conversation.ChatMessage.HasToolCalls.get -> bool
+SharpCoreAgent.Domain.Conversation.ChatMessage.IsError.get -> bool
+SharpCoreAgent.Domain.Conversation.ChatMessage.IsError.init -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage.Role.get -> SharpCoreAgent.Domain.Conversation.ChatRole
+SharpCoreAgent.Domain.Conversation.ChatMessage.Role.init -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage.ToolCallId.get -> string?
+SharpCoreAgent.Domain.Conversation.ChatMessage.ToolCallId.init -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage.ToolCalls.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ToolCall!>!
+SharpCoreAgent.Domain.Conversation.ChatMessage.ToolCalls.init -> void
+SharpCoreAgent.Domain.Conversation.ChatMessage.ToolName.get -> string?
+SharpCoreAgent.Domain.Conversation.ChatMessage.ToolName.init -> void
+SharpCoreAgent.Domain.Conversation.ChatRole
+SharpCoreAgent.Domain.Conversation.ChatRole.Assistant = 2 -> SharpCoreAgent.Domain.Conversation.ChatRole
+SharpCoreAgent.Domain.Conversation.ChatRole.System = 0 -> SharpCoreAgent.Domain.Conversation.ChatRole
+SharpCoreAgent.Domain.Conversation.ChatRole.Tool = 3 -> SharpCoreAgent.Domain.Conversation.ChatRole
+SharpCoreAgent.Domain.Conversation.ChatRole.User = 1 -> SharpCoreAgent.Domain.Conversation.ChatRole
+SharpCoreAgent.Domain.Conversation.ToolCall
+SharpCoreAgent.Domain.Conversation.ToolCall.<Clone>$() -> SharpCoreAgent.Domain.Conversation.ToolCall!
+SharpCoreAgent.Domain.Conversation.ToolCall.ArgumentsJson.get -> string!
+SharpCoreAgent.Domain.Conversation.ToolCall.ArgumentsJson.init -> void
+SharpCoreAgent.Domain.Conversation.ToolCall.Deconstruct(out string! Id, out string! Name, out string! ArgumentsJson) -> void
+SharpCoreAgent.Domain.Conversation.ToolCall.Equals(SharpCoreAgent.Domain.Conversation.ToolCall? other) -> bool
+SharpCoreAgent.Domain.Conversation.ToolCall.Id.get -> string!
+SharpCoreAgent.Domain.Conversation.ToolCall.Id.init -> void
+SharpCoreAgent.Domain.Conversation.ToolCall.Name.get -> string!
+SharpCoreAgent.Domain.Conversation.ToolCall.Name.init -> void
+SharpCoreAgent.Domain.Conversation.ToolCall.ToolCall(string! Id, string! Name, string! ArgumentsJson) -> void
+SharpCoreAgent.Domain.Errors.ModelCredentialException
+SharpCoreAgent.Domain.Errors.ModelCredentialException.ConfigurationKey.get -> string!
+SharpCoreAgent.Domain.Errors.ModelCredentialException.ModelCredentialException(string! configurationKey) -> void
+SharpCoreAgent.Domain.Errors.ModelException
+SharpCoreAgent.Domain.Errors.ModelException.IsTransient.get -> bool
+SharpCoreAgent.Domain.Errors.ModelException.ModelException(string! message, bool isTransient = false, System.TimeSpan? retryAfter = null, System.Exception? innerException = null) -> void
+SharpCoreAgent.Domain.Errors.ModelException.RetryAfter.get -> System.TimeSpan?
+SharpCoreAgent.Domain.Errors.ModelRequestException
+SharpCoreAgent.Domain.Errors.ModelRequestException.ModelId.get -> string!
+SharpCoreAgent.Domain.Errors.ModelRequestException.ModelRequestException(string! provider, string! modelId, int statusCode, string! message, bool isTransient, System.TimeSpan? retryAfter = null) -> void
+SharpCoreAgent.Domain.Errors.ModelRequestException.Provider.get -> string!
+SharpCoreAgent.Domain.Errors.ModelRequestException.StatusCode.get -> int
+SharpCoreAgent.Domain.Errors.SessionFormatException
+SharpCoreAgent.Domain.Errors.SessionFormatException.SessionFormatException(string! message, System.Exception? innerException = null) -> void
+SharpCoreAgent.Domain.Errors.SharpCoreAgentException
+SharpCoreAgent.Domain.Errors.SharpCoreAgentException.SharpCoreAgentException(string! message, System.Exception? innerException) -> void
+SharpCoreAgent.Domain.Errors.SharpCoreAgentException.SharpCoreAgentException(string! message) -> void
+SharpCoreAgent.Domain.Errors.ToolArgumentException
+SharpCoreAgent.Domain.Errors.ToolArgumentException.Parameter.get -> string!
+SharpCoreAgent.Domain.Errors.ToolArgumentException.ToolArgumentException(string! toolName, string! parameter, string! message) -> void
+SharpCoreAgent.Domain.Errors.ToolArgumentException.ToolName.get -> string!
+SharpCoreAgent.Domain.Errors.ToolNotFoundException
+SharpCoreAgent.Domain.Errors.ToolNotFoundException.ToolName.get -> string!
+SharpCoreAgent.Domain.Errors.ToolNotFoundException.ToolNotFoundException(string! toolName) -> void
+SharpCoreAgent.Domain.Index.CodeEvidence
+SharpCoreAgent.Domain.Index.CodeEvidence.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeEvidence!
+SharpCoreAgent.Domain.Index.CodeEvidence.CodeEvidence() -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.EndLine.get -> int
+SharpCoreAgent.Domain.Index.CodeEvidence.EndLine.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Equals(SharpCoreAgent.Domain.Index.CodeEvidence? other) -> bool
+SharpCoreAgent.Domain.Index.CodeEvidence.IsStale.get -> bool
+SharpCoreAgent.Domain.Index.CodeEvidence.IsStale.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Kind.get -> string!
+SharpCoreAgent.Domain.Index.CodeEvidence.Kind.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Legs.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.EvidenceLeg>!
+SharpCoreAgent.Domain.Index.CodeEvidence.Legs.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Path.get -> string!
+SharpCoreAgent.Domain.Index.CodeEvidence.Path.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Relation.get -> string?
+SharpCoreAgent.Domain.Index.CodeEvidence.Relation.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Score.get -> double
+SharpCoreAgent.Domain.Index.CodeEvidence.Score.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Sha8.get -> string!
+SharpCoreAgent.Domain.Index.CodeEvidence.Sha8.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.StartLine.get -> int
+SharpCoreAgent.Domain.Index.CodeEvidence.StartLine.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Symbol.get -> string?
+SharpCoreAgent.Domain.Index.CodeEvidence.Symbol.init -> void
+SharpCoreAgent.Domain.Index.CodeEvidence.Text.get -> string!
+SharpCoreAgent.Domain.Index.CodeEvidence.Text.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery
+SharpCoreAgent.Domain.Index.CodeQuery.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeQuery!
+SharpCoreAgent.Domain.Index.CodeQuery.CodeQuery() -> void
+SharpCoreAgent.Domain.Index.CodeQuery.Equals(SharpCoreAgent.Domain.Index.CodeQuery? other) -> bool
+SharpCoreAgent.Domain.Index.CodeQuery.Hops.get -> int
+SharpCoreAgent.Domain.Index.CodeQuery.Hops.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery.K.get -> int
+SharpCoreAgent.Domain.Index.CodeQuery.K.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery.Kind.get -> string?
+SharpCoreAgent.Domain.Index.CodeQuery.Kind.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery.Path.get -> string?
+SharpCoreAgent.Domain.Index.CodeQuery.Path.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery.Text.get -> string!
+SharpCoreAgent.Domain.Index.CodeQuery.Text.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef
+SharpCoreAgent.Domain.Index.CodeSymbolRef.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeSymbolRef!
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Callees.get -> int
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Callees.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Callers.get -> int
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Callers.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.CodeSymbolRef() -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Community.get -> string?
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Community.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Doc.get -> string?
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Doc.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.EndLine.get -> int
+SharpCoreAgent.Domain.Index.CodeSymbolRef.EndLine.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Equals(SharpCoreAgent.Domain.Index.CodeSymbolRef? other) -> bool
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Key.get -> string!
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Key.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Kind.get -> string!
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Kind.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Name.get -> string!
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Name.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Path.get -> string!
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Path.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.QualifiedName.get -> string!
+SharpCoreAgent.Domain.Index.CodeSymbolRef.QualifiedName.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Signature.get -> string?
+SharpCoreAgent.Domain.Index.CodeSymbolRef.Signature.init -> void
+SharpCoreAgent.Domain.Index.CodeSymbolRef.StartLine.get -> int
+SharpCoreAgent.Domain.Index.CodeSymbolRef.StartLine.init -> void
+SharpCoreAgent.Domain.Index.EmbedderKind
+SharpCoreAgent.Domain.Index.EmbedderKind.Local = 0 -> SharpCoreAgent.Domain.Index.EmbedderKind
+SharpCoreAgent.Domain.Index.EmbedderKind.Off = 2 -> SharpCoreAgent.Domain.Index.EmbedderKind
+SharpCoreAgent.Domain.Index.EmbedderKind.Provider = 1 -> SharpCoreAgent.Domain.Index.EmbedderKind
+SharpCoreAgent.Domain.Index.EvidenceLeg
+SharpCoreAgent.Domain.Index.EvidenceLeg.Graph = 2 -> SharpCoreAgent.Domain.Index.EvidenceLeg
+SharpCoreAgent.Domain.Index.EvidenceLeg.Lexical = 0 -> SharpCoreAgent.Domain.Index.EvidenceLeg
+SharpCoreAgent.Domain.Index.EvidenceLeg.Path = 4 -> SharpCoreAgent.Domain.Index.EvidenceLeg
+SharpCoreAgent.Domain.Index.EvidenceLeg.Symbol = 3 -> SharpCoreAgent.Domain.Index.EvidenceLeg
+SharpCoreAgent.Domain.Index.EvidenceLeg.Vector = 1 -> SharpCoreAgent.Domain.Index.EvidenceLeg
+SharpCoreAgent.Domain.Index.ICodeIndex
+SharpCoreAgent.Domain.Index.ICodeIndex.FindReferencesAsync(string! symbol, SharpCoreAgent.Domain.Index.ReferenceDirection direction, int maxResults, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
+SharpCoreAgent.Domain.Index.ICodeIndex.FindSymbolsAsync(string! name, string? kind, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeSymbolRef!>!>
+SharpCoreAgent.Domain.Index.ICodeIndex.GetContextAsync(string! target, int hops, int k, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
+SharpCoreAgent.Domain.Index.ICodeIndex.GetStatusAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexStatus!>
+SharpCoreAgent.Domain.Index.ICodeIndex.SearchAsync(SharpCoreAgent.Domain.Index.CodeQuery! query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.EnsureFreshAsync(System.TimeSpan budget, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.PruneAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.RebuildAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.VerifyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexVerification!>
+SharpCoreAgent.Domain.Index.IndexBuildReport
+SharpCoreAgent.Domain.Index.IndexBuildReport.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexBuildReport!
+SharpCoreAgent.Domain.Index.IndexBuildReport.Added.get -> int
+SharpCoreAgent.Domain.Index.IndexBuildReport.Added.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Changed.get -> int
+SharpCoreAgent.Domain.Index.IndexBuildReport.Changed.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.ElapsedMilliseconds.get -> long
+SharpCoreAgent.Domain.Index.IndexBuildReport.ElapsedMilliseconds.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Equals(SharpCoreAgent.Domain.Index.IndexBuildReport? other) -> bool
+SharpCoreAgent.Domain.Index.IndexBuildReport.Incomplete.get -> bool
+SharpCoreAgent.Domain.Index.IndexBuildReport.Incomplete.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.IndexBuildReport() -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Notes.get -> System.Collections.Generic.IReadOnlyList<string!>!
+SharpCoreAgent.Domain.Index.IndexBuildReport.Notes.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Removed.get -> int
+SharpCoreAgent.Domain.Index.IndexBuildReport.Removed.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Skipped.get -> int
+SharpCoreAgent.Domain.Index.IndexBuildReport.Skipped.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Status.get -> SharpCoreAgent.Domain.Index.IndexStatus!
+SharpCoreAgent.Domain.Index.IndexBuildReport.Status.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Unchanged.get -> int
+SharpCoreAgent.Domain.Index.IndexBuildReport.Unchanged.init -> void
+SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexFreshness.Building = 1 -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexFreshness.Corrupt = 5 -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexFreshness.Fresh = 4 -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexFreshness.Missing = 0 -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexFreshness.Partial = 2 -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexFreshness.Stale = 3 -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexStatus
+SharpCoreAgent.Domain.Index.IndexStatus.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexStatus!
+SharpCoreAgent.Domain.Index.IndexStatus.BuiltUtc.get -> System.DateTimeOffset?
+SharpCoreAgent.Domain.Index.IndexStatus.BuiltUtc.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Chunks.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Chunks.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Dimensions.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Dimensions.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Edges.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Edges.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Embedder.get -> string!
+SharpCoreAgent.Domain.Index.IndexStatus.Embedder.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Equals(SharpCoreAgent.Domain.Index.IndexStatus? other) -> bool
+SharpCoreAgent.Domain.Index.IndexStatus.Files.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Files.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Freshness.get -> SharpCoreAgent.Domain.Index.IndexFreshness
+SharpCoreAgent.Domain.Index.IndexStatus.Freshness.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.IndexStatus() -> void
+SharpCoreAgent.Domain.Index.IndexStatus.LexicalFallback.get -> bool
+SharpCoreAgent.Domain.Index.IndexStatus.LexicalFallback.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.OrphanRows.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.OrphanRows.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.SizeBytes.get -> long
+SharpCoreAgent.Domain.Index.IndexStatus.SizeBytes.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.SkippedFiles.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.SkippedFiles.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.StaleFiles.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.StaleFiles.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Symbols.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Symbols.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Tier.get -> SharpCoreAgent.Domain.Index.IndexTier
+SharpCoreAgent.Domain.Index.IndexStatus.Tier.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.VectorSearchEnabled.get -> bool
+SharpCoreAgent.Domain.Index.IndexStatus.VectorSearchEnabled.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.WorkspaceRoot.get -> string!
+SharpCoreAgent.Domain.Index.IndexStatus.WorkspaceRoot.init -> void
+SharpCoreAgent.Domain.Index.IndexTier
+SharpCoreAgent.Domain.Index.IndexTier.Lean = 0 -> SharpCoreAgent.Domain.Index.IndexTier
+SharpCoreAgent.Domain.Index.IndexTier.Rich = 1 -> SharpCoreAgent.Domain.Index.IndexTier
+SharpCoreAgent.Domain.Index.IndexVerification
+SharpCoreAgent.Domain.Index.IndexVerification.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexVerification!
+SharpCoreAgent.Domain.Index.IndexVerification.Details.get -> System.Collections.Generic.IReadOnlyList<string!>!
+SharpCoreAgent.Domain.Index.IndexVerification.Details.init -> void
+SharpCoreAgent.Domain.Index.IndexVerification.Equals(SharpCoreAgent.Domain.Index.IndexVerification? other) -> bool
+SharpCoreAgent.Domain.Index.IndexVerification.FilesMissingFromIndex.get -> int
+SharpCoreAgent.Domain.Index.IndexVerification.FilesMissingFromIndex.init -> void
+SharpCoreAgent.Domain.Index.IndexVerification.FilesMissingOnDisk.get -> int
+SharpCoreAgent.Domain.Index.IndexVerification.FilesMissingOnDisk.init -> void
+SharpCoreAgent.Domain.Index.IndexVerification.HashMismatches.get -> int
+SharpCoreAgent.Domain.Index.IndexVerification.HashMismatches.init -> void
+SharpCoreAgent.Domain.Index.IndexVerification.IndexVerification() -> void
+SharpCoreAgent.Domain.Index.IndexVerification.IsHealthy.get -> bool
+SharpCoreAgent.Domain.Index.IndexVerification.IsHealthy.init -> void
+SharpCoreAgent.Domain.Index.IndexVerification.Orphans.get -> int
+SharpCoreAgent.Domain.Index.IndexVerification.Orphans.init -> void
+SharpCoreAgent.Domain.Index.ReferenceDirection
+SharpCoreAgent.Domain.Index.ReferenceDirection.Both = 2 -> SharpCoreAgent.Domain.Index.ReferenceDirection
+SharpCoreAgent.Domain.Index.ReferenceDirection.Callees = 1 -> SharpCoreAgent.Domain.Index.ReferenceDirection
+SharpCoreAgent.Domain.Index.ReferenceDirection.Callers = 0 -> SharpCoreAgent.Domain.Index.ReferenceDirection
+SharpCoreAgent.Domain.Index.VectorQuantization
+SharpCoreAgent.Domain.Index.VectorQuantization.Binary = 2 -> SharpCoreAgent.Domain.Index.VectorQuantization
+SharpCoreAgent.Domain.Index.VectorQuantization.Int8 = 1 -> SharpCoreAgent.Domain.Index.VectorQuantization
+SharpCoreAgent.Domain.Index.VectorQuantization.None = 0 -> SharpCoreAgent.Domain.Index.VectorQuantization
+SharpCoreAgent.Domain.Model.ChatRequest
+SharpCoreAgent.Domain.Model.ChatRequest.<Clone>$() -> SharpCoreAgent.Domain.Model.ChatRequest!
+SharpCoreAgent.Domain.Model.ChatRequest.ChatRequest(SharpCoreAgent.Domain.Model.ModelDescriptor! Model, System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ChatMessage!>! Messages, System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Tools.ToolDefinition!>! Tools, double Temperature = 0.2, int? MaxOutputTokens = null) -> void
+SharpCoreAgent.Domain.Model.ChatRequest.Deconstruct(out SharpCoreAgent.Domain.Model.ModelDescriptor! Model, out System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ChatMessage!>! Messages, out System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Tools.ToolDefinition!>! Tools, out double Temperature, out int? MaxOutputTokens) -> void
+SharpCoreAgent.Domain.Model.ChatRequest.Equals(SharpCoreAgent.Domain.Model.ChatRequest? other) -> bool
+SharpCoreAgent.Domain.Model.ChatRequest.MaxOutputTokens.get -> int?
+SharpCoreAgent.Domain.Model.ChatRequest.MaxOutputTokens.init -> void
+SharpCoreAgent.Domain.Model.ChatRequest.Messages.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ChatMessage!>!
+SharpCoreAgent.Domain.Model.ChatRequest.Messages.init -> void
+SharpCoreAgent.Domain.Model.ChatRequest.Model.get -> SharpCoreAgent.Domain.Model.ModelDescriptor!
+SharpCoreAgent.Domain.Model.ChatRequest.Model.init -> void
+SharpCoreAgent.Domain.Model.ChatRequest.Temperature.get -> double
+SharpCoreAgent.Domain.Model.ChatRequest.Temperature.init -> void
+SharpCoreAgent.Domain.Model.ChatRequest.Tools.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Tools.ToolDefinition!>!
+SharpCoreAgent.Domain.Model.ChatRequest.Tools.init -> void
+SharpCoreAgent.Domain.Model.ChatResponse
+SharpCoreAgent.Domain.Model.ChatResponse.<Clone>$() -> SharpCoreAgent.Domain.Model.ChatResponse!
+SharpCoreAgent.Domain.Model.ChatResponse.ChatResponse(SharpCoreAgent.Domain.Conversation.ChatMessage! Message, SharpCoreAgent.Domain.Model.FinishReason FinishReason, SharpCoreAgent.Domain.Model.TokenUsage! Usage) -> void
+SharpCoreAgent.Domain.Model.ChatResponse.Deconstruct(out SharpCoreAgent.Domain.Conversation.ChatMessage! Message, out SharpCoreAgent.Domain.Model.FinishReason FinishReason, out SharpCoreAgent.Domain.Model.TokenUsage! Usage) -> void
+SharpCoreAgent.Domain.Model.ChatResponse.Equals(SharpCoreAgent.Domain.Model.ChatResponse? other) -> bool
+SharpCoreAgent.Domain.Model.ChatResponse.FinishReason.get -> SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.ChatResponse.FinishReason.init -> void
+SharpCoreAgent.Domain.Model.ChatResponse.Message.get -> SharpCoreAgent.Domain.Conversation.ChatMessage!
+SharpCoreAgent.Domain.Model.ChatResponse.Message.init -> void
+SharpCoreAgent.Domain.Model.ChatResponse.Text.get -> string!
+SharpCoreAgent.Domain.Model.ChatResponse.Usage.get -> SharpCoreAgent.Domain.Model.TokenUsage!
+SharpCoreAgent.Domain.Model.ChatResponse.Usage.init -> void
+SharpCoreAgent.Domain.Model.ChatStreamEvent
+SharpCoreAgent.Domain.Model.ChatStreamEvent.ChatStreamEvent() -> void
+SharpCoreAgent.Domain.Model.ChatStreamEvent.ChatStreamEvent(SharpCoreAgent.Domain.Model.ChatStreamEvent! original) -> void
+SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.FinishReason.ContentFilter = 4 -> SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.FinishReason.Length = 2 -> SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.FinishReason.Stop = 1 -> SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.FinishReason.ToolCalls = 3 -> SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.FinishReason.Unknown = 0 -> SharpCoreAgent.Domain.Model.FinishReason
+SharpCoreAgent.Domain.Model.IChatModel
+SharpCoreAgent.Domain.Model.IChatModel.CompleteAsync(SharpCoreAgent.Domain.Model.ChatRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<SharpCoreAgent.Domain.Model.ChatResponse!>!
+SharpCoreAgent.Domain.Model.IChatModel.Model.get -> SharpCoreAgent.Domain.Model.ModelDescriptor!
+SharpCoreAgent.Domain.Model.IChatModelResolver
+SharpCoreAgent.Domain.Model.IChatModelResolver.Resolve(SharpCoreAgent.Domain.Model.ModelDescriptor! model) -> SharpCoreAgent.Domain.Model.IStreamingChatModel!
+SharpCoreAgent.Domain.Model.IStreamingChatModel
+SharpCoreAgent.Domain.Model.IStreamingChatModel.Model.get -> SharpCoreAgent.Domain.Model.ModelDescriptor!
+SharpCoreAgent.Domain.Model.IStreamingChatModel.StreamAsync(SharpCoreAgent.Domain.Model.ChatRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<SharpCoreAgent.Domain.Model.ChatStreamEvent!>!
+SharpCoreAgent.Domain.Model.ModelDescriptor
+SharpCoreAgent.Domain.Model.ModelDescriptor.<Clone>$() -> SharpCoreAgent.Domain.Model.ModelDescriptor!
+SharpCoreAgent.Domain.Model.ModelDescriptor.ContextWindow.get -> int?
+SharpCoreAgent.Domain.Model.ModelDescriptor.ContextWindow.init -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.Deconstruct(out string! Provider, out string! Id, out string! DisplayName, out int? ContextWindow, out bool SupportsTools, out bool SupportsStreaming, out bool EmitsThinking) -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.DisplayName.get -> string!
+SharpCoreAgent.Domain.Model.ModelDescriptor.DisplayName.init -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.EmitsThinking.get -> bool
+SharpCoreAgent.Domain.Model.ModelDescriptor.EmitsThinking.init -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.Equals(SharpCoreAgent.Domain.Model.ModelDescriptor? other) -> bool
+SharpCoreAgent.Domain.Model.ModelDescriptor.Id.get -> string!
+SharpCoreAgent.Domain.Model.ModelDescriptor.Id.init -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.ModelDescriptor(string! Provider, string! Id, string! DisplayName, int? ContextWindow = null, bool SupportsTools = true, bool SupportsStreaming = true, bool EmitsThinking = false) -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.Provider.get -> string!
+SharpCoreAgent.Domain.Model.ModelDescriptor.Provider.init -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.QualifiedName.get -> string!
+SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsStreaming.get -> bool
+SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsStreaming.init -> void
+SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsTools.get -> bool
+SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsTools.init -> void
+SharpCoreAgent.Domain.Model.StreamCompleted
+SharpCoreAgent.Domain.Model.StreamCompleted.Deconstruct(out SharpCoreAgent.Domain.Model.ChatResponse! Response) -> void
+SharpCoreAgent.Domain.Model.StreamCompleted.Equals(SharpCoreAgent.Domain.Model.StreamCompleted? other) -> bool
+SharpCoreAgent.Domain.Model.StreamCompleted.Response.get -> SharpCoreAgent.Domain.Model.ChatResponse!
+SharpCoreAgent.Domain.Model.StreamCompleted.Response.init -> void
+SharpCoreAgent.Domain.Model.StreamCompleted.StreamCompleted(SharpCoreAgent.Domain.Model.ChatResponse! Response) -> void
+SharpCoreAgent.Domain.Model.TextDelta
+SharpCoreAgent.Domain.Model.TextDelta.Deconstruct(out string! Text) -> void
+SharpCoreAgent.Domain.Model.TextDelta.Equals(SharpCoreAgent.Domain.Model.TextDelta? other) -> bool
+SharpCoreAgent.Domain.Model.TextDelta.Text.get -> string!
+SharpCoreAgent.Domain.Model.TextDelta.Text.init -> void
+SharpCoreAgent.Domain.Model.TextDelta.TextDelta(string! Text) -> void
+SharpCoreAgent.Domain.Model.ThinkingDelta
+SharpCoreAgent.Domain.Model.ThinkingDelta.Deconstruct(out string! Text) -> void
+SharpCoreAgent.Domain.Model.ThinkingDelta.Equals(SharpCoreAgent.Domain.Model.ThinkingDelta? other) -> bool
+SharpCoreAgent.Domain.Model.ThinkingDelta.Text.get -> string!
+SharpCoreAgent.Domain.Model.ThinkingDelta.Text.init -> void
+SharpCoreAgent.Domain.Model.ThinkingDelta.ThinkingDelta(string! Text) -> void
+SharpCoreAgent.Domain.Model.TokenUsage
+SharpCoreAgent.Domain.Model.TokenUsage.<Clone>$() -> SharpCoreAgent.Domain.Model.TokenUsage!
+SharpCoreAgent.Domain.Model.TokenUsage.Deconstruct(out int? InputTokens, out int? OutputTokens) -> void
+SharpCoreAgent.Domain.Model.TokenUsage.Equals(SharpCoreAgent.Domain.Model.TokenUsage? other) -> bool
+SharpCoreAgent.Domain.Model.TokenUsage.InputTokens.get -> int?
+SharpCoreAgent.Domain.Model.TokenUsage.InputTokens.init -> void
+SharpCoreAgent.Domain.Model.TokenUsage.IsUnknown.get -> bool
+SharpCoreAgent.Domain.Model.TokenUsage.OutputTokens.get -> int?
+SharpCoreAgent.Domain.Model.TokenUsage.OutputTokens.init -> void
+SharpCoreAgent.Domain.Model.TokenUsage.TokenUsage(int? InputTokens, int? OutputTokens) -> void
+SharpCoreAgent.Domain.Model.TokenUsage.Total.get -> int?
+SharpCoreAgent.Domain.Sessions.ICredentialStore
+SharpCoreAgent.Domain.Sessions.ICredentialStore.Find(string! name) -> string?
+SharpCoreAgent.Domain.Sessions.ICredentialStore.GetRequired(string! name) -> string!
+SharpCoreAgent.Domain.Sessions.ISessionStore
+SharpCoreAgent.Domain.Sessions.ISessionStore.LoadAsync(string! path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<SharpCoreAgent.Domain.Sessions.SessionSnapshot!>!
+SharpCoreAgent.Domain.Sessions.ISessionStore.SaveAsync(SharpCoreAgent.Domain.Sessions.SessionSnapshot! snapshot, string! path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+SharpCoreAgent.Domain.Sessions.ModelUsage
+SharpCoreAgent.Domain.Sessions.ModelUsage.<Clone>$() -> SharpCoreAgent.Domain.Sessions.ModelUsage!
+SharpCoreAgent.Domain.Sessions.ModelUsage.Deconstruct(out string! ModelId, out int? InputTokens, out int? OutputTokens, out int Turns) -> void
+SharpCoreAgent.Domain.Sessions.ModelUsage.Equals(SharpCoreAgent.Domain.Sessions.ModelUsage? other) -> bool
+SharpCoreAgent.Domain.Sessions.ModelUsage.InputTokens.get -> int?
+SharpCoreAgent.Domain.Sessions.ModelUsage.InputTokens.init -> void
+SharpCoreAgent.Domain.Sessions.ModelUsage.ModelId.get -> string!
+SharpCoreAgent.Domain.Sessions.ModelUsage.ModelId.init -> void
+SharpCoreAgent.Domain.Sessions.ModelUsage.ModelUsage(string! ModelId, int? InputTokens, int? OutputTokens, int Turns) -> void
+SharpCoreAgent.Domain.Sessions.ModelUsage.OutputTokens.get -> int?
+SharpCoreAgent.Domain.Sessions.ModelUsage.OutputTokens.init -> void
+SharpCoreAgent.Domain.Sessions.ModelUsage.Turns.get -> int
+SharpCoreAgent.Domain.Sessions.ModelUsage.Turns.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.<Clone>$() -> SharpCoreAgent.Domain.Sessions.SessionSnapshot!
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Approval.get -> SharpCoreAgent.Domain.Agents.ApprovalMode
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Approval.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.CreatedAtUtc.get -> System.DateTimeOffset
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.CreatedAtUtc.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Deconstruct(out string! WorkspaceRoot, out string! Provider, out string! ModelId, out SharpCoreAgent.Domain.Agents.ApprovalMode Approval, out System.DateTimeOffset CreatedAtUtc, out System.DateTimeOffset UpdatedAtUtc, out System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ChatMessage!>! Messages, out System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Sessions.ModelUsage!>! Usage) -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Equals(SharpCoreAgent.Domain.Sessions.SessionSnapshot? other) -> bool
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Messages.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ChatMessage!>!
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Messages.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.ModelId.get -> string!
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.ModelId.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Provider.get -> string!
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Provider.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.SessionSnapshot(string! WorkspaceRoot, string! Provider, string! ModelId, SharpCoreAgent.Domain.Agents.ApprovalMode Approval, System.DateTimeOffset CreatedAtUtc, System.DateTimeOffset UpdatedAtUtc, System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ChatMessage!>! Messages, System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Sessions.ModelUsage!>! Usage) -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.UpdatedAtUtc.get -> System.DateTimeOffset
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.UpdatedAtUtc.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Usage.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Sessions.ModelUsage!>!
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.Usage.init -> void
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.WorkspaceRoot.get -> string!
+SharpCoreAgent.Domain.Sessions.SessionSnapshot.WorkspaceRoot.init -> void
+SharpCoreAgent.Domain.Tools.ITool
+SharpCoreAgent.Domain.Tools.ITool.Definition.get -> SharpCoreAgent.Domain.Tools.ToolDefinition!
+SharpCoreAgent.Domain.Tools.ITool.ExecuteAsync(SharpCoreAgent.Domain.Conversation.ToolCall! toolCall, SharpCoreAgent.Domain.Tools.ToolInvocationContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Tools.ToolResult!>
+SharpCoreAgent.Domain.Tools.ITool.Safety.get -> SharpCoreAgent.Domain.Tools.ToolSafety
+SharpCoreAgent.Domain.Tools.ToolDefinition
+SharpCoreAgent.Domain.Tools.ToolDefinition.<Clone>$() -> SharpCoreAgent.Domain.Tools.ToolDefinition!
+SharpCoreAgent.Domain.Tools.ToolDefinition.Deconstruct(out string! Name, out string! Description, out string! ParametersSchemaJson) -> void
+SharpCoreAgent.Domain.Tools.ToolDefinition.Description.get -> string!
+SharpCoreAgent.Domain.Tools.ToolDefinition.Description.init -> void
+SharpCoreAgent.Domain.Tools.ToolDefinition.Equals(SharpCoreAgent.Domain.Tools.ToolDefinition? other) -> bool
+SharpCoreAgent.Domain.Tools.ToolDefinition.Name.get -> string!
+SharpCoreAgent.Domain.Tools.ToolDefinition.Name.init -> void
+SharpCoreAgent.Domain.Tools.ToolDefinition.ParametersSchemaJson.get -> string!
+SharpCoreAgent.Domain.Tools.ToolDefinition.ParametersSchemaJson.init -> void
+SharpCoreAgent.Domain.Tools.ToolDefinition.ToolDefinition(string! Name, string! Description, string! ParametersSchemaJson) -> void
+SharpCoreAgent.Domain.Tools.ToolEffect
+SharpCoreAgent.Domain.Tools.ToolEffect.<Clone>$() -> SharpCoreAgent.Domain.Tools.ToolEffect!
+SharpCoreAgent.Domain.Tools.ToolEffect.Deconstruct(out SharpCoreAgent.Domain.Tools.ToolEffectKind Kind, out string! Target) -> void
+SharpCoreAgent.Domain.Tools.ToolEffect.Equals(SharpCoreAgent.Domain.Tools.ToolEffect? other) -> bool
+SharpCoreAgent.Domain.Tools.ToolEffect.Kind.get -> SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolEffect.Kind.init -> void
+SharpCoreAgent.Domain.Tools.ToolEffect.Target.get -> string!
+SharpCoreAgent.Domain.Tools.ToolEffect.Target.init -> void
+SharpCoreAgent.Domain.Tools.ToolEffect.ToolEffect(SharpCoreAgent.Domain.Tools.ToolEffectKind Kind, string! Target) -> void
+SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolEffectKind.CommandRun = 4 -> SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolEffectKind.Created = 1 -> SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolEffectKind.Deleted = 3 -> SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolEffectKind.Modified = 2 -> SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolEffectKind.Read = 0 -> SharpCoreAgent.Domain.Tools.ToolEffectKind
+SharpCoreAgent.Domain.Tools.ToolInvocationContext
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.<Clone>$() -> SharpCoreAgent.Domain.Tools.ToolInvocationContext!
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Deconstruct(out SharpCoreAgent.Domain.Workspace! Workspace) -> void
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Equals(SharpCoreAgent.Domain.Tools.ToolInvocationContext? other) -> bool
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.ToolInvocationContext(SharpCoreAgent.Domain.Workspace! Workspace) -> void
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Workspace.get -> SharpCoreAgent.Domain.Workspace!
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Workspace.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult
+SharpCoreAgent.Domain.Tools.ToolResult.<Clone>$() -> SharpCoreAgent.Domain.Tools.ToolResult!
+SharpCoreAgent.Domain.Tools.ToolResult.CallId.get -> string!
+SharpCoreAgent.Domain.Tools.ToolResult.CallId.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.Content.get -> string!
+SharpCoreAgent.Domain.Tools.ToolResult.Content.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.Effects.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Tools.ToolEffect!>!
+SharpCoreAgent.Domain.Tools.ToolResult.Effects.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.Equals(SharpCoreAgent.Domain.Tools.ToolResult? other) -> bool
+SharpCoreAgent.Domain.Tools.ToolResult.IsError.get -> bool
+SharpCoreAgent.Domain.Tools.ToolResult.IsError.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.IsRefused.get -> bool
+SharpCoreAgent.Domain.Tools.ToolResult.IsRefused.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.IsTruncated.get -> bool
+SharpCoreAgent.Domain.Tools.ToolResult.IsTruncated.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.ToolName.get -> string!
+SharpCoreAgent.Domain.Tools.ToolResult.ToolName.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.ToolResult() -> void
+SharpCoreAgent.Domain.Tools.ToolSafety
+SharpCoreAgent.Domain.Tools.ToolSafety.Destructive = 1 -> SharpCoreAgent.Domain.Tools.ToolSafety
+SharpCoreAgent.Domain.Tools.ToolSafety.ReadOnly = 0 -> SharpCoreAgent.Domain.Tools.ToolSafety
+SharpCoreAgent.Domain.Workspace
+SharpCoreAgent.Domain.Workspace.IsInside(string! fullPath) -> bool
+SharpCoreAgent.Domain.Workspace.Root.get -> string!
+SharpCoreAgent.Domain.Workspace.ToRelative(string! fullPath) -> string!
+SharpCoreAgent.Domain.Workspace.TryResolve(string! path, out string! fullPath, out string? error) -> bool
+static SharpCoreAgent.Domain.Agents.AgentEvent.operator !=(SharpCoreAgent.Domain.Agents.AgentEvent? left, SharpCoreAgent.Domain.Agents.AgentEvent? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentEvent.operator ==(SharpCoreAgent.Domain.Agents.AgentEvent? left, SharpCoreAgent.Domain.Agents.AgentEvent? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentReport.operator !=(SharpCoreAgent.Domain.Agents.AgentReport? left, SharpCoreAgent.Domain.Agents.AgentReport? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentReport.operator ==(SharpCoreAgent.Domain.Agents.AgentReport? left, SharpCoreAgent.Domain.Agents.AgentReport? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentTextDelta.operator !=(SharpCoreAgent.Domain.Agents.AgentTextDelta? left, SharpCoreAgent.Domain.Agents.AgentTextDelta? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentTextDelta.operator ==(SharpCoreAgent.Domain.Agents.AgentTextDelta? left, SharpCoreAgent.Domain.Agents.AgentTextDelta? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentThinkingDelta.operator !=(SharpCoreAgent.Domain.Agents.AgentThinkingDelta? left, SharpCoreAgent.Domain.Agents.AgentThinkingDelta? right) -> bool
+static SharpCoreAgent.Domain.Agents.AgentThinkingDelta.operator ==(SharpCoreAgent.Domain.Agents.AgentThinkingDelta? left, SharpCoreAgent.Domain.Agents.AgentThinkingDelta? right) -> bool
+static SharpCoreAgent.Domain.Agents.NullAgentObserver.Instance.get -> SharpCoreAgent.Domain.Agents.NullAgentObserver!
+static SharpCoreAgent.Domain.Agents.ToolApprovalRequest.operator !=(SharpCoreAgent.Domain.Agents.ToolApprovalRequest? left, SharpCoreAgent.Domain.Agents.ToolApprovalRequest? right) -> bool
+static SharpCoreAgent.Domain.Agents.ToolApprovalRequest.operator ==(SharpCoreAgent.Domain.Agents.ToolApprovalRequest? left, SharpCoreAgent.Domain.Agents.ToolApprovalRequest? right) -> bool
+static SharpCoreAgent.Domain.Agents.ToolFinished.operator !=(SharpCoreAgent.Domain.Agents.ToolFinished? left, SharpCoreAgent.Domain.Agents.ToolFinished? right) -> bool
+static SharpCoreAgent.Domain.Agents.ToolFinished.operator ==(SharpCoreAgent.Domain.Agents.ToolFinished? left, SharpCoreAgent.Domain.Agents.ToolFinished? right) -> bool
+static SharpCoreAgent.Domain.Agents.ToolRequested.operator !=(SharpCoreAgent.Domain.Agents.ToolRequested? left, SharpCoreAgent.Domain.Agents.ToolRequested? right) -> bool
+static SharpCoreAgent.Domain.Agents.ToolRequested.operator ==(SharpCoreAgent.Domain.Agents.ToolRequested? left, SharpCoreAgent.Domain.Agents.ToolRequested? right) -> bool
+static SharpCoreAgent.Domain.Agents.TurnFinished.operator !=(SharpCoreAgent.Domain.Agents.TurnFinished? left, SharpCoreAgent.Domain.Agents.TurnFinished? right) -> bool
+static SharpCoreAgent.Domain.Agents.TurnFinished.operator ==(SharpCoreAgent.Domain.Agents.TurnFinished? left, SharpCoreAgent.Domain.Agents.TurnFinished? right) -> bool
+static SharpCoreAgent.Domain.Agents.TurnStarted.operator !=(SharpCoreAgent.Domain.Agents.TurnStarted? left, SharpCoreAgent.Domain.Agents.TurnStarted? right) -> bool
+static SharpCoreAgent.Domain.Agents.TurnStarted.operator ==(SharpCoreAgent.Domain.Agents.TurnStarted? left, SharpCoreAgent.Domain.Agents.TurnStarted? right) -> bool
+static SharpCoreAgent.Domain.Conversation.ChatMessage.Assistant(string! content, System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ToolCall!>? toolCalls = null) -> SharpCoreAgent.Domain.Conversation.ChatMessage!
+static SharpCoreAgent.Domain.Conversation.ChatMessage.FromToolResult(SharpCoreAgent.Domain.Tools.ToolResult! result) -> SharpCoreAgent.Domain.Conversation.ChatMessage!
+static SharpCoreAgent.Domain.Conversation.ChatMessage.operator !=(SharpCoreAgent.Domain.Conversation.ChatMessage? left, SharpCoreAgent.Domain.Conversation.ChatMessage? right) -> bool
+static SharpCoreAgent.Domain.Conversation.ChatMessage.operator ==(SharpCoreAgent.Domain.Conversation.ChatMessage? left, SharpCoreAgent.Domain.Conversation.ChatMessage? right) -> bool
+static SharpCoreAgent.Domain.Conversation.ChatMessage.System(string! content) -> SharpCoreAgent.Domain.Conversation.ChatMessage!
+static SharpCoreAgent.Domain.Conversation.ChatMessage.User(string! content) -> SharpCoreAgent.Domain.Conversation.ChatMessage!
+static SharpCoreAgent.Domain.Conversation.ToolCall.operator !=(SharpCoreAgent.Domain.Conversation.ToolCall? left, SharpCoreAgent.Domain.Conversation.ToolCall? right) -> bool
+static SharpCoreAgent.Domain.Conversation.ToolCall.operator ==(SharpCoreAgent.Domain.Conversation.ToolCall? left, SharpCoreAgent.Domain.Conversation.ToolCall? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeEvidence.operator !=(SharpCoreAgent.Domain.Index.CodeEvidence? left, SharpCoreAgent.Domain.Index.CodeEvidence? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeEvidence.operator ==(SharpCoreAgent.Domain.Index.CodeEvidence? left, SharpCoreAgent.Domain.Index.CodeEvidence? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeQuery.Create(string! text, string? path = null, string? kind = null, int k = 8, int hops = 1) -> SharpCoreAgent.Domain.Index.CodeQuery!
+static SharpCoreAgent.Domain.Index.CodeQuery.NormalizePath(string? path) -> string?
+static SharpCoreAgent.Domain.Index.CodeQuery.operator !=(SharpCoreAgent.Domain.Index.CodeQuery? left, SharpCoreAgent.Domain.Index.CodeQuery? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeQuery.operator ==(SharpCoreAgent.Domain.Index.CodeQuery? left, SharpCoreAgent.Domain.Index.CodeQuery? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeQuery.SupportedKinds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static SharpCoreAgent.Domain.Index.CodeSymbolRef.operator !=(SharpCoreAgent.Domain.Index.CodeSymbolRef? left, SharpCoreAgent.Domain.Index.CodeSymbolRef? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeSymbolRef.operator ==(SharpCoreAgent.Domain.Index.CodeSymbolRef? left, SharpCoreAgent.Domain.Index.CodeSymbolRef? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexBuildReport.operator !=(SharpCoreAgent.Domain.Index.IndexBuildReport? left, SharpCoreAgent.Domain.Index.IndexBuildReport? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexBuildReport.operator ==(SharpCoreAgent.Domain.Index.IndexBuildReport? left, SharpCoreAgent.Domain.Index.IndexBuildReport? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexStatus.Missing(string! workspaceRoot) -> SharpCoreAgent.Domain.Index.IndexStatus!
+static SharpCoreAgent.Domain.Index.IndexStatus.operator !=(SharpCoreAgent.Domain.Index.IndexStatus? left, SharpCoreAgent.Domain.Index.IndexStatus? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexStatus.operator ==(SharpCoreAgent.Domain.Index.IndexStatus? left, SharpCoreAgent.Domain.Index.IndexStatus? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexVerification.operator !=(SharpCoreAgent.Domain.Index.IndexVerification? left, SharpCoreAgent.Domain.Index.IndexVerification? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexVerification.operator ==(SharpCoreAgent.Domain.Index.IndexVerification? left, SharpCoreAgent.Domain.Index.IndexVerification? right) -> bool
+static SharpCoreAgent.Domain.Model.ChatRequest.operator !=(SharpCoreAgent.Domain.Model.ChatRequest? left, SharpCoreAgent.Domain.Model.ChatRequest? right) -> bool
+static SharpCoreAgent.Domain.Model.ChatRequest.operator ==(SharpCoreAgent.Domain.Model.ChatRequest? left, SharpCoreAgent.Domain.Model.ChatRequest? right) -> bool
+static SharpCoreAgent.Domain.Model.ChatResponse.operator !=(SharpCoreAgent.Domain.Model.ChatResponse? left, SharpCoreAgent.Domain.Model.ChatResponse? right) -> bool
+static SharpCoreAgent.Domain.Model.ChatResponse.operator ==(SharpCoreAgent.Domain.Model.ChatResponse? left, SharpCoreAgent.Domain.Model.ChatResponse? right) -> bool
+static SharpCoreAgent.Domain.Model.ChatStreamEvent.operator !=(SharpCoreAgent.Domain.Model.ChatStreamEvent? left, SharpCoreAgent.Domain.Model.ChatStreamEvent? right) -> bool
+static SharpCoreAgent.Domain.Model.ChatStreamEvent.operator ==(SharpCoreAgent.Domain.Model.ChatStreamEvent? left, SharpCoreAgent.Domain.Model.ChatStreamEvent? right) -> bool
+static SharpCoreAgent.Domain.Model.ModelDescriptor.operator !=(SharpCoreAgent.Domain.Model.ModelDescriptor? left, SharpCoreAgent.Domain.Model.ModelDescriptor? right) -> bool
+static SharpCoreAgent.Domain.Model.ModelDescriptor.operator ==(SharpCoreAgent.Domain.Model.ModelDescriptor? left, SharpCoreAgent.Domain.Model.ModelDescriptor? right) -> bool
+static SharpCoreAgent.Domain.Model.StreamCompleted.operator !=(SharpCoreAgent.Domain.Model.StreamCompleted? left, SharpCoreAgent.Domain.Model.StreamCompleted? right) -> bool
+static SharpCoreAgent.Domain.Model.StreamCompleted.operator ==(SharpCoreAgent.Domain.Model.StreamCompleted? left, SharpCoreAgent.Domain.Model.StreamCompleted? right) -> bool
+static SharpCoreAgent.Domain.Model.TextDelta.operator !=(SharpCoreAgent.Domain.Model.TextDelta? left, SharpCoreAgent.Domain.Model.TextDelta? right) -> bool
+static SharpCoreAgent.Domain.Model.TextDelta.operator ==(SharpCoreAgent.Domain.Model.TextDelta? left, SharpCoreAgent.Domain.Model.TextDelta? right) -> bool
+static SharpCoreAgent.Domain.Model.ThinkingDelta.operator !=(SharpCoreAgent.Domain.Model.ThinkingDelta? left, SharpCoreAgent.Domain.Model.ThinkingDelta? right) -> bool
+static SharpCoreAgent.Domain.Model.ThinkingDelta.operator ==(SharpCoreAgent.Domain.Model.ThinkingDelta? left, SharpCoreAgent.Domain.Model.ThinkingDelta? right) -> bool
+static SharpCoreAgent.Domain.Model.TokenUsage.operator !=(SharpCoreAgent.Domain.Model.TokenUsage? left, SharpCoreAgent.Domain.Model.TokenUsage? right) -> bool
+static SharpCoreAgent.Domain.Model.TokenUsage.operator +(SharpCoreAgent.Domain.Model.TokenUsage! left, SharpCoreAgent.Domain.Model.TokenUsage! right) -> SharpCoreAgent.Domain.Model.TokenUsage!
+static SharpCoreAgent.Domain.Model.TokenUsage.operator ==(SharpCoreAgent.Domain.Model.TokenUsage? left, SharpCoreAgent.Domain.Model.TokenUsage? right) -> bool
+static SharpCoreAgent.Domain.Model.TokenUsage.Unknown.get -> SharpCoreAgent.Domain.Model.TokenUsage!
+static SharpCoreAgent.Domain.Sessions.ModelUsage.operator !=(SharpCoreAgent.Domain.Sessions.ModelUsage? left, SharpCoreAgent.Domain.Sessions.ModelUsage? right) -> bool
+static SharpCoreAgent.Domain.Sessions.ModelUsage.operator ==(SharpCoreAgent.Domain.Sessions.ModelUsage? left, SharpCoreAgent.Domain.Sessions.ModelUsage? right) -> bool
+static SharpCoreAgent.Domain.Sessions.SessionSnapshot.operator !=(SharpCoreAgent.Domain.Sessions.SessionSnapshot? left, SharpCoreAgent.Domain.Sessions.SessionSnapshot? right) -> bool
+static SharpCoreAgent.Domain.Sessions.SessionSnapshot.operator ==(SharpCoreAgent.Domain.Sessions.SessionSnapshot? left, SharpCoreAgent.Domain.Sessions.SessionSnapshot? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolDefinition.operator !=(SharpCoreAgent.Domain.Tools.ToolDefinition? left, SharpCoreAgent.Domain.Tools.ToolDefinition? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolDefinition.operator ==(SharpCoreAgent.Domain.Tools.ToolDefinition? left, SharpCoreAgent.Domain.Tools.ToolDefinition? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolEffect.operator !=(SharpCoreAgent.Domain.Tools.ToolEffect? left, SharpCoreAgent.Domain.Tools.ToolEffect? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolEffect.operator ==(SharpCoreAgent.Domain.Tools.ToolEffect? left, SharpCoreAgent.Domain.Tools.ToolEffect? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolInvocationContext.operator !=(SharpCoreAgent.Domain.Tools.ToolInvocationContext? left, SharpCoreAgent.Domain.Tools.ToolInvocationContext? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolInvocationContext.operator ==(SharpCoreAgent.Domain.Tools.ToolInvocationContext? left, SharpCoreAgent.Domain.Tools.ToolInvocationContext? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolResult.Failure(string! callId, string! toolName, string! message) -> SharpCoreAgent.Domain.Tools.ToolResult!
+static SharpCoreAgent.Domain.Tools.ToolResult.operator !=(SharpCoreAgent.Domain.Tools.ToolResult? left, SharpCoreAgent.Domain.Tools.ToolResult? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolResult.operator ==(SharpCoreAgent.Domain.Tools.ToolResult? left, SharpCoreAgent.Domain.Tools.ToolResult? right) -> bool
+static SharpCoreAgent.Domain.Tools.ToolResult.Refused(string! callId, string! toolName, string! reason) -> SharpCoreAgent.Domain.Tools.ToolResult!
+static SharpCoreAgent.Domain.Tools.ToolResult.Success(string! callId, string! toolName, string! content, params SharpCoreAgent.Domain.Tools.ToolEffect![]! effects) -> SharpCoreAgent.Domain.Tools.ToolResult!
+static SharpCoreAgent.Domain.Workspace.Create(string! root) -> SharpCoreAgent.Domain.Workspace!
+virtual SharpCoreAgent.Domain.Agents.AgentEvent.EqualityContract.get -> System.Type!
+virtual SharpCoreAgent.Domain.Agents.AgentEvent.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+virtual SharpCoreAgent.Domain.Agents.AgentEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual SharpCoreAgent.Domain.Model.ChatStreamEvent.EqualityContract.get -> System.Type!
+virtual SharpCoreAgent.Domain.Model.ChatStreamEvent.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
+virtual SharpCoreAgent.Domain.Model.ChatStreamEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool

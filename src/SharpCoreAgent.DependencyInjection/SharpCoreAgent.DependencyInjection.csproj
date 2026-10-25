@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SharpCoreAgent.DependencyInjection</RootNamespace>
+    <AssemblyName>SharpCoreAgent.DependencyInjection</AssemblyName>
+    <Description>Composition root: the one place that knows which concrete adapter satisfies which port.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Infrastructure\SharpCoreAgent.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      DI abstractions come from the net11.0 shared framework; an explicit package reference only earns
+      NU1510. Microsoft.Extensions.Http is a real package (the IHttpClientFactory implementation).
+    -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

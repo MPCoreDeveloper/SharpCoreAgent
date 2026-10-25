@@ -1,0 +1,57 @@
+using SharpCoreAgent.Domain.Tools;
+
+namespace SharpCoreAgent.Domain.Agents;
+
+/// <summary>
+/// How much the developer wants to be asked before a tool runs.
+/// </summary>
+public enum ApprovalMode
+{
+    /// <summary>Only read-only tools may run; everything else is refused without asking.</summary>
+    ReadOnly,
+
+    /// <summary>Read-only tools run; destructive tools ask first.</summary>
+    Ask,
+
+    /// <summary>Every tool runs without asking. Only for trusted workspaces and unattended runs.</summary>
+    AllowAll,
+}
+
+/// <summary>
+/// The developer's answer to one approval prompt.
+/// </summary>
+public enum ApprovalOutcome
+{
+    /// <summary>The tool may run.</summary>
+    Approved,
+
+    /// <summary>The tool must not run; the refusal is reported back to the model.</summary>
+    Denied,
+}
+
+/// <summary>
+/// What the developer is shown before approving a destructive tool.
+/// </summary>
+/// <param name="ToolName">The tool.</param>
+/// <param name="Safety">Its safety class, always <see cref="ToolSafety.Destructive"/> here.</param>
+/// <param name="Summary">One line naming the target, so the prompt does not require reading JSON.</param>
+/// <param name="ArgumentsJson">The raw arguments, for the developer who wants the detail.</param>
+public sealed record ToolApprovalRequest(string ToolName, ToolSafety Safety, string Summary, string ArgumentsJson);
+
+/// <summary>
+/// Decides whether a destructive tool may run.
+/// </summary>
+/// <remarks>
+/// Approval lives behind a port so the loop has no opinion about terminals: the CLI plugs in a
+/// console prompt, tests plug in a script, and an unattended run plugs in a policy that always denies.
+/// </remarks>
+public interface IToolApprover
+{
+    /// <summary>
+    /// Asks for a decision.
+    /// </summary>
+    /// <param name="request">What is about to run.</param>
+    /// <param name="cancellationToken">Cancels the prompt.</param>
+    /// <returns>The decision.</returns>
+    ValueTask<ApprovalOutcome> DecideAsync(ToolApprovalRequest request, CancellationToken cancellationToken);
+}
