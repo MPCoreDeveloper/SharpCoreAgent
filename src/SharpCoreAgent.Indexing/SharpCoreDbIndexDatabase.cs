@@ -113,18 +113,10 @@ internal sealed class SharpCoreDbIndexDatabase : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        // IDatabase itself is not disposable in 2.1.0 -- the concrete Database is -- so the cast is how a
-        // caller that only holds the interface closes the file handle. Disposing the provider alone would leak
-        // the engine's pooled buffers.
-        if (Database is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
-        else if (Database is IAsyncDisposable asynchronousDisposable)
-        {
-            asynchronousDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-
+        // IDatabase is IAsyncDisposable, and that is the handle's own close path: the cast to IDisposable only
+        // worked because the concrete database happens to implement it too. Disposing the provider alone would
+        // leak the engine's pooled buffers.
+        Database.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _serviceProvider.Dispose();
     }
 }

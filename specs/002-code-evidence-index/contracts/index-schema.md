@@ -3,7 +3,7 @@
 **Scope**: the SharpCoreDB database inside `<workspace>/.sharpcoreagent/index/`. Only `SharpCoreAgent.Indexing`
 may name these tables or columns; everything else goes through `ICodeIndex` / `ICodeIndexMaintainer`.
 
-**Engine**: SharpCoreDB `2.1.0`. The SQL used here is the subset verified against the shipped package:
+**Engine**: SharpCoreDB `2.1.1`. The SQL used here is the subset verified against the shipped package:
 `CREATE TABLE IF NOT EXISTS`, `INTEGER PRIMARY KEY AUTO` (monotonic, persisted), `TEXT`, `REAL`,
 `INTEGER`, `VECTOR(n)`, `CHECK (…)`, `COLLATE NOCASE`, `CREATE INDEX … ON t (col)` and parameterised
 `@name` arguments, executed through `IDatabase.ExecuteSQL`, `IDatabase.ExecuteQuery` and
@@ -17,8 +17,11 @@ Four facts about that package the code has to live with, all learned from `Index
    Every read names its columns and maps by column name, never by position or alias.
 3. `DatabaseFactory.CreateWithOptions` rejects a blank master password even when
    `DatabaseOptions.EnableEncryption` is `false`, so the unencrypted index passes a constant placeholder.
-4. `IDatabase` is not itself disposable; the concrete database behind it is, so closing means casting.
+4. `IDatabase` is `IAsyncDisposable` since 2.1.1, so closing the index is `Database.DisposeAsync()`; the
+   cast-to-`IDisposable` fallback the 2.1.0 adapter needed is gone.
 5. The factory appends `.scdb` to any path that does not already end with it, and preallocates the file
+   (≈14 MiB for an empty schema), so the index path carries the extension and a fresh workspace reports a
+   size before it holds a single row.
    (≈14 MiB for an empty schema), so the index path carries the extension and a fresh workspace reports a
    size before it holds a single row.
 
@@ -150,7 +153,7 @@ transaction, so a crash leaves the previous values and `VerifyAsync` can detect 
 |---|---|---|
 | `schema_version` | `1` | this document's version; a mismatch ⇒ rebuild, never a migration in v1 |
 | `parser_version` | `1` | heuristic extractor version; a mismatch ⇒ re-derive every file's symbols |
-| `analyzer_contract` | `1` | chunking + tokenisation rules; a mismatch ⇒ re-chunk every file |
+| `analyzer_contract` | `3` | chunking + tokenisation + stored-vector shape; a mismatch ⇒ re-chunk every file |
 | `tier` | `lean` | `lean` \| `rich` |
 | `embedder` | `hashed-local/512` | identity of the embedder, including dimensions |
 | `dimensions` | `512` | must equal the `VECTOR(n)` declarations |
@@ -217,6 +220,13 @@ UNION ALL
 SELECT target AS other, rel, weight FROM edges WHERE source = @id;
 ```
 
+**The vector-leg statement is the target shape, not what runs today.** `2.1.1` carries the repaired planner
+(`16cb51d5`), but it engages only on a *directory-mode* database: on this index's single `.scdb` file the
+`ORDER BY vec_distance_cosine(…)` statement still returns the rows in insertion order and projects no
+`distance` column. `VectorRetriever` therefore computes the same cosine in C# over the vectors the snapshot
+loaded; the statement above is what the leg moves to when the planner covers the single-file route, and the
+schema does not change when it does.
+
 Every value above is a bound parameter. No query string is ever built by concatenation — the
 `LIKE` pattern is `"%" + escaped + "%"`, assembled in C# and passed as `@path_prefix`/`@infix`, so the
 statement text itself stays constant (Principle III).
@@ -231,6 +241,10 @@ statement text itself stays constant (Principle III).
   maintainer rebuild only when the caller explicitly asks (`index --rebuild`).
 
 The same rule applies to `analyzer_contract` (re-chunk) and `parser_version` (re-extract facts), except
-those can be repaired in place without recreating tables.
+those can be repaired in place without recreating tables: a build that finds either of them different
+empties the six data tables before it walks the workspace, because an incremental pass would otherwise
+keep every file whose hash still matches and the rows would stay derived by the old rules for ever. The
+three version keys are rewritten with the rest of `meta` at the end of that build, so the index reports
+itself fresh afterwards instead of stale against the values the first open seeded.
 
 

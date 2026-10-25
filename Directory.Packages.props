@@ -18,7 +18,7 @@
     -->
     <DotNetExtensionsVersion>11.0.0-rc.2.26504.105</DotNetExtensionsVersion>
     <!-- One version for the six SharpCoreDB packages; see the comment on their rows below. -->
-    <SharpCoreDBVersion>2.1.0</SharpCoreDBVersion>
+    <SharpCoreDBVersion>2.1.1</SharpCoreDBVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,19 +37,23 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetExtensionsVersion)" />
 
     <!--
-      SharpCoreDB 2.1.0: the storage engine behind the code-evidence index (feature 002).
+      SharpCoreDB 2.1.1: the storage engine behind the code-evidence index (feature 002).
       One version for all six packages, because a mixed set would pit a vector column written by
       .VectorSearch against a planner from a different build. The packages are net11.0-only, which is
       the only framework this repository targets.
 
-      They are published on nuget.org, so a clone restores them like any other dependency. 2.1.0 is
-      the release; the RC.3 this file used to name is superseded. Two engine defects the RC.3 note
-      recorded are still open in 2.1.0 — a bound float[] parameter is stored as the text
-      "System.Single[]", and the SQL vector optimizer is never wired — because both were fixed after
-      the tag (32227696, and fix/vector-sql-optimizer's 16cb51d5). The writer therefore keeps
-      encoding vectors as JSON, and the vector leg stays in C#. What 2.1.0 did change is the shape a
-      VECTOR(n) read hands back: a JsonElement for the stored JSON array, which IndexReader.AsVector
-      accepts alongside the plain text RC.3 returned.
+      They are published on nuget.org, so a clone restores them like any other dependency. 2.1.1 is
+      the release, and it carries both of the fixes the 2.1.0 note used to record as open: a bound
+      float[] parameter reaches a VECTOR(n) column as a vector (32227696), and ORDER BY
+      vec_distance_*() LIMIT k reaches the vector index (16cb51d5). A VECTOR(n) column read hands
+      back float[] on the single-file path the index uses, so the writer binds the embedder's array
+      directly instead of encoding it as JSON, and analyzer_contract moved to 3 to rebuild the cells
+      written through the old encoding.
+
+      The vector leg still computes cosine in C#, and the measurement behind that decision is in
+      specs/002-code-evidence-index/research.md (D6): on the shipped package the repaired planner
+      serves directory-mode databases only, and this index is one .scdb file, where a projected
+      vec_distance_* is dropped and ORDER BY on it does not sort.
     -->
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Search" Version="$(SharpCoreDBVersion)" />

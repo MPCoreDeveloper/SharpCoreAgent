@@ -106,6 +106,30 @@ public sealed class IncrementalIndexTests
     }
 
     [Fact]
+    public async Task OlderAnalyzerContractRewritesEveryFileAndThenReportsFresh()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        await using (var first = SharpCoreDbIndexMaintainer.For(sandbox.Workspace))
+        {
+            await first.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        }
+
+        // What an index built by the previous contract looks like: every file row still matches its file, so an
+        // incremental pass would keep it and the vectors would stay in the old shape for ever.
+        IndexTestDatabase.SetMeta(IndexPaths.For(sandbox.Workspace), "analyzer_contract", "2");
+
+        await using var second = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
+        var report = await second.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        Assert.Equal(5, report.Added);
+        Assert.Equal(0, report.Unchanged);
+        Assert.Equal(IndexFreshness.Fresh, report.Status.Freshness);
+        Assert.Equal("3", ReadMeta(sandbox.Workspace)["analyzer_contract"]);
+    }
+
+    [Fact]
     public async Task EditingOneFileRewritesOnlyThatFile()
     {
         using var sandbox = ToolTestWorkspace.Create();

@@ -33,6 +33,16 @@ public sealed class IndexReaderTests
         Assert.Equal("hashed-local/512", snapshot.Embedder);
         Assert.Equal(512, snapshot.Dimensions);
         Assert.True(snapshot.HasVectors);
+
+        // The writer binds the embedder's float[] and 2.1.1 stores it in the engine's own vector format; a return to
+        // a text encoding would leave every passage without a vector, which is exactly the silent answer this
+        // assertion refuses.
+        Assert.All(snapshot.Chunks.Values, chunk =>
+        {
+            Assert.NotNull(chunk.Vector);
+            Assert.Equal(IndexSchema.Dimensions, chunk.Vector.Length);
+        });
+
         Assert.Contains("src/Geometry/Circle.cs", snapshot.Paths.Values);
     }
 

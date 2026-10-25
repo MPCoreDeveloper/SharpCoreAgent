@@ -299,11 +299,19 @@ internal sealed class IndexWriter
     /// <remarks>
     /// Written last, in one batch, so an interrupted build leaves the previous id in place and the reader can
     /// tell that the rows it is looking at were never completed.
+    /// <para>
+    /// The schema, parser and analyzer contract keys are rewritten here for the same reason the counters are:
+    /// they describe the rows this run left behind, and a build that re-derived them under a newer contract
+    /// would otherwise be reported stale for ever against the values the first open seeded.
+    /// </para>
     /// </remarks>
     private void WriteMeta(string buildId, string buildUtc)
     {
         _files.WriteMeta(
         [
+            ("schema_version", IndexSchema.Version.ToString(CultureInfo.InvariantCulture)),
+            ("parser_version", IndexSchema.ParserVersion.ToString(CultureInfo.InvariantCulture)),
+            ("analyzer_contract", IndexSchema.AnalyzerContract.ToString(CultureInfo.InvariantCulture)),
             ("build_id", buildId),
             ("build_utc", buildUtc),
             ("build_state", _incomplete ? IndexSchema.PartialState : IndexSchema.CompleteState),

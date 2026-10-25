@@ -38,13 +38,14 @@ internal sealed record VectorLegResult(IReadOnlyList<VectorMatch> Matches, strin
 /// <remarks>
 /// Three decisions are worth stating.
 /// <list type="number">
-/// <item>The comparison runs over the vectors the snapshot loaded, in this assembly. SharpCoreDB 2.1.0
-/// registers <c>vec_distance_cosine</c> but its SQL surface cannot be used for ranking: the vector query optimizer
-/// is a stub that declines every plan, the parser's optimizer reference is never assigned at all (so
-/// <c>CREATE VECTOR INDEX</c> builds nothing), a projection that computes a function is ignored and returns whole
-/// rows, and a <c>WHERE vec_distance_cosine(...)</c> predicate matches nothing. The scan is therefore done here,
-/// behind this one method, so the day a package carries the repaired planner (<c>fix/vector-sql-optimizer</c>,
-/// <c>16cb51d5</c>) the work can move into the engine without touching the ranker.</item>
+/// <item>The comparison runs over the vectors the snapshot loaded, in this assembly. SharpCoreDB 2.1.1 carries
+/// the repaired planner (<c>16cb51d5</c>), and it does serve <c>ORDER BY vec_distance_cosine(embedding, ?)
+/// LIMIT k</c> from a <c>CREATE VECTOR INDEX … USING FLAT</c> index, distance projected — but only on a
+/// directory-mode database. The index opens as a single <c>.scdb</c> file, and on that route the same statement
+/// comes back with no <c>distance</c> column and its rows in insertion order (an <c>ORDER BY</c> on a function is
+/// still a silent no-op on the scan path), while a <c>WHERE vec_distance_cosine(...)</c> predicate matches
+/// nothing on both routes. The scan is therefore done here, behind this one method, so the day the single-file
+/// route serves it the work can move into the engine without touching the ranker.</item>
 /// <item>A similarity floor is applied. Feature-hashed vectors of unrelated text sit near zero by construction, so
 /// without a floor the leg would pad the fusion list with orthogonal passages that merely outrank each other.</item>
 /// <item>Nothing throws for a leg that cannot run. An index built with the embedder off, or by an embedder of a

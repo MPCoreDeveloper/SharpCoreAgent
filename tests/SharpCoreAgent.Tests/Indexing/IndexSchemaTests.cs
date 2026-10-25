@@ -51,7 +51,7 @@ public sealed class IndexSchemaTests
         Assert.Equal(15, meta.Count);
         Assert.Equal("1", meta["schema_version"]);
         Assert.Equal("1", meta["parser_version"]);
-        Assert.Equal("2", meta["analyzer_contract"]);
+        Assert.Equal("3", meta["analyzer_contract"]);
         Assert.Equal("lean", meta["tier"]);
         Assert.Equal("hashed-local/512", meta["embedder"]);
         Assert.Equal("512", meta["dimensions"]);
@@ -81,6 +81,28 @@ public sealed class IndexSchemaTests
         // Counting rows in C# rather than through COUNT(*) AS n: the engine does not carry a column alias
         // through ExecuteQuery, and a duplicate seed would show as a count above fifteen anyway.
         Assert.Equal(15, meta.Count);
+    }
+
+    [Fact]
+    public void ContractKeysAreCurrentOnAFreshSchema()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var paths = IndexPaths.For(sandbox.Workspace);
+
+        using (var database = SharpCoreDbIndexDatabase.OpenOrCreate(paths, encryptionPassword: null))
+        {
+            IndexSchema.EnsureCreated(database.Database, paths);
+
+            // A database nobody has written rows to yet has nothing to re-derive.
+            Assert.False(IndexSchema.RowsWereDerivedByAnotherContract(database.Database));
+        }
+
+        IndexTestDatabase.SetMeta(paths, "analyzer_contract", "2");
+
+        using var reopened = SharpCoreDbIndexDatabase.OpenOrCreate(paths, encryptionPassword: null);
+
+        // Same files, older rules: the rows are current with the source and stale with the code.
+        Assert.True(IndexSchema.RowsWereDerivedByAnotherContract(reopened.Database));
     }
 
     [Fact]

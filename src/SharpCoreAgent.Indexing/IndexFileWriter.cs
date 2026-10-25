@@ -1,7 +1,6 @@
 using SharpCoreAgent.Indexing.Embedding;
 using SharpCoreAgent.Indexing.Extraction;
 using SharpCoreDB.Interfaces;
-using SharpCoreDB.VectorSearch;
 
 namespace SharpCoreAgent.Indexing;
 
@@ -365,7 +364,7 @@ internal sealed class IndexFileWriter
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // A fresh array per row: the engine keeps the reference it is handed, and a shared buffer would
+            // A fresh array per row: the embedder writes into the array it is handed, so a shared buffer would
             // leave every passage of the file holding the vector of the last one.
             var vector = new float[_embedder.Dimensions];
             _embedder.Embed(passage.Text, vector);
@@ -386,7 +385,7 @@ internal sealed class IndexFileWriter
                     ("@text", passage.Text),
                     ("@tokens", CodeTokenizer.TokenizeForIndex(passage.Text)),
                     ("@sha", IndexFileContent.HashText(passage.Text)),
-                    ("@vector", EncodeVector(vector))));
+                    ("@vector", vector)));
         }
     }
 
@@ -449,23 +448,9 @@ internal sealed class IndexFileWriter
                 IndexSql.Parameters(
                     ("@node", symbolIds[index]),
                     ("@label", symbol.Key),
-                    ("@vector", EncodeVector(vector))));
+                    ("@vector", vector)));
         }
     }
-
-    /// <summary>
-    /// Encodes a vector as the text form a <c>VECTOR(n)</c> column parses.
-    /// </summary>
-    /// <param name="vector">The components.</param>
-    /// <returns>A JSON float array.</returns>
-    /// <remarks>
-    /// A bound <c>float[]</c> does not survive parameter binding in 2.1.0: the binder calls <c>ToString()</c> on the
-    /// array, and the <c>VECTOR(n)</c> column then refuses the text <c>System.Single[]</c> it never produced
-    /// (<c>Invalid value 'System.Single[]' for data type Vector</c>), so the index would fail its build rather than
-    /// store a vector. The column accepts a JSON float array (through <c>VectorBinaryCodec.TryParse</c>) and that
-    /// form round-trips, which is why the encoding lives in one method instead of at both insert sites.
-    /// </remarks>
-    private static string EncodeVector(float[] vector) => VectorSerializer.ToJson(vector);
 
     /// <summary>
     /// Reads the id of a row that was just inserted.

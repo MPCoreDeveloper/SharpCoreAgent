@@ -3,7 +3,7 @@
 **Feature**: `002-code-evidence-index` | **Date**: 2026-10-24
 
 Every decision below was taken against the actual sources: the SharpCoreDB repository at
-`d:\repos\MPCoreDeveloper\SharpCoreDB` (packages `2.1.0`, `net11.0`) and the SharpCoreAgent tree at
+`d:\repos\MPCoreDeveloper\SharpCoreDB` (packages `2.1.1`, `net11.0`) and the SharpCoreAgent tree at
 `d:\repos\MPCoreDeveloper\SharpCoreAgent`. Where a SharpCoreDB behaviour is named, it was read in that
 repository, not inferred.
 
@@ -28,7 +28,7 @@ repository, not inferred.
 ## D1 — Depend on SharpCoreDB packages, not on the project tree
 
 **Decision**: reference `SharpCoreDB`, `SharpCoreDB.Search`, `SharpCoreDB.VectorSearch`,
-`SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and `SharpCoreDB.HybridSearch` at `2.1.0` from
+`SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and `SharpCoreDB.HybridSearch` at `2.1.1` from
 nuget.org, with one MSBuild switch (`SharpCoreAgentUseLocalSharpCoreDb=true`) that
 swaps in `ProjectReference`s for engine development.
 
@@ -99,10 +99,10 @@ persistence-and-invalidation problem for nothing.
 **Cost**: the HNSW index is rebuilt with the database, not maintained per file; at that scale a rebuild
 is an explicit `index --rebuild`, which the CLI reports.
 
-**Measured (2026-10-25), and what changed because of it**: the SQL route is not available in `2.1.0`
-(and was not in the `2.1.0-RC.3` this was first measured on). Four findings, each reproduced against a
-real index and then traced back to the engine's source, because "it does not work" is not a decision
-anyone can build on:
+**Measured (2026-10-25), and what changed because of it**: the SQL route is not available in `2.1.0`, the
+release that was consumed when this was first measured (and not in the `2.1.0-RC.3` before it). Four
+findings, each reproduced against a real index and then traced back to the engine's source, because "it
+does not work" is not a decision anyone can build on:
 
 1. `TryExecuteVectorOptimized` in `SqlParser.DML.cs` is a stub that returns `null`, so the
    `ORDER BY vec_distance_*(col, query) LIMIT k` plan never becomes an index scan. It is not a feature
@@ -117,8 +117,8 @@ anyone can build on:
    `fix/vector-sql-optimizer` (commit `16cb51d5`): `Database.GetSharedSqlParser` now resolves
    `IVectorQueryOptimizer` from the service provider and attaches it per parser instance, and the
    restored method projects onto the SELECT list and refuses `DESC`/`WHERE` (which an ascending top-k
-   cannot answer) instead of returning the wrong shape. Until a package containing it ships, `2.1.0`
-   is still what we consume, so the C# leg (D6) stays.
+   cannot answer) instead of returning the wrong shape. `2.1.1` ships that repair — and the C# leg still
+   stays, for a reason that only showed up when the repair was measured (see the re-measurement below).
 2. A projection that computes a function is ignored: `SELECT id, vec_distance_cosine(embedding, @q) AS d
    FROM chunks` returns every column of the row and no `d`. The legacy `ExecuteSelect` path never
    projects a single-table select at all (`ProjectColumns` is called only on the join path), so the
@@ -138,12 +138,11 @@ moved from the RC to the 2.1.0 release:
 - Binding a `float[]` as a parameter stores the literal text `System.Single[]` — not a similarity-score
   problem but a lost value. The column's accepted textual form is a JSON array. Fixed upstream in
   `32227696` (2026-10-11), which gave the format and the coercion a single definition
-  (`VectorBinaryCodec`) and routed both parameter binders through it. The `2.1.0` tag (2026-10-10)
-  predates that fix as well, so the release carries the same defect, one step louder: on 2.1.0 the insert
-  now fails outright (`Invalid value 'System.Single[]' for data type Vector`) instead of storing the
-  useless text. The writer still sends `VectorSerializer.ToJson(vector)` explicitly, because it does not
-  depend on the binder at all, and `analyzer_contract` is 2 so indexes written through the old path
-  rebuild.
+  (`VectorBinaryCodec`) and routed both parameter binders through it. `2.1.0` (2026-10-10) predates that
+  fix, so the writer encoded the array itself (`VectorSerializer.ToJson`) and `analyzer_contract` went to
+  2 to have those cells rewritten. `2.1.1` carries it: the writer binds the embedder's `float[]` again,
+  `EncodeVector` is gone, and `analyzer_contract` is 3 — the same argument one step further, because the
+  cells those older indexes hold are JSON text and the rows written now are the engine's own binary form.
 - A `TEXT` literal does not survive `INSERT`: the engine's `ParseInsertValues` trims every literal
   ("3. every literal is Trimmed" in its own comment, pinned by its `InsertValuesParsingTests`), so a
   passage that started with indentation or ended with a blank line was stored trimmed and the stored
@@ -159,11 +158,18 @@ moved from the RC to the 2.1.0 release:
   `VectorRetrieverTests` failed on the bump this way, and `AsVector` now also accepts the element, routing
   its raw JSON through the same parser as the text form.
 
-The leg therefore computes cosine over the vectors the snapshot loads, using the same measure the embedder
-uses. That keeps the decision (D6) — vectors in the column, one similarity floor, `4 × K` candidates — and
-moves the arithmetic one layer up until a package carrying the repaired optimizer ships (finding 1). When
-it does, the leg can move into SQL without changing the schema or the floor: the same `ORDER BY
-vec_distance_cosine(embedding, @q) LIMIT 4 * K` then becomes an index scan.
+**Re-measured against `2.1.1` (2026-10-25)**: the release closes both defects — a bound `float[]` reaches a
+`VECTOR(n)` column as a real vector, and a `VECTOR(n)` read on this index's route hands back a `float[]`.
+It does not close the SQL route for this index. The repaired planner engages only on a *directory-mode*
+database, and `<index>/sharpcoreagent.scdb` is a single file: on that route `ORDER BY
+vec_distance_cosine(embedding, ?) LIMIT k` still returns the rows in insertion order and projects no
+`distance` column, and `WHERE vec_distance_cosine(…)` still matches nothing. The probe tells the two cases
+apart by the presence of the projected `distance` column, because `information_schema.indexes` returns rows
+either way. The leg therefore keeps computing cosine over the vectors the snapshot loads, using the same
+measure the embedder uses: the decision (D6) — vectors in the column, one similarity floor, `4 × K`
+candidates — holds, with the arithmetic one layer up. When the planner covers the single-file route the
+same `ORDER BY vec_distance_cosine(embedding, @q) LIMIT 4 * K` moves into SQL without changing the schema
+or the floor.
 
 ## D7 — Local hashed embedder by default
 
@@ -277,13 +283,14 @@ agent trust "the first block" as a fact rather than a sample.
 
 ## D15 — Risks
 
-- **Engine defects that postdate the release**: `2.1.0` (2026-10-10) predates both the vector-parameter
-  fix (`32227696`, 2026-10-11) and the SQL vector optimizer repair (`16cb51d5`), so the released package
-  still stores no vector from a bound `float[]` and still cannot rank with `vec_distance_cosine`. Mitigated
-  by writing vectors as JSON, by keeping the vector leg in C# (D6), and by the
-  `SharpCoreAgentUseLocalSharpCoreDb` switch, which builds against a sibling checkout when a newer engine
-  has to be tried before it ships. The version is now the released `2.1.0` on nuget.org — the RC-era folder
-  feed this section used to describe is gone, and `nuget.config` names one source.
+- **Engine defects that postdate the release**: `2.1.1` closes the two that mattered —
+  `32227696` (a bound `float[]` now reaches a `VECTOR(n)` column) and `16cb51d5` (the SQL vector
+  optimizer is wired again). The residual gap is narrower and measured: the planner engages only on a
+  directory-mode database, so this single-file index still ranks in C# (D6). Mitigation for anything the
+  next release breaks is the `SharpCoreAgentUseLocalSharpCoreDb` switch, which builds against a sibling
+  checkout when a newer engine has to be tried before it ships. The version is the released `2.1.1` on
+  nuget.org — the RC-era folder feed this section used to describe is gone, and `nuget.config` names one
+  source.
 - **Memory**: BM25 + adjacency snapshot + vectors are in memory. Mitigation: `MaxChunks` bound, passage
   vectors read per query rather than held, and `index_status` reporting counts so the developer can see
   the size before it hurts.
