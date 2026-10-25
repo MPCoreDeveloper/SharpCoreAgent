@@ -13,8 +13,8 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <!--
       One version for the four Microsoft.Extensions packages: the .NET 11 RC that the pinned SDK in
-      global.json was built from. A newer one would exist only for a runtime this repository refuses to
-      target, and an older one would be a .NET 10 library inside a net11.0 product.
+      global.json was built from. A newer one would track an SDK this repository does not pin, and an
+      older one would be a .NET 10 library inside a net11.0 product.
     -->
     <DotNetExtensionsVersion>11.0.0-rc.2.26504.105</DotNetExtensionsVersion>
     <!-- One version for the six SharpCoreDB packages; see the comment on their rows below. -->
@@ -28,7 +28,8 @@
       The version is the .NET 11 generation on purpose, and its build number (26504.105) is the one the
       pinned SDK in global.json carries. Mixing an 11.0.0-rc.2 host with a 10.0.x extension package is
       how a net11.0 product ends up shipping a net10.0 dependency graph: it builds, and then the two
-      generations disagree at runtime. This repository targets net11.0 only, so its dependencies do too.
+      generations disagree at runtime. This repository targets net11.0 and newer, so its dependencies
+      start at that generation too.
     -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DotNetExtensionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DotNetExtensionsVersion)" />
