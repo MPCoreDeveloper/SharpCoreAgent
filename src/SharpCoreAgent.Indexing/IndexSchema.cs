@@ -25,7 +25,13 @@ internal static class IndexSchema
     internal const int ParserVersion = 1;
 
     /// <summary>The chunking and tokenisation contract stored in <c>meta['analyzer_contract']</c>.</summary>
-    internal const int AnalyzerContract = 1;
+    /// <remarks>
+    /// Raised to 2 when the writer started storing vectors in the text form a <c>VECTOR(n)</c> column actually
+    /// parses. An index built by version 1 holds the literal string <c>System.Single[]</c> in every embedding cell,
+    /// so it has no vectors at all; reporting it as stale is what makes the next open rebuild them instead of
+    /// silently answering with the lexical leg alone.
+    /// </remarks>
+    internal const int AnalyzerContract = 2;
 
     /// <summary>The vector width; it must equal every <c>VECTOR(n)</c> declaration below.</summary>
     internal const int Dimensions = 512;

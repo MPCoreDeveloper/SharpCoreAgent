@@ -41,6 +41,15 @@ internal sealed record ChunkRow
 
     /// <summary>Gets the first eight characters of the passage's SHA-256, which is what a citation shows.</summary>
     public required string Sha8 { get; init; }
+
+    /// <summary>
+    /// Gets the stored embedding, or <see langword="null"/> when the index was built with vectors off.
+    /// </summary>
+    /// <remarks>
+    /// Held with the passage because the snapshot already carries its text and tokens: the vector is the third of the
+    /// three things every leg reads, and loading it here is what lets the vector leg answer without a second query.
+    /// </remarks>
+    public float[]? Vector { get; init; }
 }
 
 /// <summary>
@@ -95,6 +104,40 @@ internal sealed record SymbolRow
 internal readonly record struct EdgeRow(long Source, long Target, string Relation, double Weight);
 
 /// <summary>
+/// One indexed file as retrieval reads it: where it is, what language it is, whether it is trustworthy and how
+/// recently it was written.
+/// </summary>
+/// <remarks>
+/// The ranking needs all four. <see cref="Language"/> turns the <c>doc</c> and <c>config</c> query kinds into a
+/// filter that can actually match something, <see cref="State"/> is what makes a block report itself as stale, and
+/// <see cref="ModifiedUtc"/> is the only input to the recency boost — passed in as a value, never read from a clock
+/// inside ranking, because a score that depends on when it was computed cannot be replayed.
+/// </remarks>
+internal sealed record FileRow
+{
+    /// <summary>Gets the <c>files.id</c>.</summary>
+    public required long Id { get; init; }
+
+    /// <summary>Gets the workspace-relative path, with <c>/</c> separators.</summary>
+    public required string Path { get; init; }
+
+    /// <summary>Gets the language the scanner assigned, for example <c>csharp</c> or <c>markdown</c>.</summary>
+    public required string Language { get; init; }
+
+    /// <summary>Gets the stored state: <c>ok</c>, <c>skipped</c>, <c>stale</c> or <c>error</c>.</summary>
+    public required string State { get; init; }
+
+    /// <summary>Gets the file's last-write timestamp as the build recorded it, or <see langword="null"/>.</summary>
+    public DateTimeOffset? ModifiedUtc { get; init; }
+
+    /// <summary>Gets a value indicating whether the build read this file and its rows are current.</summary>
+    public bool IsIndexed => string.Equals(State, IndexFileStates.Ok, StringComparison.Ordinal);
+
+    /// <summary>Gets a value indicating whether the file changed after its rows were written.</summary>
+    public bool IsStale => string.Equals(State, IndexFileStates.Stale, StringComparison.Ordinal);
+}
+
+/// <summary>
 /// One immutable view of a build: its passages, its declarations, its edges and the lexical index over them.
 /// </summary>
 /// <remarks>
@@ -121,6 +164,18 @@ internal sealed class IndexSnapshot
 
     /// <summary>Gets the workspace-relative path of every indexed file, by <c>files.id</c>.</summary>
     public required IReadOnlyDictionary<long, string> Paths { get; init; }
+
+    /// <summary>Gets every indexed file, by <c>files.id</c>.</summary>
+    public required IReadOnlyDictionary<long, FileRow> Files { get; init; }
+
+    /// <summary>
+    /// Gets the symbol keys a documentation passage in <c>docs</c> points at.
+    /// </summary>
+    /// <remarks>
+    /// The doc boost asks one question — "does the workspace's prose talk about this declaration?" — and a set of
+    /// keys answers it without loading the prose itself, which stays available to the reader through the block.
+    /// </remarks>
+    public required IReadOnlySet<string> DocumentedSymbols { get; init; }
 
     /// <summary>Gets the embedder identity stored in <c>meta['embedder']</c>, or <c>off</c>.</summary>
     public required string Embedder { get; init; }

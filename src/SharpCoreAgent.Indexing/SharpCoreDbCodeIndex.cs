@@ -1,6 +1,9 @@
 using System.Globalization;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Index;
+using SharpCoreAgent.Indexing.Embedding;
+using SharpCoreAgent.Indexing.Ranking;
+using SharpCoreAgent.Indexing.Retrieval;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreAgent.Indexing;
@@ -20,8 +23,9 @@ namespace SharpCoreAgent.Indexing;
 /// engine keeps a lock on its file, and a builder and a reader that disagree about what is committed would be
 /// worse than a lock error.</item>
 /// </list>
-/// The retrieval methods of <see cref="ICodeIndex"/> arrive with the legs that answer them; this type grows
-/// into that interface in M2 instead of shipping stubs that would silently return nothing.
+/// The retrieval methods of <see cref="ICodeIndex"/> arrive with the legs that answer them; this type grows into that
+/// interface in M3 instead of shipping stubs that would silently return nothing. <see cref="Search"/> is the first of
+/// them, composed from the two legs, the ranker and the budget.
 /// </remarks>
 internal sealed class SharpCoreDbCodeIndex : IDisposable
 {
@@ -30,6 +34,8 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
     private readonly Lock _gate = new();
     private readonly IndexPaths _paths;
     private readonly string? _encryptionPassword;
+    private readonly IndexReader _reader = IndexReader.Create();
+    private readonly ICodeTextEmbedder _embedder = HashedCodeEmbedder.CreateDefault();
 
     private IndexHandleLease? _lease;
     private IndexStatus? _cached;
@@ -130,6 +136,46 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
             _cached = null;
             _cachedStamp = null;
         }
+    }
+
+    /// <summary>
+    /// Answers one search: both retrieval legs, the ranker and the selection budget, in that order.
+    /// </summary>
+    /// <param name="query">A validated request from <see cref="CodeQuery.Create"/>.</param>
+    /// <param name="nowUtc">The moment the query runs, which only the recency boost reads.</param>
+    /// <param name="maxChars">The character allowance for the whole answer.</param>
+    /// <returns>The blocks that fit, best first; empty when the workspace has no index.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="query"/> is null.</exception>
+    /// <remarks>
+    /// This is the composition the five tools share, kept in one place so the tool that ships in T021 renders an
+    /// answer instead of assembling one. A missing index returns an empty list rather than throwing, because absence
+    /// is a value everywhere else in this assembly.
+    /// </remarks>
+    internal IReadOnlyList<CodeEvidence> Search(CodeQuery query, DateTimeOffset nowUtc, int maxChars)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        if (!_paths.DatabaseExists)
+        {
+            return [];
+        }
+
+        var database = OpenDatabase();
+        var snapshot = _reader.Load(database);
+
+        if (snapshot.ChunkCount == 0)
+        {
+            return [];
+        }
+
+        var ranked = EvidenceRanker.Rank(
+            snapshot,
+            query,
+            LexicalRetriever.Search(snapshot, query.Text, query.K),
+            VectorRetriever.Search(snapshot, _embedder, query.Text, query.K).Matches,
+            nowUtc);
+
+        return EvidenceBudget.Apply(ranked, maxChars).Blocks;
     }
 
     /// <inheritdoc />

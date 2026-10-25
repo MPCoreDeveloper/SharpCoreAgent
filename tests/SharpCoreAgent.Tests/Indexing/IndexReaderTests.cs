@@ -86,7 +86,8 @@ public sealed class IndexReaderTests
 
         var chunk = Assert.Single(
             snapshot.Chunks.Values,
-            row => row.Path.EndsWith("Circle.cs", StringComparison.Ordinal));
+            row => row.Path.EndsWith("Circle.cs", StringComparison.Ordinal)
+                && string.Equals(row.SymbolName, "Demo.Geometry.Circle", StringComparison.Ordinal));
 
         Assert.Equal(8, chunk.Sha8.Length);
         Assert.True(chunk.EndLine >= chunk.StartLine);

@@ -99,6 +99,32 @@ persistence-and-invalidation problem for nothing.
 **Cost**: the HNSW index is rebuilt with the database, not maintained per file; at that scale a rebuild
 is an explicit `index --rebuild`, which the CLI reports.
 
+**Measured (2026-10-25), and what changed because of it**: the SQL route is not available in
+`2.1.0-RC.3`. Four findings, each reproduced against a real index:
+
+1. `TryExecuteVectorOptimized` in `SqlParser.DML.cs` is a stub that returns `null`, so the
+   `ORDER BY vec_distance_*(col, query) LIMIT k` plan never becomes an index scan.
+2. A projection that computes a function is ignored: `SELECT id, vec_distance_cosine(embedding, @q) AS d
+   FROM chunks` returns every column of the row and no `d`.
+3. `ORDER BY` is handed to `Table.Select` as a column name, so an ordering on a function is silently a
+   no-op — the rows come back in insertion order.
+4. `WHERE vec_distance_cosine(embedding, @q) < 1.1` matches nothing, and `> -1.1` matches nothing either,
+   which is what an expression that evaluates to null looks like from the outside.
+
+Two more defects were found on the way, both in our own write path and both fixed under T018:
+
+- Binding a `float[]` as a parameter stores the literal text `System.Single[]`; the column's accepted
+  textual form is a JSON array (`VectorBinaryCodec.TryParse`), so the writer now sends
+  `VectorSerializer.ToJson(vector)` and `analyzer_contract` is 2 to force older indexes to rebuild.
+- A `TEXT` value does not round-trip surrounding whitespace: a passage that started with indentation or
+  ended with a blank line came back trimmed, so the passage's stored hash no longer matched its stored
+  text and `verify` reported every such passage as corrupt. Passages are now hashed over their trimmed
+  text.
+
+The leg therefore computes cosine over the vectors the snapshot loads, using the same measure the embedder
+uses. That keeps the decision (D6) — vectors in the column, one similarity floor, `4 × K` candidates — and
+moves the arithmetic one layer up until the engine's optimizer lands.
+
 ## D7 — Local hashed embedder by default
 
 **Decision**: `HashedCodeEmbedder`, 512 dimensions: split the text into code tokens, hash each token

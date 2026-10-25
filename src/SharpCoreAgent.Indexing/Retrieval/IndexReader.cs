@@ -1,6 +1,7 @@
 using System.Globalization;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Search.Lexical;
+using SharpCoreDB.VectorSearch;
 
 namespace SharpCoreAgent.Indexing.Retrieval;
 
@@ -16,7 +17,7 @@ namespace SharpCoreAgent.Indexing.Retrieval;
 internal sealed class IndexReader
 {
     private const string ChunkQuery =
-        "SELECT id, file_id, start_line, end_line, kind, symbol_key, symbol_name, text, sha256 FROM chunks ORDER BY id";
+        "SELECT id, file_id, start_line, end_line, kind, symbol_key, symbol_name, text, sha256, embedding FROM chunks ORDER BY id";
 
     private const string SymbolQuery =
         "SELECT id, file_id, key, name, qualified_name, kind, start_line, end_line, signature, community, centrality FROM symbols ORDER BY id";
@@ -84,16 +85,19 @@ internal sealed class IndexReader
 
     private static IndexSnapshot LoadSnapshot(IDatabase database, string buildId)
     {
-        var paths = LoadPaths(database);
+        var files = LoadFiles(database);
+        var paths = files.ToDictionary(entry => entry.Key, entry => entry.Value.Path);
         var meta = IndexSchema.ReadMeta(database);
 
         return new IndexSnapshot
         {
             BuildId = buildId,
             Paths = paths,
+            Files = files,
             Chunks = LoadChunks(database, paths),
             Symbols = LoadSymbols(database, paths),
             Edges = LoadEdges(database),
+            DocumentedSymbols = LoadDocumentedSymbols(database),
             Lexical = LoadLexical(database),
             Embedder = meta.TryGetValue("embedder", out var embedder) ? embedder : "off",
             Dimensions = meta.TryGetValue("dimensions", out var dimensions)
@@ -103,16 +107,45 @@ internal sealed class IndexReader
         };
     }
 
-    private static Dictionary<long, string> LoadPaths(IDatabase database)
+    private static Dictionary<long, FileRow> LoadFiles(IDatabase database)
     {
-        var paths = new Dictionary<long, string>();
+        var files = new Dictionary<long, FileRow>();
 
-        foreach (var row in IndexSql.Query(database, "SELECT id, path FROM files ORDER BY id"))
+        foreach (var row in IndexSql.Query(database, "SELECT id, path, language, state, mtime_utc FROM files ORDER BY id"))
         {
-            paths[IndexSql.AsLong(row.GetValueOrDefault("id"))] = IndexSql.AsText(row.GetValueOrDefault("path"));
+            var id = IndexSql.AsLong(row.GetValueOrDefault("id"));
+
+            files[id] = new FileRow
+            {
+                Id = id,
+                Path = IndexSql.AsText(row.GetValueOrDefault("path")),
+                Language = IndexSql.AsText(row.GetValueOrDefault("language")),
+                State = IndexSql.AsText(row.GetValueOrDefault("state")),
+                ModifiedUtc = IndexTimestamps.Parse(IndexSql.AsOptionalText(row.GetValueOrDefault("mtime_utc"))),
+            };
         }
 
-        return paths;
+        return files;
+    }
+
+    /// <summary>
+    /// Reads the declaration keys the stored documentation points at.
+    /// </summary>
+    /// <param name="database">An open index database.</param>
+    /// <returns>The keys; empty when no documentation row names a declaration.</returns>
+    private static HashSet<string> LoadDocumentedSymbols(IDatabase database)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var row in IndexSql.Query(database, "SELECT symbol_key FROM docs"))
+        {
+            if (IndexSql.AsOptionalText(row.GetValueOrDefault("symbol_key")) is { } key)
+            {
+                keys.Add(key);
+            }
+        }
+
+        return keys;
     }
 
     private static Dictionary<long, ChunkRow> LoadChunks(IDatabase database, Dictionary<long, string> paths)
@@ -136,6 +169,7 @@ internal sealed class IndexReader
                 SymbolName = IndexSql.AsOptionalText(row.GetValueOrDefault("symbol_name")),
                 Text = IndexSql.AsText(row.GetValueOrDefault("text")),
                 Sha8 = ShortHash(IndexSql.AsText(row.GetValueOrDefault("sha256"))),
+                Vector = AsVector(row.GetValueOrDefault("embedding")),
             };
         }
 
@@ -208,6 +242,24 @@ internal sealed class IndexReader
 
     private static double ToDouble(object? value) =>
         value is null or DBNull ? 0 : Convert.ToDouble(value, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Reads a <c>VECTOR(n)</c> column.
+    /// </summary>
+    /// <param name="value">The raw column value.</param>
+    /// <returns>The vector, or <see langword="null"/> when the column was never written.</returns>
+    /// <remarks>
+    /// The column hands back a <c>float[]</c> once a real vector was written. The text form is still accepted,
+    /// because an index built by the previous writer holds the literal string <c>System.Single[]</c>, and a reader
+    /// that threw on it would turn a stale index into a crash instead of a passage without a vector.
+    /// </remarks>
+    private static float[]? AsVector(object? value) => value switch
+    {
+        float[] vector when vector.Length > 0 => vector,
+        string text when text.StartsWith('[') => VectorSerializer.FromJson(text),
+        Array array => [.. array.Cast<object?>().Select(item => Convert.ToSingle(item, CultureInfo.InvariantCulture))],
+        _ => null,
+    };
 
     private static string ShortHash(string sha256) => sha256.Length > 8 ? sha256[..8] : sha256;
 }

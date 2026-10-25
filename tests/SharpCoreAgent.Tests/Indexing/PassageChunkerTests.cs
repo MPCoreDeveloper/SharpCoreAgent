@@ -57,7 +57,8 @@ public sealed class PassageChunkerTests
 
         foreach (var passage in Chunk(text, []))
         {
-            var expected = string.Join('\n', lines.Skip(passage.StartLine - 1).Take(passage.LineCount));
+            // The passage text is trimmed at the edges, because that is what a TEXT column round-trips.
+            var expected = string.Join('\n', lines.Skip(passage.StartLine - 1).Take(passage.LineCount)).Trim();
 
             Assert.Equal(expected, passage.Text);
         }
@@ -80,9 +81,13 @@ public sealed class PassageChunkerTests
         // declaration instead of mid-statement.
         foreach (var passage in passages.Where(candidate => candidate.SymbolKey is not null))
         {
-            Assert.Equal(PassageKinds.Member, passage.Kind);
-            Assert.StartsWith("Demo.Service.", passage.SymbolKey, StringComparison.Ordinal);
-            Assert.Equal("#method", passage.SymbolKey![^7..]);
+            // The header that opens the type is its own passage and is named after the type; every other named
+            // passage is one of the methods.
+            var isType = passage.SymbolKey!.EndsWith("#class", StringComparison.Ordinal);
+
+            Assert.StartsWith("Demo.Service", passage.SymbolKey, StringComparison.Ordinal);
+            Assert.EndsWith(isType ? "#class" : "#method", passage.SymbolKey, StringComparison.Ordinal);
+            Assert.Equal(isType ? PassageKinds.Type : PassageKinds.Member, passage.Kind);
         }
 
         Assert.Contains(passages, passage => passage.SymbolKey == "Demo.Service.First#method");
@@ -127,13 +132,14 @@ public sealed class PassageChunkerTests
             Enumerable.Range(0, 120).Select(index => index % 6 == 5 ? string.Empty : $"line {index}"));
 
         var passages = Chunk(text, []);
+        var lines = SourceLines.Split(text);
 
         Assert.True(passages.Count > 1);
 
         foreach (var passage in passages.Take(passages.Count - 1))
         {
             Assert.True(
-                passage.Text.EndsWith('\n'),
+                string.IsNullOrWhiteSpace(lines[passage.EndLine - 1]),
                 $"passage {passage.StartLine}-{passage.EndLine} should end on a blank line");
         }
     }

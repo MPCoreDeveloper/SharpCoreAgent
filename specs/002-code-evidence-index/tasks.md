@@ -146,27 +146,47 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     that also mentions the identifier. The `LIKE` fallback is not built: the snapshot loads every passage, so
     there is no state in which the in-memory index is unavailable while the rows are readable.
 
-- [ ] **T018** Vector leg
+- [x] **T018** Vector leg
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/VectorRetriever.cs`
   - Do: embed the query once, `ORDER BY vec_distance_cosine(embedding, ?)`, `LIMIT 4 × K`; return nothing
     when the embedder is off or dimensions mismatch (with a note, not an exception).
   - Test: `VectorRetrieverTests` — a paraphrase with no shared token still finds the passage; `--embedder
     off` short-circuits; a dimension mismatch produces a note.
+  - Done: the leg returns `VectorLegResult` (matches + note), `4 × K` candidates, a 0.05 similarity floor,
+    ties broken by passage id. Three deviations from the plan, each forced by 2.1.0-RC.3 and recorded in
+    `research.md`: the SQL route is unusable (the vector query optimizer is a stub that returns `null`, a
+    projection containing a function is ignored and returns whole rows, and `WHERE vec_distance_cosine(...)`
+    matches nothing), so the cosine runs over the vectors the snapshot holds; the writer's `float[]`
+    parameter was being stored as the literal text `System.Single[]`, so vectors are now written as JSON
+    (`VectorSerializer.ToJson`) and `analyzer_contract` went to 2 to make older indexes rebuild; and a
+    passage is now hashed over its trimmed text, because the engine does not round-trip surrounding
+    whitespace. The test that promised "a paraphrase with no shared token" was replaced by one that asserts
+    what a hashed bag of words can actually promise: the passage about the question, ordered by cosine.
 
-- [ ] **T019** Fuse and boost
+- [x] **T019** Fuse and boost
   - Files: `src/SharpCoreAgent.Indexing/Ranking/ReciprocalRankFusion.cs`, `Ranking/EvidenceRanker.cs`
   - Do: RRF with k=60, then the boosts from `research.md` (declaration match, path match, recency,
     same-file neighbour of a graph hit, doc penalty), then the 0.5/0.3/0.2 lexical/vector/graph terms;
     sort by `(score, path, start_line)`; merge adjacent passages of one file when they touch.
   - Test: `EvidenceRankerTests` — a document unique to one leg still ranks; equal scores break by path;
     the same input yields the same order ten times.
+  - Done: `ReciprocalRankFusionTests` and `EvidenceRankerTests` cover the fusion, the boosts, the graph
+    term, the path and kind filters, the stale flag and determinism. Two notes. First, the chunker had to be
+    fixed before the exact-symbol boost could ever fire: it closed a passage at the *last* boundary inside
+    the 40-line window, so a small class became one passage named after its first member. It now ends at the
+    next declaration, which is what `research.md` D4 always said. Second, a type's own passage holds its
+    header, so `kind=class` combined with a query about what the type *does* returns nothing: the filter
+    narrows, it does not aggregate members up to their type.
 
-- [ ] **T020** Respect the budget
+- [x] **T020** Respect the budget
   - Files: `src/SharpCoreAgent.Indexing/Ranking/EvidenceBudget.cs`
   - Do: ≤12 blocks, ≤2 per file, ≤1 600 characters per excerpt, whole result under
     `MaxToolResultChars`; when trimming, drop the lowest-scoring block and say so in the header.
   - Test: `EvidenceBudgetTests` — a 40-block candidate list yields 12; a file with 9 hits contributes 2;
     the rendered string never exceeds the cap.
+  - Done: `BudgetedEvidence` carries the counts (`DroppedByFileCap`, `DroppedByCount`, `DroppedBySize`,
+    `Trimmed`) and a `Note` the tool renders in its header. The character cap is measured with a per-block
+    estimate (`OverheadChars` + heading + excerpt), not by rendering here: formatting belongs to the tool.
 
 - [ ] **T021** Ship `search_code`
   - Files: `src/SharpCoreAgent.Infrastructure/Tools/SearchCodeTool.cs`

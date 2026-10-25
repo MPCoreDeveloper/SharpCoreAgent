@@ -4,18 +4,20 @@ namespace SharpCoreAgent.Indexing.Extraction;
 /// Cuts a file into passages that a reader can open and a model can cite.
 /// </summary>
 /// <remarks>
-/// Three rules, applied in this order: start a passage at a declaration when one is available, otherwise after a
-/// blank line, otherwise wherever the caps force a split. The result never starts or ends mid-line, never overlaps
-/// its neighbour, and tiles the file — every line belongs to exactly one passage, which is what makes "this passage
-/// changed, re-index the file" a cheap comparison instead of a guess.
+/// Three rules, applied in this order: end a passage where the next declaration starts, otherwise at the last blank
+/// line inside the caps, otherwise wherever the caps force a split. The result never starts or ends mid-line, never
+/// overlaps its neighbour, and tiles the file — every line belongs to exactly one passage, which is what makes "this
+/// passage changed, re-index the file" a cheap comparison instead of a guess.
 /// <para>
 /// Caps are 40 lines and 1 600 characters. The first is about reading: a passage is what a tool hands back, and 40
 /// lines is a screen. The second is about ranking: BM25 scores a bag of words, and a passage too long to have a
 /// subject scores everything and matches nothing well.
 /// </para>
 /// <para>
-/// Declaration alignment is the part that pays for itself. A window that starts mid-statement produces a citation
-/// that begins with half an expression, and the model reading it spends a turn working out what it is part of.
+/// Declaration alignment pays for itself twice. A window that starts mid-statement produces a citation that begins
+/// with half an expression, and the model reading it spends a turn working out what it is part of. And a passage that
+/// holds more than one declaration can only be named after one of them, which is how the exact-symbol boost in
+/// ranking silently stops working: ending at the next declaration is not a nicety, it is the input the ranker needs.
 /// </para>
 /// </remarks>
 internal static class PassageChunker
@@ -82,7 +84,12 @@ internal static class PassageChunker
                 StartLine = start + 1,
                 EndLine = end + 1,
                 Kind = kind,
-                Text = string.Join('\n', lines.Skip(start).Take(end - start + 1)),
+
+                // Trimmed at the edges, because the engine does not round-trip surrounding whitespace: a TEXT value
+                // that begins with indentation comes back without it. Hashing what is actually stored is the only way
+                // `verify` can mean anything, and the indentation of the first line is the only thing this costs —
+                // every later line keeps its own.
+                Text = string.Join('\n', lines.Skip(start).Take(end - start + 1)).Trim(),
                 SymbolKey = declaration?.Key,
                 SymbolName = declaration?.QualifiedName,
             });
@@ -123,6 +130,14 @@ internal static class PassageChunker
 
             characters += length;
             last = end;
+
+            // A declaration that starts the next line ends this passage. This — not the 40-line cap — is what makes a
+            // citation point at one declaration; without it a small class collapses into a single passage named after
+            // its first member, and the exact-symbol boost that ranking depends on can never fire.
+            if (end > start && declarations.ContainsKey(end + 1))
+            {
+                return end;
+            }
 
             if (IsBoundary(lines, end + 1, declarations))
             {

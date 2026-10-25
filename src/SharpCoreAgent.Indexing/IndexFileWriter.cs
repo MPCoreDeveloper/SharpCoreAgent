@@ -1,6 +1,7 @@
 using SharpCoreAgent.Indexing.Embedding;
 using SharpCoreAgent.Indexing.Extraction;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.VectorSearch;
 
 namespace SharpCoreAgent.Indexing;
 
@@ -385,7 +386,7 @@ internal sealed class IndexFileWriter
                     ("@text", passage.Text),
                     ("@tokens", CodeTokenizer.TokenizeForIndex(passage.Text)),
                     ("@sha", IndexFileContent.HashText(passage.Text)),
-                    ("@vector", vector)));
+                    ("@vector", EncodeVector(vector))));
         }
     }
 
@@ -448,9 +449,22 @@ internal sealed class IndexFileWriter
                 IndexSql.Parameters(
                     ("@node", symbolIds[index]),
                     ("@label", symbol.Key),
-                    ("@vector", vector)));
+                    ("@vector", EncodeVector(vector))));
         }
     }
+
+    /// <summary>
+    /// Encodes a vector as the text form a <c>VECTOR(n)</c> column parses.
+    /// </summary>
+    /// <param name="vector">The components.</param>
+    /// <returns>A JSON float array.</returns>
+    /// <remarks>
+    /// A bound <c>float[]</c> does not survive parameter binding in 2.1.0-RC.3: the binder calls
+    /// <c>ToString()</c> on the array and stores the literal text <c>System.Single[]</c>, so an index built that way
+    /// holds no vector at all. The column accepts a JSON float array (through <c>VectorBinaryCodec.TryParse</c>) and
+    /// that form round-trips, which is why the encoding lives in one method instead of at both insert sites.
+    /// </remarks>
+    private static string EncodeVector(float[] vector) => VectorSerializer.ToJson(vector);
 
     /// <summary>
     /// Reads the id of a row that was just inserted.

@@ -51,7 +51,7 @@ public sealed class IndexSchemaTests
         Assert.Equal(15, meta.Count);
         Assert.Equal("1", meta["schema_version"]);
         Assert.Equal("1", meta["parser_version"]);
-        Assert.Equal("1", meta["analyzer_contract"]);
+        Assert.Equal("2", meta["analyzer_contract"]);
         Assert.Equal("lean", meta["tier"]);
         Assert.Equal("hashed-local/512", meta["embedder"]);
         Assert.Equal("512", meta["dimensions"]);
