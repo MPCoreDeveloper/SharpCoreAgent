@@ -212,7 +212,7 @@ the second duplicates settings that would drift.
 ## Project status
 
 - `specs/001-coding-agent-core` — the agent loop, providers, tools, sessions and CLI are implemented
-  and covered by the test suite (183 tests, no compiler warnings; the Sonar rule set the build also runs
+  and covered by the test suite (193 tests, no compiler warnings; the Sonar rule set the build also runs
   reports findings that the dashboard tracks).
 - `specs/002-code-evidence-index` — the index foundations (schema, file scanner, tokenizer, extractor,
   embedder, reader, writer lock) are in place; the retrieval tools and the `index` command are the
