@@ -100,26 +100,38 @@ persistence-and-invalidation problem for nothing.
 is an explicit `index --rebuild`, which the CLI reports.
 
 **Measured (2026-10-25), and what changed because of it**: the SQL route is not available in
-`2.1.0-RC.3`. Four findings, each reproduced against a real index:
+`2.1.0-RC.3`. Four findings, each reproduced against a real index and then traced back to the engine's
+source, because "it does not work" is not a decision anyone can build on:
 
 1. `TryExecuteVectorOptimized` in `SqlParser.DML.cs` is a stub that returns `null`, so the
-   `ORDER BY vec_distance_*(col, query) LIMIT k` plan never becomes an index scan.
+   `ORDER BY vec_distance_*(col, query) LIMIT k` plan never becomes an index scan. It is not a feature
+   nobody wrote: `e220461e` added a working ~100-line implementation (argument extractor included), and
+   `997103be` — "sync docs distributed featurs", 2026-02-23 — replaced it with the stub and four unused
+   parameters. `VectorQueryOptimizer` itself is intact; only the wiring is gone.
 2. A projection that computes a function is ignored: `SELECT id, vec_distance_cosine(embedding, @q) AS d
-   FROM chunks` returns every column of the row and no `d`.
-3. `ORDER BY` is handed to `Table.Select` as a column name, so an ordering on a function is silently a
-   no-op — the rows come back in insertion order.
-4. `WHERE vec_distance_cosine(embedding, @q) < 1.1` matches nothing, and `> -1.1` matches nothing either,
-   which is what an expression that evaluates to null looks like from the outside.
+   FROM chunks` returns every column of the row and no `d`. The legacy `ExecuteSelect` path never
+   projects a single-table select at all (`ProjectColumns` is called only on the join path), so the
+   select list is discarded; the newer AST path does project, through `EvaluateExpression`.
+3. `ORDER BY` is handed to `Table.Select` as a column name — `ApplyOrdering` sorts on
+   `row.TryGetValue(orderBy)` and its `catch` returns the rows unsorted — so an ordering on a function or
+   any other expression is a silent no-op instead of an error.
+4. `WHERE vec_distance_cosine(embedding, @q) < 1.1` matches nothing, and `> -1.1` matches nothing either:
+   `EvaluateWhere` splits the predicate on spaces and treats `parts[0]` as a column name, so the function
+   text never resolves and every row is rejected. An unknown *operator* on a known column, in contrast,
+   returns true — the two halves of that evaluator disagree, which is why the empty result reads like a
+   data problem rather than a parser one.
 
-Two more defects were found on the way, both in our own write path and both fixed under T018:
+Two more defects surfaced on the way and were fixed under T018:
 
 - Binding a `float[]` as a parameter stores the literal text `System.Single[]`; the column's accepted
   textual form is a JSON array (`VectorBinaryCodec.TryParse`), so the writer now sends
   `VectorSerializer.ToJson(vector)` and `analyzer_contract` is 2 to force older indexes to rebuild.
-- A `TEXT` value does not round-trip surrounding whitespace: a passage that started with indentation or
-  ended with a blank line came back trimmed, so the passage's stored hash no longer matched its stored
-  text and `verify` reported every such passage as corrupt. Passages are now hashed over their trimmed
-  text.
+- A `TEXT` literal does not survive `INSERT`: the engine's `ParseInsertValues` trims every literal
+  ("3. every literal is Trimmed" in its own comment, pinned by its `InsertValuesParsingTests`), so a
+  passage that started with indentation or ended with a blank line was stored trimmed and the stored
+  hash no longer matched the stored text — `verify` reported every such passage as corrupt. Passages are
+  now hashed over their trimmed text. This is a deviation from SQL rather than a caching artefact:
+  `'  a  '` comes back as `a`.
 
 The leg therefore computes cosine over the vectors the snapshot loads, using the same measure the embedder
 uses. That keeps the decision (D6) — vectors in the column, one similarity floor, `4 × K` candidates — and
