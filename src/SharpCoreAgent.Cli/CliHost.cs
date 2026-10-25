@@ -128,7 +128,7 @@ internal static class CliHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SharpCoreAgentException or ArgumentException or NotSupportedException)
         {
-            error.WriteLine($"error: could not write the session to '{path}': {ex.Message}");
+            await error.WriteLineAsync($"error: could not write the session to '{path}': {ex.Message}").ConfigureAwait(false);
             return false;
         }
     }
@@ -151,7 +151,7 @@ internal static class CliHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SharpCoreAgentException or ArgumentException or NotSupportedException)
         {
-            error.WriteLine($"error: could not read the session at '{path}': {ex.Message}");
+            await error.WriteLineAsync($"error: could not read the session at '{path}': {ex.Message}").ConfigureAwait(false);
             return null;
         }
     }

@@ -23,22 +23,25 @@ internal static class SourceLines
 
         var lines = new List<string>();
         var start = 0;
+        var index = 0;
 
-        for (var index = 0; index < text.Length; index++)
+        // A while rather than a for: a \r\n pair consumes two characters, so this loop advances its own
+        // cursor. A for-loop would have to mutate its counter from the body to skip the \n.
+        while (index < text.Length)
         {
-            if (text[index] is not ('\n' or '\r'))
+            if (text[index] is '\n' or '\r')
             {
-                continue;
+                lines.Add(text[start..index]);
+
+                if (text[index] == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
+                {
+                    index++;
+                }
+
+                start = index + 1;
             }
 
-            lines.Add(text[start..index]);
-
-            if (text[index] == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
-            {
-                index++;
-            }
-
-            start = index + 1;
+            index++;
         }
 
         lines.Add(text[start..]);

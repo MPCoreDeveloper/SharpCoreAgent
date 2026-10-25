@@ -66,29 +66,12 @@ public sealed record AgentReport
     /// <summary>Gets the commands the turn ran, in order.</summary>
     public IReadOnlyList<string> CommandsRun => CollectCommands();
 
-    private List<string> CollectFiles()
-    {
-        if (ToolResults.Count == 0)
-        {
-            return [];
-        }
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var files = new List<string>(ToolResults.Count);
-        foreach (var result in ToolResults)
-        {
-            foreach (var effect in result.Effects)
-            {
-                if (effect.Kind is ToolEffectKind.Created or ToolEffectKind.Modified or ToolEffectKind.Deleted
-                    && seen.Add(effect.Target))
-                {
-                    files.Add(effect.Target);
-                }
-            }
-        }
-
-        return files;
-    }
+    private List<string> CollectFiles() => ToolResults
+        .SelectMany(result => result.Effects)
+        .Where(effect => effect.Kind is ToolEffectKind.Created or ToolEffectKind.Modified or ToolEffectKind.Deleted)
+        .Select(effect => effect.Target)
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
 
     private List<string> CollectCommands()
     {

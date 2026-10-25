@@ -151,14 +151,11 @@ public sealed record CodeQuery
             return null;
         }
 
-        foreach (var segment in value.Split('/'))
+        if (value.Split('/').Any(segment => string.Equals(segment, "..", StringComparison.Ordinal)))
         {
-            if (string.Equals(segment, "..", StringComparison.Ordinal))
-            {
-                throw new ArgumentException(
-                    string.Create(CultureInfo.InvariantCulture, $"path '{path}' must stay inside the workspace root."),
-                    nameof(path));
-            }
+            throw new ArgumentException(
+                string.Create(CultureInfo.InvariantCulture, $"path '{path}' must stay inside the workspace root."),
+                nameof(path));
         }
 
         return value;
@@ -172,14 +169,13 @@ public sealed record CodeQuery
         }
 
         var trimmed = kind.Trim();
-        foreach (var candidate in KindNames)
+
+        // Case-insensitive rather than lowercasing the input: the closed list is already lowercase, so
+        // returning the matching entry gives the canonical spelling without allocating per call.
+        if (KindNames.FirstOrDefault(candidate => string.Equals(candidate, trimmed, StringComparison.OrdinalIgnoreCase))
+            is { } canonical)
         {
-            // Case-insensitive rather than lowercasing the input: the closed list is already lowercase,
-            // and ToLowerInvariant would allocate a string per call and still need this loop.
-            if (string.Equals(candidate, trimmed, StringComparison.OrdinalIgnoreCase))
-            {
-                return candidate;
-            }
+            return canonical;
         }
 
         throw new ArgumentException(

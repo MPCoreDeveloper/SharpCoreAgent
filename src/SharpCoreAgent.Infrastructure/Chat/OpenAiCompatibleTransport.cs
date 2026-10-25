@@ -105,12 +105,29 @@ public sealed class OpenAiCompatibleTransport : IStreamingChatModel, IChatModel
     /// <exception cref="ModelRequestException">The provider returned a non-success status.</exception>
     /// <exception cref="ModelException">The connection failed or the stream broke.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> fired.</exception>
-    public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(
+    public IAsyncEnumerable<ChatStreamEvent> StreamAsync(
         ChatRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        return StreamCoreAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Streams one request, from the credential lookup to the terminal event.
+    /// </summary>
+    /// <param name="request">The request to send; already checked for null.</param>
+    /// <param name="cancellationToken">Aborts the request and the read.</param>
+    /// <returns>The events of one response.</returns>
+    /// <remarks>
+    /// The null check lives in <see cref="StreamAsync"/>: an iterator body does not run before the
+    /// caller asks for the first item, so a caller's bug would otherwise look like an empty stream.
+    /// </remarks>
+    private async IAsyncEnumerable<ChatStreamEvent> StreamCoreAsync(
+        ChatRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var credential = ResolveCredential();
         using var response = await SendAsync(request, credential, cancellationToken).ConfigureAwait(false);
 
@@ -209,20 +226,7 @@ public sealed class OpenAiCompatibleTransport : IStreamingChatModel, IChatModel
                 continue;
             }
 
-            if (chunk.Error is not null)
-            {
-                state.SawAnyChunk = true;
-                throw new ModelException(
-                    $"{request.Model.QualifiedName} reported an error mid-stream: {Sanitize(chunk.Error.Message, credential)}");
-            }
-
-            state.SawAnyChunk = true;
-            state.RequestId ??= chunk.Id;
-
-            if (chunk.Usage is { } usage)
-            {
-                state.Usage = new TokenUsage(usage.PromptTokens, usage.CompletionTokens);
-            }
+            ApplyChunk(chunk, state, request, credential);
 
             if (chunk.Choices is null)
             {
@@ -231,31 +235,9 @@ public sealed class OpenAiCompatibleTransport : IStreamingChatModel, IChatModel
 
             foreach (var choice in chunk.Choices)
             {
-                var delta = choice.Delta;
-                if (delta is not null)
+                foreach (var streamEvent in ChoiceEvents(choice, state))
                 {
-                    // Reasoning first: a provider that puts both in one frame described the thinking
-                    // before the answer.
-                    var thinking = delta.ReasoningContent ?? delta.Reasoning;
-                    if (!string.IsNullOrEmpty(thinking))
-                    {
-                        yield return new ThinkingDelta(thinking);
-                    }
-
-                    if (!string.IsNullOrEmpty(delta.Content))
-                    {
-                        yield return new TextDelta(delta.Content);
-                    }
-
-                    if (delta.ToolCalls is { Count: > 0 } fragments)
-                    {
-                        state.ApplyFragments(fragments);
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(choice.FinishReason))
-                {
-                    state.FinishReason = MapFinishReason(choice.FinishReason);
+                    yield return streamEvent;
                 }
             }
         }
@@ -264,6 +246,71 @@ public sealed class OpenAiCompatibleTransport : IStreamingChatModel, IChatModel
         {
             throw new ModelException(
                 $"{request.Model.QualifiedName} sent {state.SkippedFrames.ToString(CultureInfo.InvariantCulture)} frame(s) that were not valid JSON.");
+        }
+    }
+
+    /// <summary>
+    /// Applies one frame's bookkeeping to the response being assembled.
+    /// </summary>
+    /// <param name="chunk">One decoded frame.</param>
+    /// <param name="state">The response under construction.</param>
+    /// <param name="request">The request that produced the frame, for the error message.</param>
+    /// <param name="credential">The secret to scrub from a provider's message.</param>
+    /// <exception cref="ModelException">The frame reported a provider error.</exception>
+    private static void ApplyChunk(OpenAiStreamChunk chunk, StreamState state, ChatRequest request, string credential)
+    {
+        if (chunk.Error is not null)
+        {
+            state.SawAnyChunk = true;
+            throw new ModelException(
+                $"{request.Model.QualifiedName} reported an error mid-stream: {Sanitize(chunk.Error.Message, credential)}");
+        }
+
+        state.SawAnyChunk = true;
+        state.RequestId ??= chunk.Id;
+
+        if (chunk.Usage is { } usage)
+        {
+            state.Usage = new TokenUsage(usage.PromptTokens, usage.CompletionTokens);
+        }
+    }
+
+    /// <summary>
+    /// Turns one choice's delta into the events the caller sees.
+    /// </summary>
+    /// <param name="choice">The candidate's increment.</param>
+    /// <param name="state">The response under construction, which collects tool-call fragments.</param>
+    /// <returns>The deltas of this increment, reasoning before text.</returns>
+    private static IEnumerable<ChatStreamEvent> ChoiceEvents(OpenAiStreamChoice choice, StreamState state)
+    {
+        var delta = choice.Delta;
+        if (delta is not null)
+        {
+            // Reasoning first: a provider that puts both in one frame described the thinking
+            // before the answer.
+            var thinking = delta.ReasoningContent ?? delta.Reasoning;
+            if (!string.IsNullOrEmpty(thinking))
+            {
+                yield return new ThinkingDelta(thinking);
+            }
+
+            if (!string.IsNullOrEmpty(delta.Content))
+            {
+                // Accumulated here, not by the caller: the terminal response is what the transcript
+                // records, and a response whose text is empty would lose the answer the deltas delivered.
+                state.Text.Append(delta.Content);
+                yield return new TextDelta(delta.Content);
+            }
+
+            if (delta.ToolCalls is { Count: > 0 } fragments)
+            {
+                state.ApplyFragments(fragments);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(choice.FinishReason))
+        {
+            state.FinishReason = MapFinishReason(choice.FinishReason);
         }
     }
 

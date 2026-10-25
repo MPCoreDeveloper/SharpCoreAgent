@@ -51,12 +51,29 @@ public sealed partial class DemoChatModel : IStreamingChatModel
     public ModelDescriptor Model { get; }
 
     /// <inheritdoc />
-    public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(
+    public IAsyncEnumerable<ChatStreamEvent> StreamAsync(
         ChatRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        return StreamCoreAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Produces the scripted answer for one request.
+    /// </summary>
+    /// <param name="request">The request to answer; already checked for null.</param>
+    /// <param name="cancellationToken">Aborts the stream.</param>
+    /// <returns>The text deltas and the terminal event.</returns>
+    /// <remarks>
+    /// The check lives in <see cref="StreamAsync"/>: an iterator body does not run at all until the
+    /// caller asks for the first item, so an argument check inside it would never fire in time.
+    /// </remarks>
+    private static async IAsyncEnumerable<ChatStreamEvent> StreamCoreAsync(
+        ChatRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         // Yield once so the caller's own async plumbing runs before the first event, which keeps this
         // adapter's behaviour identical to one that waits on a socket.
         await Task.Yield();
@@ -171,31 +188,11 @@ public sealed partial class DemoChatModel : IStreamingChatModel
         return null;
     }
 
-    private static bool Advertises(ChatRequest request, string name)
-    {
-        foreach (var tool in request.Tools)
-        {
-            if (string.Equals(tool.Name, name, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
+    private static bool Advertises(ChatRequest request, string name) =>
+        request.Tools.Any(tool => string.Equals(tool.Name, name, StringComparison.Ordinal));
 
-        return false;
-    }
-
-    private static bool MentionsAny(string prompt, params string[] needles)
-    {
-        foreach (var needle in needles)
-        {
-            if (prompt.Contains(needle, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool MentionsAny(string prompt, params string[] needles) =>
+        needles.Any(needle => prompt.Contains(needle, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Builds an argument object, escaping each value with <see cref="JsonEncodedText"/> so a path with

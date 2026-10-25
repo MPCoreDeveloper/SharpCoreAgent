@@ -194,16 +194,14 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
         var imports = new List<string>();
         var containers = new List<Declaration>();
         var indented = IsIndentationScoped(file.Language);
+        var view = new FileView(code, lines, indented);
         string? declaredNamespace = null;
 
         for (var index = 0; index < code.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            while (containers.Count > 0 && containers[^1].End < index)
-            {
-                containers.RemoveAt(containers.Count - 1);
-            }
+            PopFinishedContainers(containers, index);
 
             var masked = code[index];
             if (masked.Trim().Length == 0)
@@ -226,19 +224,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
 
             if (TryTypeDeclaration(masked, out var kind, out var typeName, out var bases))
             {
-                var declaration = new Declaration
-                {
-                    Kind = kind,
-                    Name = typeName,
-                    Container = container?.QualifiedName,
-                    Namespace = declaredNamespace,
-                    Start = index,
-                    End = ComputeRange(code, index, indented),
-                    Signature = ReadSignature(lines, index),
-                    Bases = bases,
-                    RawDoc = DocComment(lines, index),
-                };
-
+                var declaration = NewType(kind, typeName, container, declaredNamespace, index, bases, view);
                 declarations.Add(declaration);
 
                 if (declaration.OwnsMembers)
@@ -249,59 +235,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
                 continue;
             }
 
-            if (TryCallable(masked, container?.Name, out var callableName))
-            {
-                declarations.Add(new Declaration
-                {
-                    Kind = SymbolKinds.Method,
-                    Name = callableName,
-                    Container = container?.QualifiedName,
-                    Namespace = declaredNamespace,
-                    Start = index,
-                    End = ComputeRange(code, index, indented),
-                    Signature = ReadSignature(lines, index),
-                    RawDoc = DocComment(lines, index),
-                });
-
-                continue;
-            }
-
-            if (container is null)
-            {
-                continue;
-            }
-
-            if (TryPropertyDeclaration(masked, out var propertyName))
-            {
-                declarations.Add(new Declaration
-                {
-                    Kind = SymbolKinds.Property,
-                    Name = propertyName,
-                    Container = container.QualifiedName,
-                    Namespace = declaredNamespace,
-                    Start = index,
-                    End = ComputeRange(code, index, indented),
-                    Signature = ReadSignature(lines, index),
-                    RawDoc = DocComment(lines, index),
-                });
-
-                continue;
-            }
-
-            if (TryFieldDeclaration(masked, out var fieldName))
-            {
-                declarations.Add(new Declaration
-                {
-                    Kind = SymbolKinds.Field,
-                    Name = fieldName,
-                    Container = container.QualifiedName,
-                    Namespace = declaredNamespace,
-                    Start = index,
-                    End = index,
-                    Signature = ReadSignature(lines, index),
-                    RawDoc = DocComment(lines, index),
-                });
-            }
+            AddMember(declarations, masked, container, declaredNamespace, index, view);
         }
 
         var symbols = declarations.Select(static declaration => declaration.ToSymbol()).ToList();
@@ -316,6 +250,149 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
         };
     }
 
+
+    /// <summary>
+    /// The file being read, as every declaration built from it needs to see it.
+    /// </summary>
+    /// <param name="Code">The masked lines, used to find each declaration's range.</param>
+    /// <param name="Lines">The original lines, used for the signature and the doc comment.</param>
+    /// <param name="Indented">Whether the language scopes blocks by indentation rather than braces.</param>
+    private readonly record struct FileView(List<string> Code, List<string> Lines, bool Indented);
+
+    /// <summary>
+    /// Drops the open containers whose last line is behind the line being read.
+    /// </summary>
+    /// <param name="containers">The types that may still own declarations.</param>
+    /// <param name="index">The 0-based line being read.</param>
+    private static void PopFinishedContainers(List<Declaration> containers, int index)
+    {
+        while (containers.Count > 0 && containers[^1].End < index)
+        {
+            containers.RemoveAt(containers.Count - 1);
+        }
+    }
+
+    /// <summary>
+    /// Builds a declaration for a type, which may itself end up holding members.
+    /// </summary>
+    /// <param name="kind">The symbol kind.</param>
+    /// <param name="name">The declared name.</param>
+    /// <param name="container">The enclosing type, when there is one.</param>
+    /// <param name="declaredNamespace">The namespace in force, when one was declared.</param>
+    /// <param name="index">The 0-based declaration line.</param>
+    /// <param name="bases">The base types named in the header.</param>
+    /// <param name="view">The file being read.</param>
+    /// <returns>The declaration.</returns>
+    private static Declaration NewType(
+        string kind,
+        string name,
+        Declaration? container,
+        string? declaredNamespace,
+        int index,
+        IReadOnlyList<string> bases,
+        FileView view) => new()
+    {
+        Kind = kind,
+        Name = name,
+        Container = container?.QualifiedName,
+        Namespace = declaredNamespace,
+        Start = index,
+        End = ComputeRange(view.Code, index, view.Indented),
+        Signature = ReadSignature(view.Lines, index),
+        Bases = bases,
+        RawDoc = DocComment(view.Lines, index),
+    };
+
+    /// <summary>
+    /// Adds the member a line declares, when it declares one.
+    /// </summary>
+    /// <param name="declarations">Where the declaration is added.</param>
+    /// <param name="masked">The line, with comments and strings blanked.</param>
+    /// <param name="container">The enclosing type, when there is one.</param>
+    /// <param name="declaredNamespace">The namespace in force, when one was declared.</param>
+    /// <param name="index">The 0-based line being read.</param>
+    /// <param name="view">The file being read.</param>
+    private static void AddMember(
+        List<Declaration> declarations,
+        string masked,
+        Declaration? container,
+        string? declaredNamespace,
+        int index,
+        FileView view)
+    {
+        if (TryCallable(masked, container?.Name, out var callableName))
+        {
+            declarations.Add(NewMember(
+                SymbolKinds.Method,
+                callableName,
+                container,
+                declaredNamespace,
+                index,
+                ComputeRange(view.Code, index, view.Indented),
+                view.Lines));
+            return;
+        }
+
+        if (container is null)
+        {
+            return;
+        }
+
+        if (TryPropertyDeclaration(masked, out var propertyName))
+        {
+            declarations.Add(NewMember(
+                SymbolKinds.Property,
+                propertyName,
+                container,
+                declaredNamespace,
+                index,
+                ComputeRange(view.Code, index, view.Indented),
+                view.Lines));
+            return;
+        }
+
+        if (TryFieldDeclaration(masked, out var fieldName))
+        {
+            declarations.Add(NewMember(
+                SymbolKinds.Field,
+                fieldName,
+                container,
+                declaredNamespace,
+                index,
+                index,
+                view.Lines));
+        }
+    }
+
+    /// <summary>
+    /// Builds a declaration for one member of an open type.
+    /// </summary>
+    /// <param name="kind">The symbol kind.</param>
+    /// <param name="name">The declared name.</param>
+    /// <param name="container">The enclosing type, which a top-level function does not have.</param>
+    /// <param name="declaredNamespace">The namespace in force, when one was declared.</param>
+    /// <param name="start">The 0-based first line.</param>
+    /// <param name="end">The 0-based last line, inclusive.</param>
+    /// <param name="lines">The original lines, used for the signature and doc comment.</param>
+    /// <returns>The declaration.</returns>
+    private static Declaration NewMember(
+        string kind,
+        string name,
+        Declaration? container,
+        string? declaredNamespace,
+        int start,
+        int end,
+        List<string> lines) => new()
+    {
+        Kind = kind,
+        Name = name,
+        Container = container?.QualifiedName,
+        Namespace = declaredNamespace,
+        Start = start,
+        End = end,
+        Signature = ReadSignature(lines, start),
+        RawDoc = DocComment(lines, start),
+    };
 
     /// <summary>
     /// One declaration as it was found: the parts that are interesting before names become keys.
@@ -398,22 +475,9 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
 
         for (var index = start; index < code.Count; index++)
         {
-            foreach (var character in code[index])
+            if (ClosesOn(code[index], ref depth, ref opened))
             {
-                if (character == '{')
-                {
-                    depth++;
-                    opened = true;
-                }
-                else if (character == '}')
-                {
-                    depth--;
-
-                    if (opened && depth <= 0)
-                    {
-                        return index;
-                    }
-                }
+                return index;
             }
 
             if (!opened && code[index].Contains(';', StringComparison.Ordinal))
@@ -426,6 +490,36 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
 
         // An unbalanced file: the declaration does run to the end, and saying so beats inventing a range.
         return opened ? Math.Max(start, code.Count - 1) : start;
+    }
+
+    /// <summary>
+    /// Counts the braces on one line and reports whether the block it opened also closed on it.
+    /// </summary>
+    /// <param name="line">The masked line.</param>
+    /// <param name="depth">The brace depth, carried across lines.</param>
+    /// <param name="opened">Whether a block has been opened, carried across lines.</param>
+    /// <returns><see langword="true"/> when the line closes the block the declaration opened.</returns>
+    private static bool ClosesOn(string line, ref int depth, ref bool opened)
+    {
+        foreach (var character in line)
+        {
+            if (character == '{')
+            {
+                depth++;
+                opened = true;
+            }
+            else if (character == '}')
+            {
+                depth--;
+
+                if (opened && depth <= 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static int IndentedRange(IReadOnlyList<string> code, int start)
@@ -822,6 +916,30 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
         var calls = new Dictionary<(string Source, string Target), int>();
         var owners = Owners(symbols, code.Count);
 
+        CollectCalls(owners, code, calls, cancellationToken);
+        AddCallRelations(calls, relations);
+        AddDocMentionRelations(declarations, relations);
+
+        return relations
+            .OrderBy(static relation => relation.Source ?? string.Empty, StringComparer.Ordinal)
+            .ThenBy(static relation => relation.Kind, StringComparer.Ordinal)
+            .ThenBy(static relation => relation.Target, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Counts how often each declaration calls which name, attributing a line to the declaration that owns it.
+    /// </summary>
+    /// <param name="owners">For each line, the symbol that owns it.</param>
+    /// <param name="code">The masked lines, where call sites are visible.</param>
+    /// <param name="calls">The counts, keyed by source key and called name.</param>
+    /// <param name="cancellationToken">Cancels between lines.</param>
+    private static void CollectCalls(
+        ExtractedSymbol?[] owners,
+        List<string> code,
+        Dictionary<(string Source, string Target), int> calls,
+        CancellationToken cancellationToken)
+    {
         for (var index = 0; index < code.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -836,24 +954,46 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
 
             foreach (Match match in CallPattern().Matches(masked))
             {
-                var target = match.Groups["name"].Value;
-
-                if (NonCallWords.Contains(target))
+                if (CallTarget(match, index, owner) is { } target)
                 {
-                    continue;
+                    var key = (owner.Key, target);
+                    calls[key] = calls.TryGetValue(key, out var count) ? count + 1 : 1;
                 }
-
-                // The declaration's own name on its own line is a signature, not a call to itself.
-                if (index == owner.StartLine - 1 && string.Equals(target, owner.Name, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                var key = (owner.Key, target);
-                calls[key] = calls.TryGetValue(key, out var count) ? count + 1 : 1;
             }
         }
+    }
 
+    /// <summary>
+    /// Answers which name a call site calls, or <see langword="null"/> when it calls nothing worth an edge.
+    /// </summary>
+    /// <param name="match">The call-shaped match found on the line.</param>
+    /// <param name="index">The 0-based line the match was found on.</param>
+    /// <param name="owner">The declaration that owns the line.</param>
+    /// <returns>The called name, or <see langword="null"/> for a keyword or for the declaration itself.</returns>
+    private static string? CallTarget(Match match, int index, ExtractedSymbol owner)
+    {
+        var target = match.Groups["name"].Value;
+
+        if (NonCallWords.Contains(target))
+        {
+            return null;
+        }
+
+        // The declaration's own name on its own line is a signature, not a call to itself.
+        return index == owner.StartLine - 1 && string.Equals(target, owner.Name, StringComparison.Ordinal)
+            ? null
+            : target;
+    }
+
+    /// <summary>
+    /// Writes one edge per called name, weighted by how often it was called.
+    /// </summary>
+    /// <param name="calls">The counts, keyed by source key and called name.</param>
+    /// <param name="relations">Where the edges are added.</param>
+    private static void AddCallRelations(
+        Dictionary<(string Source, string Target), int> calls,
+        List<SyntaxRelation> relations)
+    {
         foreach (var ((source, target), count) in calls)
         {
             relations.Add(new SyntaxRelation
@@ -864,14 +1004,6 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
                 Weight = Math.Min(count, MaxCallWeight),
             });
         }
-
-        AddDocMentionRelations(declarations, relations);
-
-        return relations
-            .OrderBy(static relation => relation.Source ?? string.Empty, StringComparer.Ordinal)
-            .ThenBy(static relation => relation.Kind, StringComparer.Ordinal)
-            .ThenBy(static relation => relation.Target, StringComparer.Ordinal)
-            .ToList();
     }
 
     private static void AddDocMentionRelations(

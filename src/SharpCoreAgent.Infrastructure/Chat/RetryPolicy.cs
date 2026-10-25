@@ -58,27 +58,29 @@ public sealed record RetryPolicy
     /// <exception cref="ArgumentOutOfRangeException">A value is outside its documented range.</exception>
     public RetryPolicy Validate()
     {
-        if (MaxAttempts < 1 || MaxAttempts > 10)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxAttempts), MaxAttempts, "must be between 1 and 10");
-        }
-
-        if (BaseDelay < TimeSpan.Zero || BaseDelay > MaxDelay)
-        {
-            throw new ArgumentOutOfRangeException(nameof(BaseDelay), BaseDelay, "must be non-negative and no larger than MaxDelay");
-        }
-
-        if (MaxDelay > TimeSpan.FromMinutes(1))
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxDelay), MaxDelay, "must be at most one minute");
-        }
-
-        if (MaxJitterMilliseconds < 0 || MaxJitterMilliseconds > 5_000)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxJitterMilliseconds), MaxJitterMilliseconds, "must be between 0 and 5000");
-        }
+        Require(MaxAttempts is < 1 or > 10, nameof(MaxAttempts), MaxAttempts, "must be between 1 and 10");
+        Require(BaseDelay < TimeSpan.Zero || BaseDelay > MaxDelay, nameof(BaseDelay), BaseDelay, "must be non-negative and no larger than MaxDelay");
+        Require(MaxDelay > TimeSpan.FromMinutes(1), nameof(MaxDelay), MaxDelay, "must be at most one minute");
+        Require(MaxJitterMilliseconds is < 0 or > 5_000, nameof(MaxJitterMilliseconds), MaxJitterMilliseconds, "must be between 0 and 5000");
 
         return this;
+    }
+
+    /// <summary>
+    /// Throws for a value outside its documented range.
+    /// </summary>
+    /// <remarks>
+    /// The throw goes through this helper so the exception still carries the property name in
+    /// <see cref="ArgumentException.ParamName"/>, while the name reaches the exception as this method's
+    /// own parameter: <see cref="Validate"/> takes no arguments, so reading <c>nameof(MaxAttempts)</c>
+    /// there would describe a name that is not in anyone's argument list.
+    /// </remarks>
+    private static void Require(bool violated, string name, object? actual, string message)
+    {
+        if (violated)
+        {
+            throw new ArgumentOutOfRangeException(name, actual, message);
+        }
     }
 
     /// <inheritdoc />

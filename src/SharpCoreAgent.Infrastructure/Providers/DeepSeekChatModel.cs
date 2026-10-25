@@ -70,14 +70,7 @@ public sealed class DeepSeekChatModel : OpenAiCompatibleModelBase
     public static ModelDescriptor DescriptorFor(string? modelId)
     {
         var id = string.IsNullOrWhiteSpace(modelId) ? DefaultModelId : modelId.Trim();
-        foreach (var entry in Catalog)
-        {
-            if (string.Equals(entry.Id, id, StringComparison.Ordinal))
-            {
-                return entry;
-            }
-        }
-
-        return new ModelDescriptor(ProviderKey, id, id);
+        return Catalog.FirstOrDefault(entry => string.Equals(entry.Id, id, StringComparison.Ordinal))
+            ?? new ModelDescriptor(ProviderKey, id, id);
     }
 }

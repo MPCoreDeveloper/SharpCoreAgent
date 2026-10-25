@@ -60,33 +60,44 @@ internal static class ChatCommand
 
         if (!cli.Quiet)
         {
-            Console.Error.WriteLine($"workspace: {session.Workspace.Root}");
+            await WriteErrorLineAsync($"workspace: {session.Workspace.Root}", scope.ExitToken).ConfigureAwait(false);
         }
 
+        return await RunLoopAsync(cli, scope, session, store, agent, observer, path).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Prompts, runs a turn, saves the transcript — until the developer leaves.
+    /// </summary>
+    /// <param name="cli">The parsed command line.</param>
+    /// <param name="scope">The Ctrl+C split between cancelling a turn and leaving.</param>
+    /// <param name="session">The conversation, mutated in place.</param>
+    /// <param name="store">The session store.</param>
+    /// <param name="agent">The agent that runs a turn.</param>
+    /// <param name="observer">Where the turn's events go.</param>
+    /// <param name="path">The transcript path, already absolute.</param>
+    /// <returns>The process exit code.</returns>
+    private static async Task<int> RunLoopAsync(
+        CliOptions cli,
+        CancellationScope scope,
+        AgentSession session,
+        ISessionStore store,
+        CodingAgent agent,
+        IAgentObserver observer,
+        string path)
+    {
         AgentReport? last = null;
         while (true)
         {
-            Console.Error.Write($"{session.ActiveModel.QualifiedName} › ");
-            Console.Error.Flush();
+            var line = await ReadLineAsync(session, scope).ConfigureAwait(false);
 
-            string? input;
-            try
+            // null is end of input (Ctrl+Z on Windows, Ctrl+D elsewhere) or Ctrl+C at the prompt,
+            // which means "leave": there is no turn to abandon.
+            if (line is null)
             {
-                input = await Console.In.ReadLineAsync(scope.ExitToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Ctrl+C at the prompt means "leave": there is no turn to abandon.
                 break;
             }
 
-            if (input is null)
-            {
-                // End of input (Ctrl+Z on Windows, Ctrl+D elsewhere) ends the conversation too.
-                break;
-            }
-
-            var line = input.Trim();
             if (line.Length == 0)
             {
                 continue;
@@ -104,15 +115,7 @@ internal static class ChatCommand
                 continue;
             }
 
-            var turn = scope.BeginTurn();
-            try
-            {
-                last = await agent.RunTurnAsync(session, line, observer, turn).ConfigureAwait(false);
-            }
-            finally
-            {
-                scope.EndTurn();
-            }
+            last = await RunTurnAsync(agent, session, line, observer, scope).ConfigureAwait(false);
 
             if (cli.SaveSession
                 && !await CliHost.TrySaveSessionAsync(store, session, path, Console.Error).ConfigureAwait(false))
@@ -121,20 +124,107 @@ internal static class ChatCommand
             }
         }
 
-        if (cli.SaveSession)
-        {
-            if (!await CliHost.TrySaveSessionAsync(store, session, path, Console.Error).ConfigureAwait(false))
-            {
-                return ExitCodes.SessionIo;
-            }
+        return await FinishAsync(cli, scope, session, store, path).ConfigureAwait(false);
+    }
 
-            if (!cli.Quiet)
-            {
-                Console.Error.WriteLine($"session: {path}");
-            }
+    /// <summary>
+    /// Saves the transcript the loop produced and returns the code the conversation ends with.
+    /// </summary>
+    /// <param name="cli">The parsed command line.</param>
+    /// <param name="scope">Supplies the token the final writes run on.</param>
+    /// <param name="session">The conversation to persist.</param>
+    /// <param name="store">The session store.</param>
+    /// <param name="path">The transcript path, already absolute.</param>
+    /// <returns><see cref="ExitCodes.SessionIo"/> when the transcript could not be written.</returns>
+    private static async Task<int> FinishAsync(
+        CliOptions cli,
+        CancellationScope scope,
+        AgentSession session,
+        ISessionStore store,
+        string path)
+    {
+        if (!cli.SaveSession)
+        {
+            return ExitCodes.Success;
+        }
+
+        if (!await CliHost.TrySaveSessionAsync(store, session, path, Console.Error).ConfigureAwait(false))
+        {
+            return ExitCodes.SessionIo;
+        }
+
+        if (!cli.Quiet)
+        {
+            await WriteErrorLineAsync($"session: {path}", scope.ExitToken).ConfigureAwait(false);
         }
 
         return ExitCodes.Success;
+    }
+
+    /// <summary>
+    /// Paints the prompt and reads one line.
+    /// </summary>
+    /// <param name="session">The conversation, for the model name in the prompt.</param>
+    /// <param name="scope">Cancelled by Ctrl+C, which ends the conversation.</param>
+    /// <returns>The trimmed line, or <see langword="null"/> when the developer left.</returns>
+    private static async Task<string?> ReadLineAsync(AgentSession session, CancellationScope scope)
+    {
+        await WriteErrorAsync($"{session.ActiveModel.QualifiedName} › ", scope.ExitToken).ConfigureAwait(false);
+        await Console.Error.FlushAsync(scope.ExitToken).ConfigureAwait(false);
+
+        try
+        {
+            return (await Console.In.ReadLineAsync(scope.ExitToken).ConfigureAwait(false))?.Trim();
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Writes one line to standard error, on the conversation's token.
+    /// </summary>
+    /// <param name="text">The line to write.</param>
+    /// <param name="cancellationToken">Cancelled when the developer leaves.</param>
+    /// <returns>The pending write.</returns>
+    private static Task WriteErrorLineAsync(string text, CancellationToken cancellationToken) =>
+        Console.Error.WriteLineAsync(text.AsMemory(), cancellationToken);
+
+    /// <summary>
+    /// Writes a prompt to standard error, on the conversation's token.
+    /// </summary>
+    /// <param name="text">The prompt, without its trailing space.</param>
+    /// <param name="cancellationToken">Cancelled when the developer leaves.</param>
+    /// <returns>The pending write.</returns>
+    private static Task WriteErrorAsync(string text, CancellationToken cancellationToken) =>
+        Console.Error.WriteAsync(text.AsMemory(), cancellationToken);
+
+    /// <summary>
+    /// Runs one turn inside the cancellation scope's turn split.
+    /// </summary>
+    /// <param name="agent">The agent that runs the turn.</param>
+    /// <param name="session">The conversation to append to.</param>
+    /// <param name="prompt">What the developer typed.</param>
+    /// <param name="observer">Where the turn's events go.</param>
+    /// <param name="scope">Supplies the turn's token and restores the exit split afterwards.</param>
+    /// <returns>The turn's report.</returns>
+    private static async Task<AgentReport> RunTurnAsync(
+        CodingAgent agent,
+        AgentSession session,
+        string prompt,
+        IAgentObserver observer,
+        CancellationScope scope)
+    {
+        var turn = scope.BeginTurn();
+        try
+        {
+            return await agent.RunTurnAsync(session, prompt, observer, turn).ConfigureAwait(false);
+        }
+        finally
+        {
+            scope.EndTurn();
+        }
     }
 
     /// <summary>
@@ -187,16 +277,16 @@ internal static class ChatCommand
 
             if (!cli.Quiet)
             {
-                Console.Error.WriteLine(
-                    $"resumed {path} ({session.Messages.Count} message(s)) on {resumedModel.QualifiedName}");
+                await Console.Error.WriteLineAsync(
+                    $"resumed {path} ({session.Messages.Count} message(s)) on {resumedModel.QualifiedName}").ConfigureAwait(false);
             }
 
             return (session, ExitCodes.Success);
         }
         catch (Exception ex) when (ex is ArgumentException or DirectoryNotFoundException)
         {
-            Console.Error.WriteLine(
-                $"error: the session at '{path}' names a model or workspace this build cannot open: {ex.Message}");
+            await Console.Error.WriteLineAsync(
+                $"error: the session at '{path}' names a model or workspace this build cannot open: {ex.Message}").ConfigureAwait(false);
             return (null, ExitCodes.SessionIo);
         }
     }

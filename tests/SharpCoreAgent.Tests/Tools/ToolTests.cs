@@ -16,7 +16,7 @@ public sealed class ToolTests
     {
         using var sandbox = ToolTestWorkspace.Create();
         var outside = Path.Combine(Path.GetDirectoryName(sandbox.Root)!, "outside.txt");
-        File.WriteAllText(outside, "secret");
+        await File.WriteAllTextAsync(outside, "secret", TestContext.Current.CancellationToken);
 
         var result = await new ReadFileTool().ExecuteAsync(
             ToolTestWorkspace.Call("read_file", """{"path":"../outside.txt"}"""),
@@ -135,7 +135,7 @@ public sealed class ToolTests
         Assert.Equal("wrote 5 bytes to src/app.txt (created)", result.Content);
         Assert.Equal(new ToolEffect(ToolEffectKind.Created, "src/app.txt"), Assert.Single(result.Effects));
 
-        var bytes = File.ReadAllBytes(sandbox.FullPath("src/app.txt"));
+        var bytes = await File.ReadAllBytesAsync(sandbox.FullPath("src/app.txt"), TestContext.Current.CancellationToken);
         Assert.Equal("hello"u8.ToArray(), bytes);
     }
 
@@ -153,7 +153,7 @@ public sealed class ToolTests
         Assert.False(result.IsError);
         Assert.Contains("(overwritten)", result.Content, StringComparison.Ordinal);
         Assert.Equal(new ToolEffect(ToolEffectKind.Modified, "app.txt"), Assert.Single(result.Effects));
-        Assert.Equal("new", File.ReadAllText(sandbox.FullPath("app.txt")));
+        Assert.Equal("new", await File.ReadAllTextAsync(sandbox.FullPath("app.txt"), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class ToolTests
 
         Assert.True(result.IsError);
         Assert.Empty(result.Effects);
-        Assert.Equal("keep me", File.ReadAllText(sandbox.FullPath("app.txt")));
+        Assert.Equal("keep me", await File.ReadAllTextAsync(sandbox.FullPath("app.txt"), TestContext.Current.CancellationToken));
     }
 
     [Fact]

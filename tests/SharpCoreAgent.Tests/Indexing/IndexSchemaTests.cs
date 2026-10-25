@@ -107,9 +107,9 @@ public sealed class IndexSchemaTests
 
         var rows = database.Database.ExecuteQuery("SELECT source, target, weight FROM edges");
 
-        Assert.Single(rows);
-        Assert.Equal("1", rows[0]["source"].ToString());
-        Assert.Equal("2", rows[0]["target"].ToString());
-        Assert.Equal("1", rows[0]["weight"].ToString());
+        var row = Assert.Single(rows);
+        Assert.Equal("1", row["source"].ToString());
+        Assert.Equal("2", row["target"].ToString());
+        Assert.Equal("1", row["weight"].ToString());
     }
 }

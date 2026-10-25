@@ -25,18 +25,18 @@ internal static class Program
         }
         catch (CliUsageException ex)
         {
-            WriteUsageError(ex);
+            await WriteUsageErrorAsync(ex).ConfigureAwait(false);
             return ExitCodes.Usage;
         }
 
         switch (options.Command)
         {
             case CliCommand.Help:
-                Console.Out.WriteLine(HelpText.Usage);
+                await Console.Out.WriteLineAsync(HelpText.Usage).ConfigureAwait(false);
                 return ExitCodes.Success;
 
             case CliCommand.Version:
-                Console.Out.WriteLine($"sharpcoreagent {HelpText.Version}");
+                await Console.Out.WriteLineAsync($"sharpcoreagent {HelpText.Version}").ConfigureAwait(false);
                 return ExitCodes.Success;
 
             case CliCommand.Models:
@@ -60,29 +60,29 @@ internal static class Program
         }
         catch (CliUsageException ex)
         {
-            WriteUsageError(ex);
+            await WriteUsageErrorAsync(ex).ConfigureAwait(false);
             return ExitCodes.Usage;
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine("cancelled.");
+            await Console.Error.WriteLineAsync("cancelled.").ConfigureAwait(false);
             return ExitCodes.Budget;
         }
         catch (ModelCredentialException ex)
         {
-            Console.Error.WriteLine($"error: {ex.Message}");
+            await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
             return ExitCodes.Credentials;
         }
         catch (ArgumentException ex)
         {
             // ModelCatalog and AgentOptions.Validate reject a bad provider or budget this way: the
             // command line is at fault, so the developer gets a usage error rather than a crash.
-            Console.Error.WriteLine($"error: {ex.Message}");
+            await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
             return ExitCodes.Usage;
         }
         catch (Exception ex)
         {
-            WriteFailure(ex, options.Verbose);
+            await WriteFailureAsync(ex, options.Verbose).ConfigureAwait(false);
             return ExitCodes.Failed;
         }
         finally
@@ -91,11 +91,11 @@ internal static class Program
         }
     }
 
-    private static void WriteUsageError(CliUsageException ex)
+    private static async Task WriteUsageErrorAsync(CliUsageException ex)
     {
         ArgumentNullException.ThrowIfNull(ex);
-        Console.Error.WriteLine($"error: {ex.Message}");
-        Console.Error.WriteLine($"hint: {ex.Hint ?? HelpText.Hint}");
+        await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
+        await Console.Error.WriteLineAsync($"hint: {ex.Hint ?? HelpText.Hint}").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -108,6 +108,14 @@ internal static class Program
     /// </remarks>
     private static void UseUtf8Output()
     {
+        if (Console.IsOutputRedirected)
+        {
+            // A pipe, a file or a test harness owns the stream. Setting the encoding would discard the
+            // writer that caller installed -- Console.OutputEncoding re-creates Console.Out -- so the
+            // consumer's encoding stays the consumer's choice.
+            return;
+        }
+
         try
         {
             Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -122,12 +130,12 @@ internal static class Program
         }
     }
 
-    private static void WriteFailure(Exception ex, bool verbose)
+    private static async Task WriteFailureAsync(Exception ex, bool verbose)
     {
-        Console.Error.WriteLine($"error: {ex.Message}");
+        await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
         if (verbose && ex.StackTrace is not null)
         {
-            Console.Error.WriteLine(ex.StackTrace);
+            await Console.Error.WriteLineAsync(ex.StackTrace).ConfigureAwait(false);
         }
     }
 }

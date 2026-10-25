@@ -111,34 +111,55 @@ internal static class SourceMasker
 
         // A triple quote opens a block string (C# raw strings, Python docstrings); a single one closes at the next
         // matching quote that is not escaped.
-        var triple = Peek(text, index + 1) == quote && Peek(text, index + 2) == quote;
-
-        if (triple)
+        if (Peek(text, index + 1) == quote && Peek(text, index + 2) == quote)
         {
             masked[index] = masked[index + 1] = masked[index + 2] = ' ';
-            index += 3;
-
-            while (index < text.Length)
-            {
-                if (text[index] == quote && Peek(text, index + 1) == quote && Peek(text, index + 2) == quote)
-                {
-                    masked[index] = masked[index + 1] = masked[index + 2] = ' ';
-                    return index + 3;
-                }
-
-                if (text[index] is not ('\n' or '\r'))
-                {
-                    masked[index] = ' ';
-                }
-
-                index++;
-            }
-
-            return index;
+            return BlankBlockString(text, masked, index + 3, quote);
         }
 
         masked[index++] = ' ';
+        return BlankSingleString(text, masked, index, quote);
+    }
 
+    /// <summary>
+    /// Blanks a block string, up to and including its closing triple quote.
+    /// </summary>
+    /// <param name="text">The whole file.</param>
+    /// <param name="masked">The mask being written.</param>
+    /// <param name="index">The first character after the opening triple quote.</param>
+    /// <param name="quote">The quote character that opened the block.</param>
+    /// <returns>The index just past what was consumed.</returns>
+    private static int BlankBlockString(string text, char[] masked, int index, char quote)
+    {
+        while (index < text.Length)
+        {
+            if (text[index] == quote && Peek(text, index + 1) == quote && Peek(text, index + 2) == quote)
+            {
+                masked[index] = masked[index + 1] = masked[index + 2] = ' ';
+                return index + 3;
+            }
+
+            if (text[index] is not ('\n' or '\r'))
+            {
+                masked[index] = ' ';
+            }
+
+            index++;
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Blanks a single-quoted string, up to and including its closing quote.
+    /// </summary>
+    /// <param name="text">The whole file.</param>
+    /// <param name="masked">The mask being written.</param>
+    /// <param name="index">The first character after the opening quote.</param>
+    /// <param name="quote">The quote character that opened the literal.</param>
+    /// <returns>The index just past what was consumed.</returns>
+    private static int BlankSingleString(string text, char[] masked, int index, char quote)
+    {
         while (index < text.Length)
         {
             var current = text[index];

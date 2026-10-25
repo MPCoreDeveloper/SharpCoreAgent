@@ -56,7 +56,7 @@ internal static class RunCommand
 
             if (!cli.Json && !cli.Quiet)
             {
-                Console.Error.WriteLine($"session: {Path.GetFullPath(path)}");
+                await Console.Error.WriteLineAsync($"session: {Path.GetFullPath(path)}".AsMemory(), cancellationToken).ConfigureAwait(false);
             }
         }
 

@@ -124,7 +124,7 @@ public sealed class HashedCodeEmbedderTests
         Assert.Equal(0f, HashedCodeEmbedder.CosineSimilarity(new float[4], new float[4]));
     }
 
-    private static float[] Embed(ICodeTextEmbedder embedder, string text)
+    private static float[] Embed(HashedCodeEmbedder embedder, string text)
     {
         var vector = new float[embedder.Dimensions];
         embedder.Embed(text, vector);

@@ -182,7 +182,10 @@ a transcript, and the file is the authority on which model the conversation was 
 
 Every line is analysed on [SonarCloud](https://sonarcloud.io/summary/new_code?id=MPCoreDeveloper_SharpCoreAgent):
 `src/` as product code, `tests/` as test code, with no hand-written file or directory excluded
-(`bin`/`obj` and generated sources aside) and no coverage exclusion except the test project itself.
+(`bin`/`obj` and generated sources aside). Two exclusions exist and both are about ownership: `.specify/`
+is the Spec Kit scaffolding that the `specify` CLI refreshes (a fix there rewrites upstream's PowerShell
+and is lost on the next upgrade), and `eng/` is the build tooling no test can execute, so it is analysed
+but not counted as uncovered code. The test project itself is excluded from coverage.
 
 ```
 pwsh ./eng/sonar-scan.ps1      # reads SONAR_TOKEN from the environment
@@ -204,16 +207,22 @@ the second duplicates settings that would drift.
 - **The gate is "Sonar way",** unmodified: A ratings for reliability, security and maintainability, 80%
   coverage on new code, at most 3% duplication, every security hotspot reviewed. It is computed on every
   run and shown in the badge above.
-- **Where the project stands:** 8 944 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
-  reliability, security and maintainability, 0.6% duplication, 56 code smells, and 53.0% coverage
-  (54.5% of lines, 49.7% of branches). The gate reports **failed** on one condition: new-code coverage is
-  32.8% against the 80% it asks for.
+- **Where the project stands:** 7 827 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
+  reliability, security and maintainability, 0% duplication, **0 code smells**, and 82.0% coverage
+  (88.6% of lines, 70.1% of branches) across 334 tests. The gate reports **failed** on one condition:
+  new-code coverage. That number is only meaningful once a commit is the baseline — the analysis uploaded
+  before the commit reports the previous revision's diff, not this one's tests.
 - **Why new-code coverage under-reports on refactors.** Sonar counts a changed declaration line as a new
   line to cover, and no test hits a signature, a brace or a doc comment; a commit that only renames or
-  re-signatures code therefore lands near 30% however well it is tested. Part of that 32.8% is a real gap
-  (the first pass of these changes added tests for `AgentOptions.Validate`, which had none), part is
-  arithmetic. Failing CI on the gate is a switch, not the default: set the repository variable
-  `SONAR_ENFORCE_GATE` to `true` when the number reflects the code instead of the shape of the diff.
+  re-signatures code therefore lands near 30% however well it is tested. Failing CI on the gate is a
+  switch, not the default: set the repository variable `SONAR_ENFORCE_GATE` to `true` when the number
+  reflects the code instead of the shape of the diff.
+- **How the last 56 smells were cleared.** Every finding was fixed rather than suppressed: the nested
+  ternaries, shadowed names and loop shapes became plain statements, `ArgumentOutOfRangeException` is
+  raised through one helper that carries the property name as its own parameter, the async iterators were
+  split into a validating wrapper and a private core (an iterator body does not run its checks before the
+  first item is requested), and the eight methods over the cognitive-complexity limit were cut into named
+  steps. The build reports zero warnings, which is the same rule set the scanner runs.
 - **Triage is recorded, not silent:** one finding — `csharpsquid:S2068` on the index's
   `NoEncryptionPassword` sentinel, a documented non-secret the storage engine requires when encryption is
   off — is marked false positive in SonarCloud with the reasoning attached. Nothing else is suppressed.
@@ -221,8 +230,7 @@ the second duplicates settings that would drift.
 ## Project status
 
 - `specs/001-coding-agent-core` — the agent loop, providers, tools, sessions and CLI are implemented
-  and covered by the test suite (193 tests, no compiler warnings; the Sonar rule set the build also runs
-  reports findings that the dashboard tracks).
+  and covered by the test suite (334 tests, no compiler warnings and no open Sonar findings).
 - `specs/002-code-evidence-index` — the index foundations (schema, file scanner, tokenizer, extractor,
   embedder, reader, writer lock) are in place; the retrieval tools and the `index` command are the
   remaining tasks.

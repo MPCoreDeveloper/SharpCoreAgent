@@ -57,13 +57,32 @@ public sealed class RetryingChatModel : IStreamingChatModel
     public RetryPolicy Policy => _policy;
 
     /// <inheritdoc />
-    public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(
+    public IAsyncEnumerable<ChatStreamEvent> StreamAsync(
         ChatRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        for (var attempt = 1; ; attempt++)
+        return StreamCoreAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Streams one attempt at a time until the policy gives up or an answer has started.
+    /// </summary>
+    /// <param name="request">The request to send; already checked for null.</param>
+    /// <param name="cancellationToken">Aborts the stream and any pending delay.</param>
+    /// <returns>The inner model's events, with a pause between attempts.</returns>
+    /// <remarks>
+    /// The check lives in <see cref="StreamAsync"/> because an iterator body only starts running once
+    /// the caller asks for the first item, which would turn a caller's bug into a strange empty stream.
+    /// </remarks>
+    private async IAsyncEnumerable<ChatStreamEvent> StreamCoreAsync(
+        ChatRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var attempt = 1;
+
+        while (true)
         {
             RetryAttempt? retry = null;
 
@@ -104,6 +123,7 @@ public sealed class RetryingChatModel : IStreamingChatModel
 
             _onRetry?.Invoke(retry);
             await Task.Delay(retry.Delay, _time, cancellationToken).ConfigureAwait(false);
+            attempt++;
         }
     }
 }

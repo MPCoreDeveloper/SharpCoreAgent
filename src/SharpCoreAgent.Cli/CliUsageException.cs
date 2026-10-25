@@ -9,7 +9,7 @@ namespace SharpCoreAgent.Cli;
 /// it a distinct type is what stops a typo in <c>--max-iterations</c> from being reported as a failed
 /// turn and from being retried by anyone scripting the CLI.
 /// </remarks>
-internal sealed class CliUsageException : Exception
+public sealed class CliUsageException : Exception
 {
     /// <summary>
     /// Creates a usage error.

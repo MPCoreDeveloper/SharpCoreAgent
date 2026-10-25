@@ -105,17 +105,9 @@ public sealed class ChatModelResolver : IChatModelResolver
     private void EnsureCredential(string provider)
     {
         var names = ModelCatalog.CredentialNames(provider);
-        if (names.Count == 0)
+        if (names.Count == 0 || names.Any(name => _credentials.Find(name) is not null))
         {
             return;
-        }
-
-        foreach (var name in names)
-        {
-            if (_credentials.Find(name) is not null)
-            {
-                return;
-            }
         }
 
         throw new ModelCredentialException(names[0]);

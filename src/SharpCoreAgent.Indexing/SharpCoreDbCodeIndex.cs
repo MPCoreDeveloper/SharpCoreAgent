@@ -168,6 +168,104 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
         }
     }
 
+    /// <summary>
+    /// Decides what the stored meta alone says about the index.
+    /// </summary>
+    /// <param name="view">The meta table, as read.</param>
+    /// <param name="comparableRoot">The workspace the index is expected to describe.</param>
+    /// <param name="building">Whether another process holds the writer lock.</param>
+    /// <returns>The freshness and, when it is not fresh, the reason a developer can act on.</returns>
+    private static (IndexFreshness Freshness, string? Reason) DescribeFreshness(
+        MetaView view,
+        string comparableRoot,
+        bool building)
+    {
+        var version = view.Number("schema_version");
+        var contract = view.Number("analyzer_contract");
+        var storedRoot = view.Text("workspace_root");
+
+        if (version is null || contract is null)
+        {
+            return (IndexFreshness.Corrupt, "meta has no schema_version or analyzer_contract");
+        }
+
+        if (version > IndexSchema.Version)
+        {
+            return (IndexFreshness.Corrupt, string.Create(
+                CultureInfo.InvariantCulture,
+                $"built with schema v{version}, this build understands v{IndexSchema.Version}"));
+        }
+
+        if (storedRoot is not null && !string.Equals(storedRoot, comparableRoot, StringComparison.Ordinal))
+        {
+            return (IndexFreshness.Corrupt, string.Create(
+                CultureInfo.InvariantCulture,
+                $"index belongs to '{storedRoot}', not to '{comparableRoot}'"));
+        }
+
+        if (building)
+        {
+            return (IndexFreshness.Building, "another SharpCoreAgent process is building the index");
+        }
+
+        if (version < IndexSchema.Version || contract != IndexSchema.AnalyzerContract)
+        {
+            return (IndexFreshness.Stale, string.Create(
+                CultureInfo.InvariantCulture,
+                $"built with schema v{version} and analyzer {contract}, this build wants v{IndexSchema.Version} and analyzer {IndexSchema.AnalyzerContract}"));
+        }
+
+        return (IndexFreshness.Fresh, null);
+    }
+
+    /// <summary>
+    /// Downgrades a fresh index whose last build did not finish, or whose files moved under it.
+    /// </summary>
+    /// <param name="view">The meta table, as read.</param>
+    /// <param name="freshness">What the schema version decided.</param>
+    /// <param name="reason">The reason that decision produced, if any.</param>
+    /// <param name="staleFiles">How many files changed since the last build.</param>
+    /// <param name="orphans">How many stored rows point at a file that is gone.</param>
+    /// <returns>The freshness and reason after the stored state is taken into account.</returns>
+    private static (IndexFreshness Freshness, string? Reason) ApplyBuildState(
+        MetaView view,
+        IndexFreshness freshness,
+        string? reason,
+        int staleFiles,
+        int orphans)
+    {
+        if (freshness != IndexFreshness.Fresh)
+        {
+            return (freshness, reason);
+        }
+
+        if (string.Equals(view.Text("build_state"), IndexSchema.PartialState, StringComparison.Ordinal))
+        {
+            return (IndexFreshness.Partial, "the last build stopped before the workspace was exhausted");
+        }
+
+        if (view.Text("build_id") is null)
+        {
+            return (IndexFreshness.Stale, "the index has never completed a build");
+        }
+
+        if (staleFiles > 0)
+        {
+            return (IndexFreshness.Stale, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{staleFiles} file(s) changed since the last build"));
+        }
+
+        if (orphans > 0)
+        {
+            return (IndexFreshness.Stale, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{orphans} stored row(s) point at a file that is gone"));
+        }
+
+        return (IndexFreshness.Fresh, null);
+    }
+
     private IndexStatus ComputeStatus()
     {
         var root = _paths.WorkspaceRoot;
@@ -187,49 +285,7 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
         }
 
         var view = new MetaView(meta);
-        var version = view.Number("schema_version");
-        var contract = view.Number("analyzer_contract");
-        var storedRoot = view.Text("workspace_root");
-
-        IndexFreshness freshness;
-        string? reason = null;
-
-        if (version is null || contract is null)
-        {
-            freshness = IndexFreshness.Corrupt;
-            reason = "meta has no schema_version or analyzer_contract";
-        }
-        else if (version > IndexSchema.Version)
-        {
-            freshness = IndexFreshness.Corrupt;
-            reason = string.Create(
-                CultureInfo.InvariantCulture,
-                $"built with schema v{version}, this build understands v{IndexSchema.Version}");
-        }
-        else if (storedRoot is not null
-                 && !string.Equals(storedRoot, _paths.ComparableWorkspaceRoot, StringComparison.Ordinal))
-        {
-            freshness = IndexFreshness.Corrupt;
-            reason = string.Create(
-                CultureInfo.InvariantCulture,
-                $"index belongs to '{storedRoot}', not to '{_paths.ComparableWorkspaceRoot}'");
-        }
-        else if (building)
-        {
-            freshness = IndexFreshness.Building;
-            reason = "another SharpCoreAgent process is building the index";
-        }
-        else if (version < IndexSchema.Version || contract != IndexSchema.AnalyzerContract)
-        {
-            freshness = IndexFreshness.Stale;
-            reason = string.Create(
-                CultureInfo.InvariantCulture,
-                $"built with schema v{version} and analyzer {contract}, this build wants v{IndexSchema.Version} and analyzer {IndexSchema.AnalyzerContract}");
-        }
-        else
-        {
-            freshness = IndexFreshness.Fresh;
-        }
+        var (freshness, reason) = DescribeFreshness(view, _paths.ComparableWorkspaceRoot, building);
 
         var staleFiles = 0;
         var skippedFiles = 0;
@@ -250,30 +306,7 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
             }
         }
 
-        if (freshness == IndexFreshness.Fresh)
-        {
-            if (string.Equals(view.Text("build_state"), IndexSchema.PartialState, StringComparison.Ordinal))
-            {
-                freshness = IndexFreshness.Partial;
-                reason = "the last build stopped before the workspace was exhausted";
-            }
-            else if (view.Text("build_id") is null)
-            {
-                freshness = IndexFreshness.Stale;
-                reason = "the index has never completed a build";
-            }
-            else if (staleFiles > 0)
-            {
-                freshness = IndexFreshness.Stale;
-                reason = string.Create(CultureInfo.InvariantCulture, $"{staleFiles} file(s) changed since the last build");
-            }
-            else if (orphans > 0)
-            {
-                freshness = IndexFreshness.Stale;
-                reason = string.Create(CultureInfo.InvariantCulture, $"{orphans} stored row(s) point at a file that is gone");
-            }
-        }
-
+        (freshness, reason) = ApplyBuildState(view, freshness, reason, staleFiles, orphans);
         LastReason = reason;
 
         var embedder = view.Text("embedder") ?? "off";

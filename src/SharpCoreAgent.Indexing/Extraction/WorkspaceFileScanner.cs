@@ -74,49 +74,70 @@ internal sealed class WorkspaceFileScanner
             cancellationToken.ThrowIfCancellationRequested();
 
             var directory = pending.Pop();
-
-            foreach (var child in EnumerateDirectories(directory))
-            {
-                if (IsIgnored(Path.GetFileName(child)))
-                {
-                    continue;
-                }
-
-                if (TryResolveLink(child, asDirectory: true, out _))
-                {
-                    // A linked directory is never walked under its link name. When the target is inside the
-                    // workspace it is reached through its own name, and when it is outside it is out of bounds;
-                    // either way walking it here would either duplicate the tree or index another repository.
-                    continue;
-                }
-
-                if (!_workspace.IsInside(child) || !visitedDirectories.Add(child))
-                {
-                    continue;
-                }
-
-                pending.Push(child);
-            }
-
-            foreach (var file in EnumerateFiles(directory))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                _ = TryResolveLink(file, asDirectory: false, out var real);
-
-                if (!_workspace.IsInside(real) || !visitedFiles.Add(real))
-                {
-                    // A link that leaves the workspace is out of bounds, and the same bytes under two names are
-                    // one row: the file is indexed once, under its real path.
-                    continue;
-                }
-
-                found.Add(Describe(real));
-            }
+            PushChildDirectories(directory, pending, visitedDirectories);
+            CollectFiles(directory, found, visitedFiles, cancellationToken);
         }
 
         found.Sort(static (left, right) => string.CompareOrdinal(left.Path, right.Path));
         return found;
+    }
+
+    /// <summary>
+    /// Queues the subdirectories that may be walked.
+    /// </summary>
+    /// <param name="directory">The directory being visited.</param>
+    /// <param name="pending">The walk's stack.</param>
+    /// <param name="visited">The directories already queued, so a link cannot loop the walk.</param>
+    private void PushChildDirectories(string directory, Stack<string> pending, HashSet<string> visited)
+    {
+        foreach (var child in EnumerateDirectories(directory))
+        {
+            if (IsIgnored(Path.GetFileName(child)))
+            {
+                continue;
+            }
+
+            if (TryResolveLink(child, asDirectory: true, out _))
+            {
+                // A linked directory is never walked under its link name. When the target is inside the
+                // workspace it is reached through its own name, and when it is outside it is out of bounds;
+                // either way walking it here would either duplicate the tree or index another repository.
+                continue;
+            }
+
+            if (!_workspace.IsInside(child) || !visited.Add(child))
+            {
+                continue;
+            }
+
+            pending.Push(child);
+        }
+    }
+
+    /// <summary>
+    /// Adds the files of one directory, each under its real path.
+    /// </summary>
+    /// <param name="directory">The directory being visited.</param>
+    /// <param name="found">Where the files are collected.</param>
+    /// <param name="visited">The files already collected, so two names for one file do not become two rows.</param>
+    /// <param name="cancellationToken">Cancels between files.</param>
+    private void CollectFiles(string directory, List<ScannedFile> found, HashSet<string> visited, CancellationToken cancellationToken)
+    {
+        foreach (var file in EnumerateFiles(directory))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _ = TryResolveLink(file, asDirectory: false, out var real);
+
+            if (!_workspace.IsInside(real) || !visited.Add(real))
+            {
+                // A link that leaves the workspace is out of bounds, and the same bytes under two names are
+                // one row: the file is indexed once, under its real path.
+                continue;
+            }
+
+            found.Add(Describe(real));
+        }
     }
 
     private ScannedFile Describe(string fullPath)

@@ -176,12 +176,9 @@ public sealed class SearchTextTool : ITool
                 }
             }
 
-            foreach (var entry in entries)
+            foreach (var entry in entries.Where(entry => entry is FileInfo))
             {
-                if (entry is FileInfo)
-                {
-                    yield return entry.FullName;
-                }
+                yield return entry.FullName;
             }
         }
     }

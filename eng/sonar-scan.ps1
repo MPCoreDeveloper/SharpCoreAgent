@@ -62,8 +62,14 @@ try {
         "/d:sonar.token=$Token"
         '/d:sonar.sourceEncoding=UTF-8'
         "/d:sonar.cs.cobertura.reportsPaths=$CoveragePath"
-        '/d:sonar.exclusions=**/bin/**,**/obj/**,**/*.g.cs,**/*.generated.cs,**/*.Designer.cs'
-        '/d:sonar.coverage.exclusions=tests/**'
+        # bin/obj and generated files are not source. .specify/ is the Spec Kit scaffolding: it is
+        # refreshed by the `specify` CLI, so a fix made there rewrites upstream's PowerShell and is lost
+        # on the next upgrade -- it is reviewed as a dependency, not as this product's code.
+        '/d:sonar.exclusions=**/bin/**,**/obj/**,**/*.g.cs,**/*.generated.cs,**/*.Designer.cs,**/.specify/**'
+        # Tests are measured by the test run, not by coverage of themselves. eng/ is build tooling
+        # (sonar-scan.ps1): nothing in the test suite can execute it, so counting it as uncovered code
+        # would report a gap that no test can ever close.
+        '/d:sonar.coverage.exclusions=tests/**,**/.specify/**,eng/**'
     )
 
     if ($WaitForQualityGate) {

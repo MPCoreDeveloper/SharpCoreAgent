@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SharpCoreAgent.Domain.Agents;
@@ -80,35 +80,18 @@ public sealed class CodingAgent
 
         var sink = observer ?? NullAgentObserver.Instance;
         var model = session.ActiveModel;
-        var results = new List<ToolResult>();
-        var iterations = 0;
-        TokenUsage? turnUsage = null;
-
-        AgentReport Build(AgentOutcome outcome, string? detail = null, string? finalText = null) => new()
-        {
-            Outcome = outcome,
-            ModelId = model.QualifiedName,
-            FinalText = finalText,
-            Usage = turnUsage ?? TokenUsage.Unknown,
-            Iterations = iterations,
-            ToolResults = [.. results],
-            Detail = detail,
-        };
-
-        async Task<AgentReport> FinishAsync(AgentReport report)
-        {
-            await sink.OnEventAsync(new TurnFinished(report), CancellationToken.None).ConfigureAwait(false);
-            return report;
-        }
+        var state = new TurnState(model);
 
         // A model that cannot call tools would answer in prose and silently ignore every tool, so the
         // turn is refused before a request is spent and before the transcript is polluted.
         if (!model.SupportsTools)
         {
             Log.NoToolSupport(_logger, model.QualifiedName, null);
-            return await FinishAsync(Build(
-                AgentOutcome.Failed,
-                $"the model {model.QualifiedName} is declared as not supporting tool calls. Choose another model with /model or --model."))
+            return await FinishAsync(
+                sink,
+                state.Report(
+                    AgentOutcome.Failed,
+                    $"the model {model.QualifiedName} is declared as not supporting tool calls. Choose another model with /model or --model."))
                 .ConfigureAwait(false);
         }
 
@@ -120,7 +103,7 @@ public sealed class CodingAgent
         catch (SharpCoreAgentException ex)
         {
             Log.ModelUnavailable(_logger, model.QualifiedName, ex.Message, ex);
-            return await FinishAsync(Build(AgentOutcome.Failed, ex.Message)).ConfigureAwait(false);
+            return await FinishAsync(sink, state.Report(AgentOutcome.Failed, ex.Message)).ConfigureAwait(false);
         }
 
         session.Add(ChatMessage.User(prompt));
@@ -132,16 +115,19 @@ public sealed class CodingAgent
 
         while (true)
         {
-            if (iterations >= _options.MaxIterations)
+            if (state.Iterations >= _options.MaxIterations)
             {
                 Log.IterationBudgetSpent(_logger, model.QualifiedName, _options.MaxIterations, null);
-                return await FinishAsync(Build(
-                    AgentOutcome.BudgetExhausted,
-                    $"the iteration budget of {_options.MaxIterations} model calls ran out before the model stopped calling tools."))
+                return await FinishAsync(
+                    sink,
+                    state.Report(
+                        AgentOutcome.BudgetExhausted,
+                        $"the iteration budget of {_options.MaxIterations} model calls ran out before the model stopped calling tools."))
                     .ConfigureAwait(false);
             }
 
-            iterations++;
+            state.Iterations++;
+
             var request = new ChatRequest(
                 model,
                 session.Messages,
@@ -149,75 +135,190 @@ public sealed class CodingAgent
                 _options.Temperature,
                 _options.MaxOutputTokensPerTurn);
 
-            StreamOutcome stream;
-            try
+            var (stream, failure) = await TryStreamAsync(client, request, sink, turnBudget.Token).ConfigureAwait(false);
+            if (stream is null)
             {
-                stream = await StreamOnceAsync(client, request, sink, turnBudget.Token).ConfigureAwait(false);
-            }
-            catch (ModelException ex)
-            {
-                Log.TurnFailed(_logger, model.QualifiedName, iterations, ex.Message, ex);
-                return await FinishAsync(Build(AgentOutcome.Failed, ex.Message)).ConfigureAwait(false);
+                Log.TurnFailed(_logger, model.QualifiedName, state.Iterations, failure ?? "the model call failed", null);
+                return await FinishAsync(sink, state.Report(AgentOutcome.Failed, failure)).ConfigureAwait(false);
             }
 
-            // Cancellation and timeout are the same interruption to the protocol but not to the user:
-            // a timeout spent a budget, an interrupt did not. Partial text is kept so the developer can
-            // read what the model had already said.
             if (stream.Interrupted)
             {
-                if (stream.Text.Length > 0)
-                {
-                    session.Add(ChatMessage.Assistant(stream.Text));
-                }
-
-                var cancelled = cancellationToken.IsCancellationRequested;
-                var detail = cancelled
-                    ? "the turn was cancelled before the model finished its answer."
-                    : $"the turn exceeded its wall-clock budget of {_options.TurnTimeout}.";
-                return await FinishAsync(Build(
-                    cancelled ? AgentOutcome.Cancelled : AgentOutcome.BudgetExhausted,
-                    detail,
-                    stream.Text.Length > 0 ? stream.Text : null))
-                    .ConfigureAwait(false);
+                return await FinishAsync(sink, Interruption(session, stream, state, cancellationToken)).ConfigureAwait(false);
             }
 
             var response = stream.Response!;
             session.Add(response.Message);
-            turnUsage = turnUsage is null ? response.Usage : turnUsage + response.Usage;
+            state.Usage = state.Usage is null ? response.Usage : state.Usage + response.Usage;
             session.RecordUsage(model.QualifiedName, response.Usage);
 
-            if (response.FinishReason == FinishReason.ContentFilter)
+            var ending = await AdvanceAsync(session, response, state, sink, turnBudget.Token).ConfigureAwait(false);
+            if (ending is not null)
             {
-                return await FinishAsync(Build(
-                    AgentOutcome.Failed,
-                    "the provider filtered the model's output, so the answer cannot be trusted.",
-                    response.Message.Content))
-                    .ConfigureAwait(false);
-            }
-
-            if (!response.Message.HasToolCalls)
-            {
-                Log.TurnCompleted(_logger, model.QualifiedName, iterations, results.Count, null);
-                return await FinishAsync(Build(AgentOutcome.Completed, null, response.Message.Content)).ConfigureAwait(false);
-            }
-
-            foreach (var call in response.Message.ToolCalls)
-            {
-                var result = await InvokeAsync(session, call, sink, turnBudget.Token).ConfigureAwait(false);
-                results.Add(result);
-                session.Add(ChatMessage.FromToolResult(result));
-            }
-
-            // Checked after the tool round because a single round can add several large results.
-            var spent = session.TotalUsage.Total;
-            if (spent is not null && spent > _options.MaxTotalTokens)
-            {
-                return await FinishAsync(Build(
-                    AgentOutcome.BudgetExhausted,
-                    $"the session token budget of {_options.MaxTotalTokens} is spent ({spent} used). Start a new session or raise the budget."))
-                    .ConfigureAwait(false);
+                return await FinishAsync(sink, ending).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    /// Streams one request, turning a provider failure into the detail a report can carry.
+    /// </summary>
+    /// <param name="client">The model to stream from.</param>
+    /// <param name="request">The request to send.</param>
+    /// <param name="sink">Receives progress.</param>
+    /// <param name="cancellationToken">Cancels the stream.</param>
+    /// <returns>The outcome, or the failure message when the provider failed.</returns>
+    private static async Task<(StreamOutcome? Stream, string? Failure)> TryStreamAsync(
+        IStreamingChatModel client,
+        ChatRequest request,
+        IAgentObserver sink,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await StreamOnceAsync(client, request, sink, cancellationToken).ConfigureAwait(false), null);
+        }
+        catch (ModelException ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Handles one model answer: the final answer, a filtered answer, or a round of tool calls.
+    /// </summary>
+    /// <param name="session">The conversation to append to.</param>
+    /// <param name="response">What the model answered.</param>
+    /// <param name="state">The turn's running totals.</param>
+    /// <param name="sink">Receives tool events.</param>
+    /// <param name="cancellationToken">Cancels the tool round.</param>
+    /// <returns>The report that ends the turn, or <see langword="null"/> to continue it.</returns>
+    private async Task<AgentReport?> AdvanceAsync(
+        AgentSession session,
+        ChatResponse response,
+        TurnState state,
+        IAgentObserver sink,
+        CancellationToken cancellationToken)
+    {
+        if (response.FinishReason == FinishReason.ContentFilter)
+        {
+            return state.Report(
+                AgentOutcome.Failed,
+                "the provider filtered the model's output, so the answer cannot be trusted.",
+                response.Message.Content);
+        }
+
+        if (!response.Message.HasToolCalls)
+        {
+            Log.TurnCompleted(_logger, state.Model.QualifiedName, state.Iterations, state.ResultCount, null);
+            return state.Report(AgentOutcome.Completed, null, response.Message.Content);
+        }
+
+        foreach (var call in response.Message.ToolCalls)
+        {
+            var result = await InvokeAsync(session, call, sink, cancellationToken).ConfigureAwait(false);
+            state.Add(result);
+            session.Add(ChatMessage.FromToolResult(result));
+        }
+
+        // Checked after the tool round because a single round can add several large results.
+        if (session.TotalUsage.Total is { } spent && spent > _options.MaxTotalTokens)
+        {
+            return state.Report(
+                AgentOutcome.BudgetExhausted,
+                $"the session token budget of {_options.MaxTotalTokens} is spent ({spent} used). Start a new session or raise the budget.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Turns an interruption into the report that ends the turn.
+    /// </summary>
+    /// <param name="session">The conversation, which keeps whatever the model had said.</param>
+    /// <param name="stream">The interrupted stream.</param>
+    /// <param name="state">The turn's running totals.</param>
+    /// <param name="cancellationToken">Tells a cancel from a timeout.</param>
+    /// <returns>The report.</returns>
+    /// <remarks>
+    /// Cancellation and timeout are the same interruption to the protocol but not to the user: a timeout
+    /// spent a budget, an interrupt did not. Partial text is kept so the developer can read what the model
+    /// had already said.
+    /// </remarks>
+    private AgentReport Interruption(
+        AgentSession session,
+        StreamOutcome stream,
+        TurnState state,
+        CancellationToken cancellationToken)
+    {
+        if (stream.Text.Length > 0)
+        {
+            session.Add(ChatMessage.Assistant(stream.Text));
+        }
+
+        var cancelled = cancellationToken.IsCancellationRequested;
+
+        return state.Report(
+            cancelled ? AgentOutcome.Cancelled : AgentOutcome.BudgetExhausted,
+            cancelled
+                ? "the turn was cancelled before the model finished its answer."
+                : $"the turn exceeded its wall-clock budget of {_options.TurnTimeout}.",
+            stream.Text.Length > 0 ? stream.Text : null);
+    }
+
+    /// <summary>
+    /// Announces the end of the turn to the observer and hands the report back.
+    /// </summary>
+    /// <param name="sink">Receives the terminal event.</param>
+    /// <param name="report">The report to finish with.</param>
+    /// <returns>The same report.</returns>
+    private static async Task<AgentReport> FinishAsync(IAgentObserver sink, AgentReport report)
+    {
+        await sink.OnEventAsync(new TurnFinished(report), CancellationToken.None).ConfigureAwait(false);
+        return report;
+    }
+
+    /// <summary>
+    /// The running totals of one turn: what it spent, and what its tools reported.
+    /// </summary>
+    /// <param name="model">The model the turn runs on.</param>
+    private sealed class TurnState(ModelDescriptor model)
+    {
+        private readonly List<ToolResult> _results = [];
+
+        /// <summary>Gets the model the turn runs on.</summary>
+        public ModelDescriptor Model { get; } = model;
+
+        /// <summary>Gets or sets the tokens the turn has spent so far.</summary>
+        public TokenUsage? Usage { get; set; }
+
+        /// <summary>Gets or sets how many model round trips the turn has used.</summary>
+        public int Iterations { get; set; }
+
+        /// <summary>Gets how many tool results the turn has collected.</summary>
+        public int ResultCount => _results.Count;
+
+        /// <summary>Records one tool result.</summary>
+        /// <param name="result">The result to keep.</param>
+        public void Add(ToolResult result) => _results.Add(result);
+
+        /// <summary>
+        /// Builds the report for an outcome.
+        /// </summary>
+        /// <param name="outcome">How the turn ended.</param>
+        /// <param name="detail">Why, when the outcome needs explaining.</param>
+        /// <param name="finalText">The answer, when there is one.</param>
+        /// <returns>The report.</returns>
+        public AgentReport Report(AgentOutcome outcome, string? detail = null, string? finalText = null) => new()
+        {
+            Outcome = outcome,
+            ModelId = Model.QualifiedName,
+            FinalText = finalText,
+            Usage = Usage ?? TokenUsage.Unknown,
+            Iterations = Iterations,
+            ToolResults = [.. _results],
+            Detail = detail,
+        };
     }
 
     private async Task<ToolResult> InvokeAsync(

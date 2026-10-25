@@ -132,20 +132,39 @@ internal sealed record CliOptions
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var environment = readEnvironment ?? Environment.GetEnvironmentVariable;
-        var options = new CliOptions
-        {
-            Provider = NormalizeProvider(environment("SHARPCOREAGENT_PROVIDER")),
-            ProviderExplicit = Trim(environment("SHARPCOREAGENT_PROVIDER")) is not null,
-            Model = Trim(environment("SHARPCOREAGENT_MODEL")),
-            Workspace = Trim(environment("SHARPCOREAGENT_WORKSPACE")) ?? Directory.GetCurrentDirectory(),
-        };
+        var options = FromEnvironment(readEnvironment ?? Environment.GetEnvironmentVariable);
 
         if (args.Length == 0)
         {
             return options with { Command = CliCommand.Help };
         }
 
+        return ScanArguments(args, options);
+    }
+
+    /// <summary>
+    /// Reads the defaults the environment supplies.
+    /// </summary>
+    /// <param name="environment">The environment reader.</param>
+    /// <returns>Options with the provider, model and workspace the environment names.</returns>
+    /// <exception cref="CliUsageException">The environment names a provider this build does not serve.</exception>
+    private static CliOptions FromEnvironment(Func<string, string?> environment) => new()
+    {
+        Provider = NormalizeProvider(environment("SHARPCOREAGENT_PROVIDER")),
+        ProviderExplicit = Trim(environment("SHARPCOREAGENT_PROVIDER")) is not null,
+        Model = Trim(environment("SHARPCOREAGENT_MODEL")),
+        Workspace = Trim(environment("SHARPCOREAGENT_WORKSPACE")) ?? Directory.GetCurrentDirectory(),
+    };
+
+    /// <summary>
+    /// Walks the arguments, applying options and collecting the command and its positionals.
+    /// </summary>
+    /// <param name="args">The arguments, without the program name.</param>
+    /// <param name="options">The options to start from.</param>
+    /// <returns>The parsed options.</returns>
+    /// <exception cref="CliUsageException">An argument is unknown or incomplete.</exception>
+    private static CliOptions ScanArguments(string[] args, CliOptions options)
+    {
         CliCommand? command = null;
         var positionals = new List<string>();
         var optionsEnded = false;
@@ -187,6 +206,19 @@ internal sealed record CliOptions
             positionals.Add(argument);
         }
 
+        return Finish(options, command, positionals);
+    }
+
+    /// <summary>
+    /// Turns the collected command and positionals into validated options.
+    /// </summary>
+    /// <param name="options">The options the flags produced.</param>
+    /// <param name="command">The command, or <see langword="null"/> when none was named.</param>
+    /// <param name="positionals">The arguments that were not options.</param>
+    /// <returns>The parsed options.</returns>
+    /// <exception cref="CliUsageException">The command and its arguments contradict each other.</exception>
+    private static CliOptions Finish(CliOptions options, CliCommand? command, List<string> positionals)
+    {
         switch (command)
         {
             case null:
@@ -433,12 +465,10 @@ internal sealed record CliOptions
         }
 
         var key = provider.Trim();
-        foreach (var known in ModelCatalog.Providers)
+        var known = ModelCatalog.Providers.FirstOrDefault(candidate => Is(candidate, key));
+        if (known is not null)
         {
-            if (Is(known, key))
-            {
-                return known;
-            }
+            return known;
         }
 
         throw new CliUsageException(

@@ -191,12 +191,9 @@ public sealed class RunShellCommandTool : ITool
         startInfo.ArgumentList.Add(_shellCommandFlag);
         startInfo.ArgumentList.Add(command);
 
-        foreach (var name in startInfo.Environment.Keys.ToArray())
+        foreach (var name in startInfo.Environment.Keys.Where(IsSecretName).ToArray())
         {
-            if (IsSecretName(name))
-            {
-                startInfo.Environment.Remove(name);
-            }
+            startInfo.Environment.Remove(name);
         }
 
         return startInfo;
