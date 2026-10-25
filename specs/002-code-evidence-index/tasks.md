@@ -127,7 +127,7 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
 
 ## Phase 2 — Retrieval and `search_code` (M2)
 
-- [ ] **T016** Load the reader
+- [x] **T016** Load the reader
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/IndexReader.cs`
   - Do: on first query, open the database, load `chunks.tokens` into SharpCoreDB's `FullTextIndex`
     (already-tokenised, no re-analysis), snapshot `edges` into the adjacency map, cache chunk count and
@@ -135,12 +135,16 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Test: `IndexReaderTests` — the snapshot matches the table counts, a rebuild invalidates it, and a
     second query does no I/O against `chunks`.
 
-- [ ] **T017** Lexical leg
+- [x] **T017** Lexical leg
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/LexicalRetriever.cs`
   - Do: BM25 over the in-memory index, `TopN = 4 × K`, tokenised query, `LIKE` fallback when the in-memory
     index is unavailable; return `(chunkId, path, startLine, endLine, score)` ordered deterministically.
   - Test: `LexicalRetrieverTests` — an exact identifier ranks its declaration first; a stop-word-only
     query returns nothing; scores are non-increasing.
+  - Note: the leg finds the declaring passage and returns it as a candidate; putting it *first* is the
+    exact-symbol boost of T019, because BM25 alone weighs a short abstract declaration above the longer file
+    that also mentions the identifier. The `LIKE` fallback is not built: the snapshot loads every passage, so
+    there is no state in which the in-memory index is unavailable while the rows are readable.
 
 - [ ] **T018** Vector leg
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/VectorRetriever.cs`

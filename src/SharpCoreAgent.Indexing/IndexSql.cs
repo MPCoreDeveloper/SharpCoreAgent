@@ -122,25 +122,38 @@ internal static class IndexSql
     /// <summary>
     /// Reads a value as a number.
     /// </summary>
-    /// <param name="value">The raw column value, possibly <see langword="null"/>.</param>
-    /// <returns>The number, or zero for <see langword="null"/>.</returns>
+    /// <param name="value">The raw column value, possibly <see langword="null"/> or <see cref="DBNull"/>.</param>
+    /// <returns>The number, or zero for an absent value.</returns>
     public static long AsLong(object? value) =>
-        value is null ? 0 : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+        Normalise(value) is { } present ? Convert.ToInt64(present, CultureInfo.InvariantCulture) : 0;
 
     /// <summary>
     /// Reads a value as text.
     /// </summary>
-    /// <param name="value">The raw column value, possibly <see langword="null"/>.</param>
-    /// <returns>The text, or the empty string for <see langword="null"/>.</returns>
-    public static string AsText(object? value) => value?.ToString() ?? string.Empty;
+    /// <param name="value">The raw column value, possibly <see langword="null"/> or <see cref="DBNull"/>.</param>
+    /// <returns>The text, or the empty string for an absent value.</returns>
+    public static string AsText(object? value) => Normalise(value)?.ToString() ?? string.Empty;
 
     /// <summary>
     /// Reads a value as optional text.
     /// </summary>
-    /// <param name="value">The raw column value, possibly <see langword="null"/>.</param>
-    /// <returns>The text, or <see langword="null"/> when the column is null or empty.</returns>
+    /// <param name="value">The raw column value, possibly <see langword="null"/> or <see cref="DBNull"/>.</param>
+    /// <returns>The text, or <see langword="null"/> when the column is absent or empty.</returns>
     public static string? AsOptionalText(object? value) =>
-        value?.ToString() is { Length: > 0 } text ? text : null;
+        Normalise(value)?.ToString() is { Length: > 0 } text ? text : null;
+
+    /// <summary>
+    /// Turns the engine's "no value" marker into the null this assembly works with.
+    /// </summary>
+    /// <param name="value">The raw column value.</param>
+    /// <returns>The value, or <see langword="null"/> for <see cref="DBNull"/>.</returns>
+    /// <remarks>
+    /// SharpCoreDB returns <see cref="DBNull"/> for a column that was never written and <see langword="null"/>
+    /// for one that was written as null, so both have to mean the same thing here — otherwise
+    /// <see cref="Convert.ToInt64(object, IFormatProvider)"/> throws on a row that merely omitted a column with a
+    /// default.
+    /// </remarks>
+    private static object? Normalise(object? value) => value is DBNull ? null : value;
 }
 
 /// <summary>
