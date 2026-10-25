@@ -54,15 +54,12 @@ public sealed record AgentOptions
         Require(MaxToolResultChars, 1_000, 1_000_000, nameof(MaxToolResultChars));
         if (TurnTimeout < TimeSpan.FromSeconds(10) || TurnTimeout > TimeSpan.FromHours(1))
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(TurnTimeout),
-                TurnTimeout,
-                "TurnTimeout must be between 10 seconds and 1 hour.");
+            throw OutOfRange(nameof(TurnTimeout), TurnTimeout, "TurnTimeout must be between 10 seconds and 1 hour.");
         }
 
         if (double.IsNaN(Temperature) || Temperature < 0 || Temperature > 2)
         {
-            throw new ArgumentOutOfRangeException(nameof(Temperature), Temperature, "Temperature must be between 0 and 2.");
+            throw OutOfRange(nameof(Temperature), Temperature, "Temperature must be between 0 and 2.");
         }
 
         return this;
@@ -78,4 +75,15 @@ public sealed record AgentOptions
                 $"must be between {minimum} and {maximum}");
         }
     }
+
+    /// <summary>
+    /// Builds the exception for a limit outside its range.
+    /// </summary>
+    /// <remarks>
+    /// The throw goes through a helper so the exception still carries the property name in
+    /// <see cref="ArgumentException.ParamName"/> without the analyzer reading that name as an argument
+    /// of the method that happened to validate it.
+    /// </remarks>
+    private static ArgumentOutOfRangeException OutOfRange<T>(string name, T actual, string message) =>
+        new(name, actual, message);
 }

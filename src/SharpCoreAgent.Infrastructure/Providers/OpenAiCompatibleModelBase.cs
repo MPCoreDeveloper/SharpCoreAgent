@@ -54,7 +54,7 @@ public abstract class OpenAiCompatibleModelBase : IStreamingChatModel
     /// <inheritdoc />
     public IAsyncEnumerable<ChatStreamEvent> StreamAsync(
         ChatRequest request,
-        CancellationToken cancellationToken = default) => _transport.StreamAsync(request, cancellationToken);
+        CancellationToken cancellationToken) => _transport.StreamAsync(request, cancellationToken);
 
     /// <summary>
     /// Sends one request and returns the whole response.

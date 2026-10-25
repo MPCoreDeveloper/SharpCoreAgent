@@ -59,7 +59,7 @@ public sealed class RetryingChatModel : IStreamingChatModel
     /// <inheritdoc />
     public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(
         ChatRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 

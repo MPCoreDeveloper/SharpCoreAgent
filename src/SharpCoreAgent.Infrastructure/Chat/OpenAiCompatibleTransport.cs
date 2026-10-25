@@ -107,7 +107,7 @@ public sealed class OpenAiCompatibleTransport : IStreamingChatModel, IChatModel
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> fired.</exception>
     public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(
         ChatRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 

@@ -234,7 +234,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
                     Namespace = declaredNamespace,
                     Start = index,
                     End = ComputeRange(code, index, indented),
-                    Signature = Signature(lines, index),
+                    Signature = ReadSignature(lines, index),
                     Bases = bases,
                     RawDoc = DocComment(lines, index),
                 };
@@ -259,7 +259,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
                     Namespace = declaredNamespace,
                     Start = index,
                     End = ComputeRange(code, index, indented),
-                    Signature = Signature(lines, index),
+                    Signature = ReadSignature(lines, index),
                     RawDoc = DocComment(lines, index),
                 });
 
@@ -281,7 +281,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
                     Namespace = declaredNamespace,
                     Start = index,
                     End = ComputeRange(code, index, indented),
-                    Signature = Signature(lines, index),
+                    Signature = ReadSignature(lines, index),
                     RawDoc = DocComment(lines, index),
                 });
 
@@ -298,7 +298,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
                     Namespace = declaredNamespace,
                     Start = index,
                     End = index,
-                    Signature = Signature(lines, index),
+                    Signature = ReadSignature(lines, index),
                     RawDoc = DocComment(lines, index),
                 });
             }
@@ -350,9 +350,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
         public IReadOnlyList<string> Bases { get; init; } = [];
 
         /// <summary>Gets the dotted name without the kind suffix.</summary>
-        public string QualifiedName => Container is null
-            ? Namespace is null ? Name : Namespace + "." + Name
-            : Container + "." + Name;
+        public string QualifiedName => (Container ?? Namespace) is { } prefix ? prefix + "." + Name : Name;
 
         /// <summary>Gets the stable key.</summary>
         public string Key => QualifiedName + "#" + Kind;
@@ -733,7 +731,7 @@ internal sealed partial class HeuristicSyntaxFactsExtractor : ISyntaxFactsExtrac
         return !NonCallWords.Contains(name);
     }
 
-    private static string? Signature(IReadOnlyList<string> lines, int index)
+    private static string? ReadSignature(IReadOnlyList<string> lines, int index)
     {
         var line = LineAt(lines, index).Trim();
 

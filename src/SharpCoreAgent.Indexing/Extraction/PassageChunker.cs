@@ -71,13 +71,17 @@ internal static class PassageChunker
             var end = Window(lines, start, declarations);
             var declaration = DeclarationsAt(declarations, start, end);
 
+            var kind = PassageKinds.Block;
+            if (declaration is not null)
+            {
+                kind = declaration.IsContainer ? PassageKinds.Type : PassageKinds.Member;
+            }
+
             passages.Add(new Passage
             {
                 StartLine = start + 1,
                 EndLine = end + 1,
-                Kind = declaration is null
-                    ? PassageKinds.Block
-                    : declaration.IsContainer ? PassageKinds.Type : PassageKinds.Member,
+                Kind = kind,
                 Text = string.Join('\n', lines.Skip(start).Take(end - start + 1)),
                 SymbolKey = declaration?.Key,
                 SymbolName = declaration?.QualifiedName,
