@@ -208,15 +208,17 @@ the second duplicates settings that would drift.
   coverage on new code, at most 3% duplication, every security hotspot reviewed. It is computed on every
   run and shown in the badge above.
 - **Where the project stands:** 7 827 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
-  reliability, security and maintainability, 0% duplication, **0 code smells**, and 82.0% coverage
-  (88.6% of lines, 70.1% of branches) across 334 tests. The gate reports **failed** on one condition:
-  new-code coverage. That number is only meaningful once a commit is the baseline — the analysis uploaded
-  before the commit reports the previous revision's diff, not this one's tests.
+  reliability, security and maintainability, 0% duplication, **0 code smells**, and 81.8% coverage
+  (88.5% of lines, 69.7% of branches) across 334 tests. **The gate passes**, including the condition it
+  used to fail: new-code coverage is 91.2% against the 80% it asks for, because the commit that lifted the
+  baseline also carried the tests for it.
+- **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
+  colouring the badge. Setting the repository variable `SONAR_ENFORCE_GATE` to `false` turns that back
+  off — which is the switch you want the day a rename lands and new-code arithmetic dips, not a rewrite.
 - **Why new-code coverage under-reports on refactors.** Sonar counts a changed declaration line as a new
   line to cover, and no test hits a signature, a brace or a doc comment; a commit that only renames or
-  re-signatures code therefore lands near 30% however well it is tested. Failing CI on the gate is a
-  switch, not the default: set the repository variable `SONAR_ENFORCE_GATE` to `true` when the number
-  reflects the code instead of the shape of the diff.
+  re-signatures code therefore lands near 30% however well it is tested. That is what the switch above is
+  for.
 - **How the last 56 smells were cleared.** Every finding was fixed rather than suppressed: the nested
   ternaries, shadowed names and loop shapes became plain statements, `ArgumentOutOfRangeException` is
   raised through one helper that carries the property name as its own parameter, the async iterators were

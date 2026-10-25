@@ -52,7 +52,8 @@ jobs:
       - name: Analyse
         # The gate is computed on every run and shown on the badge. Blocking on it is a switch, not a
         # rewrite: set the repository variable SONAR_ENFORCE_GATE to true and a red gate fails the job.
-        # It is off while the baseline coverage (roughly 53%) is below the 80% the gate wants.
-        run: pwsh ./eng/sonar-scan.ps1 ${{ vars.SONAR_ENFORCE_GATE == 'true' && '-WaitForQualityGate' || '' }}
+        # It is on: the gate is green (new-code coverage above 91%, no findings), so a regression should
+        # stop the pipeline rather than decorate the dashboard.
+        run: pwsh ./eng/sonar-scan.ps1 ${{ vars.SONAR_ENFORCE_GATE != 'false' && '-WaitForQualityGate' || '' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
