@@ -5,8 +5,8 @@
 ## 0. Prerequisites
 
 - .NET SDK with `net11.0` (the repository already builds with it).
-- The sibling SharpCoreDB repository at `d:\repos\MPCoreDeveloper\SharpCoreDB` with `artifacts/*.nupkg`
-  present, **or** the six SharpCoreDB packages resolvable from the configured feed.
+- Network access to nuget.org: the six SharpCoreDB packages (`2.1.0-RC.3`) are published there and
+  restore like any other dependency. Nothing else has to be checked out first.
 - A provider credential only if you want a real turn; `--provider demo` needs none.
 
 ## 1. Build and test

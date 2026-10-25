@@ -1,6 +1,21 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.0.1 -> 1.0.2 (PATCH: one constraint sentence made explicit and enforceable; no
+  principle, section or quality gate added, removed or reworded in intent)
+Amended: the Runtime constraint said `net11.0` for every project and excluded `net10.0`. It now says
+  the same thing in the direction it was always meant: 11 is a floor, not a ceiling — .NET 10 and
+  older, .NET Framework and .NET Standard stay unsupported, and a later `net12.0`/`net13.0` target is
+  the same product on a newer runtime rather than an amendment. The floor is now enforced by
+  `Directory.Build.targets` (`SCA0001`) instead of relying on every project file to repeat it, and the
+  Microsoft.Extensions packages move to the .NET 11 generation (`11.0.0-rc.2.26504.105`) so that no
+  .NET 10 library remains in a net11.0 dependency graph. The SharpCoreDB packages are resolved from
+  nuget.org; the local-feed requirement, and the build error that explained it, are gone.
+Added sections: none. Removed sections: none. Follow-up TODOs: none.
+-->
+<!--
+Sync Impact Report (previous)
+==================
 Version change: 1.0.0 -> 1.0.1 (PATCH: identity only; no principle, section or gate changed)
 Amended: the product, the namespaces, the project names, the assembly name and the configuration
   prefix moved from SharpAgent to SharpCoreAgent. Every principle, constraint and quality gate is
@@ -161,8 +176,11 @@ transcript is a key in a screenshot, a paste and a support ticket.
 ## Technical Constraints
 
 - **Runtime**: `net11.0` for every project, `LangVersion` `preview` (C# 15), `runtime-async=on` for
-  the libraries. `net10.0` is not a supported target for this repository; a port to another
-  framework is a decision, not a build property.
+  the libraries. `net11.0` is a floor, not a ceiling: `net10.0` and older — and .NET Framework or
+  .NET Standard — are not supported targets for this repository, while a later `net12.0`/`net13.0`
+  target is the same product on a newer runtime and needs no amendment. The floor is enforced by
+  `Directory.Build.targets` (`SCA0001`), so it fails the build rather than the reader's expectations.
+  Targeting a framework at all is a decision, not a build property.
 - **Language features in use**: nullable reference types everywhere, file-scoped namespaces,
   primary constructors, collection expressions, `field`-backed properties,
   `System.Threading.Channels` for streaming and `System.Text.Json` source generation for the wire
@@ -203,7 +221,7 @@ rationale, the version bump described below, and a migration note for any surfac
 - `docs/` and `README.md` are governed as code: a behaviour change that contradicts them is a bug
   in one of the two, and the pull request fixes both.
 
-**Version**: 1.0.1 | **Ratified**: 2026-10-23 | **Last Amended**: 2026-10-25
+**Version**: 1.0.2 | **Ratified**: 2026-10-23 | **Last Amended**: 2026-10-25
 
 
 

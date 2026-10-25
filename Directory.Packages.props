@@ -11,25 +11,37 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <!--
+      One version for the four Microsoft.Extensions packages: the .NET 11 RC that the pinned SDK in
+      global.json was built from. A newer one would exist only for a runtime this repository refuses to
+      target, and an older one would be a .NET 10 library inside a net11.0 product.
+    -->
+    <DotNetExtensionsVersion>11.0.0-rc.2.26504.105</DotNetExtensionsVersion>
     <!-- One version for the six SharpCoreDB packages; see the comment on their rows below. -->
     <SharpCoreDBVersion>2.1.0-RC.3</SharpCoreDBVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- DI, HTTP and logging: the only Microsoft.Extensions packages the product needs. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <!--
+      DI, HTTP and logging: the only Microsoft.Extensions packages the product needs.
+
+      The version is the .NET 11 generation on purpose, and its build number (26504.105) is the one the
+      pinned SDK in global.json carries. Mixing an 11.0.0-rc.2 host with a 10.0.x extension package is
+      how a net11.0 product ends up shipping a net10.0 dependency graph: it builds, and then the two
+      generations disagree at runtime. This repository targets net11.0 only, so its dependencies do too.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DotNetExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DotNetExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="$(DotNetExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetExtensionsVersion)" />
 
     <!--
-      SharpCoreDB 2.1.0-RC.3: the storage engine behind the code-evidence index (feature 002).
+      SharpCoreDB 2.1.0-rc.3: the storage engine behind the code-evidence index (feature 002).
       One version for all six packages, because a mixed set would pit a vector column written by
       .VectorSearch against a planner from a different build. The packages are net11.0-only, which is
       the only framework this repository targets.
 
-      They are not on nuget.org yet, so nuget.config points a `sharpcoredb-local` folder source at the
-      sibling repository's artifacts folder and maps `SharpCoreDB*` to it.
+      They are published on nuget.org, so a clone restores them like any other dependency.
     -->
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Search" Version="$(SharpCoreDBVersion)" />

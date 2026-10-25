@@ -24,8 +24,8 @@ existing settings, inherited from `src/Directory.Build.props`.
 
 **Primary dependencies**: BCL plus, new in this feature, `SharpCoreDB`, `SharpCoreDB.Search`,
 `SharpCoreDB.VectorSearch`, `SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced`,
-`SharpCoreDB.HybridSearch` — all `2.1.0-RC.3`, all `net11.0`, all from the sibling repository's
-`artifacts` folder (see `research.md` D1 and Complexity Tracking below).
+`SharpCoreDB.HybridSearch` — all `2.1.0-RC.3`, all `net11.0`, all from nuget.org like every other
+dependency (see `research.md` D1 and Complexity Tracking below).
 
 **Storage**: one SharpCoreDB database per workspace at `<workspace>/.sharpcoreagent/index/sharpcoreagent.scdb`,
 unencrypted by default (`NoEncryptMode`), opt-in encrypted.

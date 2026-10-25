@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    The runtime floor, enforced instead of documented.
+
+    `net11.0` is what every project here targets, and .NET 10 or older is refused: the code is written
+    against net11.0 APIs (runtime-async, the newer BCL surface), and so are the SharpCoreDB packages it
+    depends on, so an older target fails late and confusingly — as NU1202 or a missing member — rather
+    than as the one-line policy violation it is.
+
+    Newer is deliberately *not* refused. A net12.0 or net13.0 build is this product on a later runtime,
+    and a floor that turned into a ceiling would force a source edit to accept a target the code
+    already compiles for. .NET Framework and .NET Standard are older than the floor by definition.
+
+    In targets rather than props because TargetFrameworkIdentifier/TargetFrameworkVersion are only
+    final after the SDK has evaluated the project, and before CoreCompile so the build stops before it
+    produces a binary nobody asked for.
+  -->
+  <Target Name="SharpCoreAgentEnforceRuntimeFloor" BeforeTargets="CoreCompile" Condition="'$(TargetFramework)' != ''">
+    <!--
+      TargetFrameworkVersion is a 'v'-prefixed string ('v11.0'), which MSBuild refuses to compare
+      numerically (MSB4086), so the major is parsed out once and compared as an integer.
+    -->
+    <PropertyGroup>
+      <_SharpCoreAgentTargetMajor>$([System.Version]::Parse('$(TargetFrameworkVersion.Substring(1))').Major)</_SharpCoreAgentTargetMajor>
+    </PropertyGroup>
+    <Error Code="SCA0001"
+           Condition="'$(TargetFrameworkIdentifier)' != '.NETCoreApp' or '$(_SharpCoreAgentTargetMajor)' &lt; '11'"
+           Text="&quot;$(MSBuildProjectName)&quot; targets &quot;$(TargetFramework)&quot;, but this repository supports .NET 11 and newer only: .NET 10 and older (including .NET Framework and .NET Standard) cannot express the API surface the code uses. Retarget the project to net11.0 or later." />
+  </Target>
+
+</Project>

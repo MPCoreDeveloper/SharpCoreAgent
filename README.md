@@ -36,6 +36,13 @@ OpenAI-compatible endpoint is reachable through configuration — no rebuild, no
 - Windows, Linux or macOS (the shell tool picks `cmd.exe` or the Unix shell at construction time)
 - API keys for the providers you intend to use; the `demo` provider needs none
 
+**Supported runtime**: `net11.0` and newer — 11 is a floor, not a ceiling. .NET 10 and older, .NET
+Framework and .NET Standard are refused by the build itself (`Directory.Build.targets`, error
+`SCA0001`), because the code and the SharpCoreDB packages it depends on are written against .NET 11
+APIs; a `net12.0` or `net13.0` target needs no change beyond the framework property. The language
+level is C# 15 (`LangVersion=preview`) and the only place that is configured is
+`src/Directory.Build.props`.
+
 ## Quickstart
 
 ```powershell

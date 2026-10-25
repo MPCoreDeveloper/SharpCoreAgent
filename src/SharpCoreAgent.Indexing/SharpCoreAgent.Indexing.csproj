@@ -9,13 +9,13 @@
   <!--
     Where the SharpCoreDB packages come from.
 
-    The default is the package path: the six 2.1.0-RC.3 packages restore from the `sharpcoredb-local`
-    folder source that nuget.config declares. That is what CI and every other checkout uses, and it is
-    the only path that proves the shipped artifacts are the ones the index was tested against.
+    The default is the package path: the six 2.1.0-rc.3 packages restore from nuget.org, which is what
+    CI and every other checkout uses, and it is the only path that proves the shipped artifacts are the
+    ones the index was tested against.
 
     `-p:SharpCoreAgentUseLocalSharpCoreDb=true` swaps the six PackageReferences for ProjectReferences into
-    the sibling checkout's src/ tree. It exists for the day the index needs an engine change that is
-    not packaged yet: build both repositories without a pack-and-copy round-trip. It is not a supported
+    a sibling checkout's src/ tree. It exists for the day the index needs an engine change that is not
+    packaged yet: build both repositories without a pack-and-copy round-trip. It is not a supported
     build mode, so nothing in CI sets it.
   -->
   <PropertyGroup>
@@ -46,17 +46,10 @@
   </ItemGroup>
 
   <!--
-    A missing feed is a NU1101 four hundred lines later; this says it once, in the place the developer
-    is looking. The check is only meaningful for the package path, and only when the folder source this
-    repository's nuget.config points at is absent — a user-level source for the same key still works,
-    which is why the message offers that way out instead of failing hard on the path alone.
+    No feed pre-flight check any more: the packages come from nuget.org like every other dependency, so
+    a missing one is the ordinary NU1101 with an ordinary fix. The target that used to explain a local
+    folder source would now only be a second, staler explanation of the same failure.
   -->
-  <Target Name="VerifySharpCoreDbFeed"
-          BeforeTargets="CollectPackageReferences"
-          Condition="'$(SharpCoreAgentUseLocalSharpCoreDb)' != 'true' and !Exists('$(SharpCoreDbRepoRoot)artifacts')">
-    <Error Code="SA0001"
-           Text="SharpCoreDB 2.1.0-RC.3 was not found: '$(SharpCoreDbRepoRoot)artifacts' does not exist, and nuget.config points the 'sharpcoredb-local' source at '..\SharpCoreDB\artifacts'. Clone SharpCoreDB next to this repository (or add a 'sharpcoredb-local' source to your user-level NuGet.config), or build with -p:SharpCoreAgentUseLocalSharpCoreDb=true to reference '$(SharpCoreDbRepoRoot)src' directly." />
-  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="SharpCoreAgent.Tests" />

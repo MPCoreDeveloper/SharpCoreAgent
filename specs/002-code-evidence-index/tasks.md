@@ -11,15 +11,17 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Files: `Directory.Packages.props`, `nuget.config`, `src/SharpCoreAgent.Indexing/SharpCoreAgent.Indexing.csproj`, `SharpCoreAgent.slnx`
   - Do: add `PackageVersion` rows at `2.1.0-RC.3` for `SharpCoreDB`, `SharpCoreDB.Search`,
     `SharpCoreDB.VectorSearch`, `SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and
-    `SharpCoreDB.HybridSearch`; add a `sharpcoredb-local` folder source pointing at
-    `..\SharpCoreDB\artifacts` plus `packageSourceMapping` for `SharpCoreDB*` (nuget.org keeps `*`); create
-    the project with `net11.0`, nullable enabled, references to `SharpCoreAgent.Domain` and those six packages.
-  - Done when: `dotnet restore` resolves all six from the local feed with no `NU1101`.
+    `SharpCoreDB.HybridSearch`, sourced from nuget.org like every other dependency (a `sharpcoredb-local`
+    folder source was tried first, while the packages were unpublished, and removed when they shipped);
+    create the project with `net11.0`, nullable enabled, references to `SharpCoreAgent.Domain` and those
+    six packages.
+  - Done when: `dotnet restore` resolves all six from nuget.org with no `NU1101`.
 
 - [x] **T002** Add the project-reference escape hatch
   - Files: `src/SharpCoreAgent.Indexing/SharpCoreAgent.Indexing.csproj`
   - Do: `SharpCoreAgentUseLocalSharpCoreDb=true` switches six `PackageReference`s to `ProjectReference`s into
-    `..\..\..\SharpCoreDB\src\*`; default false; a conditional `Error` explains a missing feed.
+    `..\..\..\SharpCoreDB\src\*`; default false. (The conditional `Error` that explained a missing local
+    feed went with the feed: an absent nuget.org package is an ordinary `NU1101`.)
   - Done when: both switches restore and build; the package path is the default.
 
 - [x] **T003** Write the Domain surface

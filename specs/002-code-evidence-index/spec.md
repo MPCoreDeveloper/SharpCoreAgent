@@ -285,8 +285,8 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
   the feature degrades to "index unavailable" rather than failing the turn.
 - Source files are UTF-8 or single-byte; invalid sequences are replaced, not rejected.
 - The SharpCoreDB `2.1.0-RC.3` packages (`SharpCoreDB`, `.Graph`, `.Graph.Advanced`, `.Search`,
-  `.VectorSearch`, `.HybridSearch`) are available from the sibling repository's `artifacts` folder or the
-  configured feed, and target `net11.0` like this repository.
+  `.VectorSearch`, `.HybridSearch`) are published on nuget.org and target `net11.0` like this
+  repository.
 - The local embedder is deliberately lexical-hashed rather than neural: zero download, deterministic,
   offline (FR-026). A provider embedder is a later opt-in, not part of this feature.
 - Language support in v1 is heuristic: C# gets the richest facts; other text-like languages get passages
