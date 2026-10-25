@@ -38,11 +38,13 @@ internal sealed record VectorLegResult(IReadOnlyList<VectorMatch> Matches, strin
 /// <remarks>
 /// Three decisions are worth stating.
 /// <list type="number">
-/// <item>The comparison runs over the vectors the snapshot loaded, in this assembly. SharpCoreDB 2.1.0-RC.3
+/// <item>The comparison runs over the vectors the snapshot loaded, in this assembly. SharpCoreDB 2.1.0
 /// registers <c>vec_distance_cosine</c> but its SQL surface cannot be used for ranking: the vector query optimizer
-/// is a stub that declines every plan, a projection that computes a function is ignored and returns whole rows, and
-/// a <c>WHERE vec_distance_cosine(...)</c> predicate matches nothing. The scan is therefore done here, behind this
-/// one method, so the day the optimizer lands the work can move into the engine without touching the ranker.</item>
+/// is a stub that declines every plan, the parser's optimizer reference is never assigned at all (so
+/// <c>CREATE VECTOR INDEX</c> builds nothing), a projection that computes a function is ignored and returns whole
+/// rows, and a <c>WHERE vec_distance_cosine(...)</c> predicate matches nothing. The scan is therefore done here,
+/// behind this one method, so the day a package carries the repaired planner (<c>fix/vector-sql-optimizer</c>,
+/// <c>16cb51d5</c>) the work can move into the engine without touching the ranker.</item>
 /// <item>A similarity floor is applied. Feature-hashed vectors of unrelated text sit near zero by construction, so
 /// without a floor the leg would pad the fusion list with orthogonal passages that merely outrank each other.</item>
 /// <item>Nothing throws for a leg that cannot run. An index built with the embedder off, or by an embedder of a

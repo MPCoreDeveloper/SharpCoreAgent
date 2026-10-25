@@ -113,7 +113,7 @@ internal sealed class SharpCoreDbIndexDatabase : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        // IDatabase itself is not disposable in 2.1.0-RC.3 -- the concrete Database is -- so the cast is how a
+        // IDatabase itself is not disposable in 2.1.0 -- the concrete Database is -- so the cast is how a
         // caller that only holds the interface closes the file handle. Disposing the provider alone would leak
         // the engine's pooled buffers.
         if (Database is IDisposable disposable)

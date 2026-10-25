@@ -8,7 +8,7 @@ namespace SharpCoreAgent.Indexing;
 /// everywhere in this assembly.
 /// </summary>
 /// <remarks>
-/// Two facts about SharpCoreDB 2.1.0-RC.3 shape this: every overload takes <c>Dictionary&lt;string, object&gt;</c>
+/// Two facts about SharpCoreDB 2.1.0 shape this: every overload takes <c>Dictionary&lt;string, object&gt;</c>
 /// even when a column is genuinely <c>NULL</c>, and <c>ExecuteQuery</c> hands back <c>object</c> values whose
 /// runtime type depends on the column, not on the declaration. Binding and reading therefore live here instead
 /// of being re-derived at each call site.

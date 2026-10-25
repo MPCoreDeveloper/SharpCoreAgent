@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Search.Lexical;
 using SharpCoreDB.VectorSearch;
@@ -249,14 +250,22 @@ internal sealed class IndexReader
     /// <param name="value">The raw column value.</param>
     /// <returns>The vector, or <see langword="null"/> when the column was never written.</returns>
     /// <remarks>
-    /// The column hands back a <c>float[]</c> once a real vector was written. The text form is still accepted,
-    /// because an index built by the previous writer holds the literal string <c>System.Single[]</c>, and a reader
-    /// that threw on it would turn a stale index into a crash instead of a passage without a vector.
+    /// Four shapes have to be accepted, because the engine has handed back three different ones for the same
+    /// column: a <c>float[]</c> (a vector written and read within one handle), the JSON text the writer stores
+    /// (<c>2.1.0-RC.3</c> hands that back unchanged), and a <see cref="JsonElement"/> for that same JSON array
+    /// once the read goes through the 2.1.0 row materializer — which is why an index that rebuilt cleanly can
+    /// still yield passages without a vector if only the first two are handled. The text form of the previous
+    /// writer, the literal string <c>System.Single[]</c>, stays a passage without a vector rather than a crash.
     /// </remarks>
     private static float[]? AsVector(object? value) => value switch
     {
         float[] vector when vector.Length > 0 => vector,
         string text when text.StartsWith('[') => VectorSerializer.FromJson(text),
+
+        // The raw JSON of the array goes through the same parser as the stored text: one grammar, one place to
+        // harden, and the element order the writer produced is preserved.
+        JsonElement { ValueKind: JsonValueKind.Array } json => AsVector(json.GetRawText()),
+        JsonElement { ValueKind: JsonValueKind.String } json => AsVector(json.GetString()),
         Array array => [.. array.Cast<object?>().Select(item => Convert.ToSingle(item, CultureInfo.InvariantCulture))],
         _ => null,
     };

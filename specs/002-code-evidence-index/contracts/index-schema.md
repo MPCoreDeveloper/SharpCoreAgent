@@ -3,7 +3,7 @@
 **Scope**: the SharpCoreDB database inside `<workspace>/.sharpcoreagent/index/`. Only `SharpCoreAgent.Indexing`
 may name these tables or columns; everything else goes through `ICodeIndex` / `ICodeIndexMaintainer`.
 
-**Engine**: SharpCoreDB `2.1.0-RC.3`. The SQL used here is the subset verified against the shipped package:
+**Engine**: SharpCoreDB `2.1.0`. The SQL used here is the subset verified against the shipped package:
 `CREATE TABLE IF NOT EXISTS`, `INTEGER PRIMARY KEY AUTO` (monotonic, persisted), `TEXT`, `REAL`,
 `INTEGER`, `VECTOR(n)`, `CHECK (…)`, `COLLATE NOCASE`, `CREATE INDEX … ON t (col)` and parameterised
 `@name` arguments, executed through `IDatabase.ExecuteSQL`, `IDatabase.ExecuteQuery` and

@@ -3,7 +3,7 @@
 **Feature**: `002-code-evidence-index` | **Date**: 2026-10-24
 
 Every decision below was taken against the actual sources: the SharpCoreDB repository at
-`d:\repos\MPCoreDeveloper\SharpCoreDB` (packages `2.1.0-RC.3`, `net11.0`) and the SharpCoreAgent tree at
+`d:\repos\MPCoreDeveloper\SharpCoreDB` (packages `2.1.0`, `net11.0`) and the SharpCoreAgent tree at
 `d:\repos\MPCoreDeveloper\SharpCoreAgent`. Where a SharpCoreDB behaviour is named, it was read in that
 repository, not inferred.
 
@@ -28,8 +28,8 @@ repository, not inferred.
 ## D1 — Depend on SharpCoreDB packages, not on the project tree
 
 **Decision**: reference `SharpCoreDB`, `SharpCoreDB.Search`, `SharpCoreDB.VectorSearch`,
-`SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and `SharpCoreDB.HybridSearch` at `2.1.0-RC.3` from
-the sibling `artifacts` folder, with one MSBuild switch (`SharpCoreAgentUseLocalSharpCoreDb=true`) that
+`SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and `SharpCoreDB.HybridSearch` at `2.1.0` from
+nuget.org, with one MSBuild switch (`SharpCoreAgentUseLocalSharpCoreDb=true`) that
 swaps in `ProjectReference`s for engine development.
 
 **Why**: the versions are local pre-releases, so `nuget.org` alone cannot satisfy them, and `artifacts`
@@ -99,9 +99,10 @@ persistence-and-invalidation problem for nothing.
 **Cost**: the HNSW index is rebuilt with the database, not maintained per file; at that scale a rebuild
 is an explicit `index --rebuild`, which the CLI reports.
 
-**Measured (2026-10-25), and what changed because of it**: the SQL route is not available in
-`2.1.0-RC.3`. Four findings, each reproduced against a real index and then traced back to the engine's
-source, because "it does not work" is not a decision anyone can build on:
+**Measured (2026-10-25), and what changed because of it**: the SQL route is not available in `2.1.0`
+(and was not in the `2.1.0-RC.3` this was first measured on). Four findings, each reproduced against a
+real index and then traced back to the engine's source, because "it does not work" is not a decision
+anyone can build on:
 
 1. `TryExecuteVectorOptimized` in `SqlParser.DML.cs` is a stub that returns `null`, so the
    `ORDER BY vec_distance_*(col, query) LIMIT k` plan never becomes an index scan. It is not a feature
@@ -116,7 +117,7 @@ source, because "it does not work" is not a decision anyone can build on:
    `fix/vector-sql-optimizer` (commit `16cb51d5`): `Database.GetSharedSqlParser` now resolves
    `IVectorQueryOptimizer` from the service provider and attaches it per parser instance, and the
    restored method projects onto the SELECT list and refuses `DESC`/`WHERE` (which an ascending top-k
-   cannot answer) instead of returning the wrong shape. Until a package containing it ships, `2.1.0-RC.3`
+   cannot answer) instead of returning the wrong shape. Until a package containing it ships, `2.1.0`
    is still what we consume, so the C# leg (D6) stays.
 2. A projection that computes a function is ignored: `SELECT id, vec_distance_cosine(embedding, @q) AS d
    FROM chunks` returns every column of the row and no `d`. The legacy `ExecuteSelect` path never
@@ -131,20 +132,32 @@ source, because "it does not work" is not a decision anyone can build on:
    returns true — the two halves of that evaluator disagree, which is why the empty result reads like a
    data problem rather than a parser one.
 
-Two more defects surfaced on the way and were fixed under T018:
+Two more defects surfaced on the way and were fixed under T018, and a third appeared when the dependency
+moved from the RC to the 2.1.0 release:
 
-- Binding a `float[]` as a parameter stored the literal text `System.Single[]` — not a similarity-score
+- Binding a `float[]` as a parameter stores the literal text `System.Single[]` — not a similarity-score
   problem but a lost value. The column's accepted textual form is a JSON array. Fixed upstream in
   `32227696` (2026-10-11), which gave the format and the coercion a single definition
-  (`VectorBinaryCodec`) and routed both parameter binders through it; `2.1.0-RC.3` predates that. The
-  writer still sends `VectorSerializer.ToJson(vector)` explicitly, because it does not depend on the
-  binder at all, and `analyzer_contract` is 2 so indexes written through the old path rebuild.
+  (`VectorBinaryCodec`) and routed both parameter binders through it. The `2.1.0` tag (2026-10-10)
+  predates that fix as well, so the release carries the same defect, one step louder: on 2.1.0 the insert
+  now fails outright (`Invalid value 'System.Single[]' for data type Vector`) instead of storing the
+  useless text. The writer still sends `VectorSerializer.ToJson(vector)` explicitly, because it does not
+  depend on the binder at all, and `analyzer_contract` is 2 so indexes written through the old path
+  rebuild.
 - A `TEXT` literal does not survive `INSERT`: the engine's `ParseInsertValues` trims every literal
   ("3. every literal is Trimmed" in its own comment, pinned by its `InsertValuesParsingTests`), so a
   passage that started with indentation or ended with a blank line was stored trimmed and the stored
   hash no longer matched the stored text — `verify` reported every such passage as corrupt. Passages are
   now hashed over their trimmed text. This is a deviation from SQL rather than a caching artefact:
   `'  a  '` comes back as `a`.
+- **`2.1.0` changed the shape a `VECTOR(n)` read hands back.** RC.3 returned the stored JSON text
+  unchanged; 2.1.0 materializes the row through `OptimizedRowParser` and its AOT JSON path, so the same
+  column arrives as a `System.Text.Json.JsonElement`. A reader that accepted only text and `float[]` — as
+  `IndexReader.AsVector` did — then saw no vector at all: the index built cleanly, `meta.dimensions`
+  matched the embedder, and every passage was skipped as having "no direction to compare", which is
+  exactly the silent empty answer the floor and the note were designed to make visible. Three
+  `VectorRetrieverTests` failed on the bump this way, and `AsVector` now also accepts the element, routing
+  its raw JSON through the same parser as the text form.
 
 The leg therefore computes cosine over the vectors the snapshot loads, using the same measure the embedder
 uses. That keeps the decision (D6) — vectors in the column, one similarity floor, `4 × K` candidates — and
@@ -264,8 +277,13 @@ agent trust "the first block" as a fact rather than a sample.
 
 ## D15 — Risks
 
-- **Pre-release dependency**: `2.1.0-RC.3` is not on nuget.org. Mitigation: folder feed in
-  `nuget.config`, the `SharpCoreAgentUseLocalSharpCoreDb` switch, and a build-time error if neither resolves.
+- **Engine defects that postdate the release**: `2.1.0` (2026-10-10) predates both the vector-parameter
+  fix (`32227696`, 2026-10-11) and the SQL vector optimizer repair (`16cb51d5`), so the released package
+  still stores no vector from a bound `float[]` and still cannot rank with `vec_distance_cosine`. Mitigated
+  by writing vectors as JSON, by keeping the vector leg in C# (D6), and by the
+  `SharpCoreAgentUseLocalSharpCoreDb` switch, which builds against a sibling checkout when a newer engine
+  has to be tried before it ships. The version is now the released `2.1.0` on nuget.org — the RC-era folder
+  feed this section used to describe is gone, and `nuget.config` names one source.
 - **Memory**: BM25 + adjacency snapshot + vectors are in memory. Mitigation: `MaxChunks` bound, passage
   vectors read per query rather than held, and `index_status` reporting counts so the developer can see
   the size before it hurts.

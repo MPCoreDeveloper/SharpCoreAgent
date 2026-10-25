@@ -459,10 +459,11 @@ internal sealed class IndexFileWriter
     /// <param name="vector">The components.</param>
     /// <returns>A JSON float array.</returns>
     /// <remarks>
-    /// A bound <c>float[]</c> does not survive parameter binding in 2.1.0-RC.3: the binder calls
-    /// <c>ToString()</c> on the array and stores the literal text <c>System.Single[]</c>, so an index built that way
-    /// holds no vector at all. The column accepts a JSON float array (through <c>VectorBinaryCodec.TryParse</c>) and
-    /// that form round-trips, which is why the encoding lives in one method instead of at both insert sites.
+    /// A bound <c>float[]</c> does not survive parameter binding in 2.1.0: the binder calls <c>ToString()</c> on the
+    /// array, and the <c>VECTOR(n)</c> column then refuses the text <c>System.Single[]</c> it never produced
+    /// (<c>Invalid value 'System.Single[]' for data type Vector</c>), so the index would fail its build rather than
+    /// store a vector. The column accepts a JSON float array (through <c>VectorBinaryCodec.TryParse</c>) and that
+    /// form round-trips, which is why the encoding lives in one method instead of at both insert sites.
     /// </remarks>
     private static string EncodeVector(float[] vector) => VectorSerializer.ToJson(vector);
 
