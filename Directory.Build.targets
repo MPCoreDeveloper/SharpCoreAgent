@@ -10,7 +10,9 @@
 
     Newer is deliberately *not* refused. A net12.0 or net13.0 build is this product on a later runtime,
     and a floor that turned into a ceiling would force a source edit to accept a target the code
-    already compiles for. .NET Framework and .NET Standard are older than the floor by definition.
+    already compiles for. None of those exist yet — .NET 12 arrives a year after 11 — and until an SDK
+    that supports them is installed, a net12.0 target fails on its own with NETSDK1045, before this
+    repository has an opinion. .NET Framework and .NET Standard are older than the floor by definition.
 
     In targets rather than props because TargetFrameworkIdentifier/TargetFrameworkVersion are only
     final after the SDK has evaluated the project, and before CoreCompile so the build stops before it

@@ -39,8 +39,9 @@ OpenAI-compatible endpoint is reachable through configuration — no rebuild, no
 **Supported runtime**: `net11.0` and newer — 11 is a floor, not a ceiling. .NET 10 and older, .NET
 Framework and .NET Standard are refused by the build itself (`Directory.Build.targets`, error
 `SCA0001`), because the code and the SharpCoreDB packages it depends on are written against .NET 11
-APIs; a `net12.0` or `net13.0` target needs no change beyond the framework property. The language
-level is C# 15 (`LangVersion=preview`) and the only place that is configured is
+APIs. Later frameworks are not blocked, but they do not exist yet: .NET 12 ships a year after 11, and
+until an SDK that supports it is installed, targeting `net12.0` fails on its own with `NETSDK1045`.
+The language level is C# 15 (`LangVersion=preview`) and the only place that is configured is
 `src/Directory.Build.props`.
 
 ## Quickstart
