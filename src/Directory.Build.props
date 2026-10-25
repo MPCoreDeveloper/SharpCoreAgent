@@ -55,4 +55,14 @@
     <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
+  <!--
+    The SonarCloud rules run on every build, so a developer without a Sonar token still sees what the
+    analysis would say. Reports, not errors: the rule set is large and turning 60 findings into build
+    breaks on the day it arrives stops work instead of describing it. The gate in SonarCloud is where
+    they become blocking.
+  -->
+  <ItemGroup>
+    <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>

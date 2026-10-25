@@ -1,0 +1,58 @@
+name: sonar
+
+# One workflow, because one script does the whole analysis: eng/sonar-scan.ps1 builds with the scanner's
+# analyzers attached, runs the tests with Microsoft.Testing.Platform coverage, and uploads the report.
+# The same script runs on a laptop, so CI cannot drift from what a developer sees.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyse
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          # SCM blame is how Sonar attributes every line to a commit and an author. A shallow clone
+          # makes it guess, and the guess shows up as "unknown" on the dashboard.
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # The exact SDK global.json pins. The floor is .NET 11, but the compiler is pinned to a patch,
+          # and an RC that rolls to a different patch can change what "no warnings" means.
+          dotnet-version: '11.0.100-rc.2.26504.105'
+          dotnet-quality: 'preview'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install the scanner
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Analyse
+        # The gate is computed on every run and shown on the badge. Blocking on it is a switch, not a
+        # rewrite: set the repository variable SONAR_ENFORCE_GATE to true and a red gate fails the job.
+        # It is off while the baseline coverage (roughly 53%) is below the 80% the gate wants.
+        run: pwsh ./eng/sonar-scan.ps1 ${{ vars.SONAR_ENFORCE_GATE == 'true' && '-WaitForQualityGate' || '' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

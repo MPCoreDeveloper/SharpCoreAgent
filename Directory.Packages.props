@@ -57,11 +57,28 @@
     -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
 
-    <!-- xUnit v3 on the Microsoft.Testing.Platform: the same test stack as the sibling repositories. -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
-    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.0" />
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <!--
+      The SonarCloud rule set, in the build rather than only in the cloud. Pinned to the exact build the
+      scanner provisions (csharpenterprise 10.35.0.4138), so a rule cannot be an error on a laptop and
+      absent in an analysis, or the other way round.
+    -->
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
+
+    <!--
+      xUnit v3 on the Microsoft.Testing.Platform — Microsoft's own runner, no VSTest in the graph.
+
+      There is deliberately no `Microsoft.NET.Test.Sdk` and no `xunit.runner.visualstudio`: both exist to
+      make a test project look like a VSTest project, and this one is an executable that hosts MTP
+      directly (`global.json` names the runner, so `dotnet test` uses it). VSTest data collectors are
+      replaced by MTP's own coverage extension, which is why the test project reports coverage with a
+      flag instead of an adapter.
+
+      Versions move together: xunit.v3 names the MTP version it hosts, and a test project on a newer
+      platform than its runner is how "the tests pass locally" and "the tests vanish in CI" diverge.
+    -->
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
   </ItemGroup>
 
 </Project>

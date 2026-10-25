@@ -7,6 +7,9 @@ TestResults/
 *.suo
 .vs/
 
+## Sonar scanner working directory, created by `dotnet sonarscanner begin`.
+.sonarqube/
+
 ## Agent transcripts: they contain prompts, tool output and file contents, and they are per-machine.
 .sharpcoreagent/
 

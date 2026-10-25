@@ -26,10 +26,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="Microsoft.Testing.Platform" />
+    <!--
+      xUnit v3 on Microsoft.Testing.Platform, with MTP's coverage extension, so `dotnet test` can write a
+      Cobertura report through a platform switch rather than a VSTest data collector. SonarCloud reads it.
+    -->
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Testing.Platform" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test code is held to the same Sonar rules; the scanner analyses it either way. -->
+    <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

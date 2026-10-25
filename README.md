@@ -12,6 +12,21 @@
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
 </p>
 
+<p align="center">
+  <a href="https://sonarcloud.io/summary/new_code?id=MPCoreDeveloper_SharpCoreAgent">
+    <img alt="Quality gate" src="https://sonarcloud.io/api/project_badges/measure?project=MPCoreDeveloper_SharpCoreAgent&metric=alert_status">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=MPCoreDeveloper_SharpCoreAgent">
+    <img alt="Coverage" src="https://sonarcloud.io/api/project_badges/measure?project=MPCoreDeveloper_SharpCoreAgent&metric=coverage">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=MPCoreDeveloper_SharpCoreAgent">
+    <img alt="Security rating" src="https://sonarcloud.io/api/project_badges/measure?project=MPCoreDeveloper_SharpCoreAgent&metric=security_rating">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=MPCoreDeveloper_SharpCoreAgent">
+    <img alt="Maintainability rating" src="https://sonarcloud.io/api/project_badges/measure?project=MPCoreDeveloper_SharpCoreAgent&metric=sqale_rating">
+  </a>
+</p>
+
 SharpCoreAgent reads a repository, edits it, runs the build and the tests, and reports what it changed.
 The model is swappable by design: DeepSeek and Grok ship as dedicated, tested adapters, and any other
 OpenAI-compatible endpoint is reachable through configuration — no rebuild, no new project.
@@ -163,10 +178,42 @@ a transcript, and the file is the authority on which model the conversation was 
   transcript or an exception message.
 - No telemetry, no phone-home, no update check: traffic goes to the configured model endpoint only.
 
+## Code quality (SonarCloud)
+
+Every line is analysed on [SonarCloud](https://sonarcloud.io/summary/new_code?id=MPCoreDeveloper_SharpCoreAgent):
+`src/` as product code, `tests/` as test code, with no hand-written file or directory excluded
+(`bin`/`obj` and generated sources aside) and no coverage exclusion except the test project itself.
+
+```
+pwsh ./eng/sonar-scan.ps1      # reads SONAR_TOKEN from the environment
+```
+
+That one script is what CI runs (`.github/workflows/sonar.yml`), so a scan on a laptop and a scan on a
+runner cannot disagree about scope, exclusions or the coverage path. It begins an analysis, rebuilds with
+the scanner's Roslyn analyzers attached, runs the tests with coverage, and uploads the result. There is no
+`sonar-project.properties` and no `SonarQube.Analysis.xml`: the .NET scanner does not read the first, and
+the second duplicates settings that would drift.
+
+- **Coverage** comes from Microsoft.Testing.Platform's own coverage extension, not a VSTest data collector,
+  and lands in `TestResults/sonar/coverage.cobertura.xml`. The same file that feeds the dashboard is one
+  command away: `dotnet test --coverage --coverage-output-format cobertura`.
+- **The rules also run in the build.** `SonarAnalyzer.CSharp` is pinned to the exact analyzer build the
+  scanner provisions (10.35.0.4138), so `dotnet build` reports the same findings without a token.
+- **The gate is "Sonar way",** unmodified and strict: A ratings for reliability, security and
+  maintainability, 80% coverage on new code, at most 3% duplication, every security hotspot reviewed. It
+  is computed on every run and shown in the badge above. Failing the CI job on it is the
+  `SONAR_ENFORCE_GATE` repository variable rather than the default, because the first analysis measured
+  52.9% line coverage (49.7% of branches) and a pipeline that is red for a month teaches people to ignore
+  it; the variable is the ratchet, and coverage is the backlog.
+- **Triage is recorded, not silent:** one finding — `csharpsquid:S2068` on the index's
+  `NoEncryptionPassword` sentinel, a documented non-secret the storage engine requires when encryption is
+  off — is marked false positive in SonarCloud with the reasoning attached.
+
 ## Project status
 
 - `specs/001-coding-agent-core` — the agent loop, providers, tools, sessions and CLI are implemented
-  and covered by the test suite (183 tests, 0 warnings).
+  and covered by the test suite (183 tests, no compiler warnings; the Sonar rule set the build also runs
+  reports findings that the dashboard tracks).
 - `specs/002-code-evidence-index` — the index foundations (schema, file scanner, tokenizer, extractor,
   embedder, reader, writer lock) are in place; the retrieval tools and the `index` command are the
   remaining tasks.
@@ -185,6 +232,8 @@ tests/      SharpCoreAgent.Tests — unit and integration tests, no network
 specs/      one directory per feature, written before the code
 .specify/   spec-kit templates, scripts and the constitution
 assets/     the logo
+eng/        the SonarCloud scan script CI runs
+.github/    the sonar workflow
 ```
 
 ## License
