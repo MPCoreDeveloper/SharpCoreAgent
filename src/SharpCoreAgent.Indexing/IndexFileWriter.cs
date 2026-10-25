@@ -37,6 +37,16 @@ internal sealed record WrittenFile
 /// </remarks>
 internal sealed class IndexFileWriter
 {
+    /// <summary>The bound parameter every statement in this file uses for the owning file id.</summary>
+    /// <remarks>
+    /// A constant rather than a repeated literal: the name appears in ten statements, and a typo in one of them
+    /// would bind nothing and insert a row nobody asked for.
+    /// </remarks>
+    private const string FileParameter = "@file";
+
+    /// <summary>The bound parameter that identifies a file by its workspace-relative path.</summary>
+    private const string PathParameter = "@path";
+
     private readonly IDatabase _database;
     private readonly ISyntaxFactsExtractor _extractor;
     private readonly ICodeTextEmbedder _embedder;
@@ -139,7 +149,7 @@ internal sealed class IndexFileWriter
                 VALUES (@path, @language, @size, @mtime, @sha, @state, @reason, 0, 0, @indexed)
                 """,
                 IndexSql.Parameters(
-                    ("@path", file.Path),
+                    (PathParameter, file.Path),
                     ("@language", file.Language),
                     ("@size", file.SizeBytes),
                     ("@mtime", IndexTimestamps.Format(file.ModifiedUtc)),
@@ -187,7 +197,7 @@ internal sealed class IndexFileWriter
                         ("@target", edge.Target),
                         ("@rel", edge.Relation),
                         ("@weight", (double)edge.Weight),
-                        ("@file", edge.FileId)));
+                        (FileParameter, edge.FileId)));
             }
 
             return true;
@@ -253,7 +263,7 @@ internal sealed class IndexFileWriter
     /// <param name="fileId">The id being replaced.</param>
     private void DeleteRows(long fileId)
     {
-        var parameters = IndexSql.Parameters(("@file", fileId));
+        var parameters = IndexSql.Parameters((FileParameter, fileId));
 
         // An edge that pointed at one of this file's symbols would dangle the moment the symbols go, so the
         // incoming side is cleared here and not only the outgoing rows this file owned.
@@ -290,7 +300,7 @@ internal sealed class IndexFileWriter
             VALUES (@path, @language, @size, @mtime, @sha, @state, NULL, @chunks, @symbols, @indexed)
             """,
             IndexSql.Parameters(
-                ("@path", file.Path),
+                (PathParameter, file.Path),
                 ("@language", file.Language),
                 ("@size", file.SizeBytes),
                 ("@mtime", IndexTimestamps.Format(file.ModifiedUtc)),
@@ -300,7 +310,7 @@ internal sealed class IndexFileWriter
                 ("@symbols", (long)symbols),
                 ("@indexed", indexedUtc)));
 
-        return LastInsertedId("SELECT id FROM files WHERE path = @path", IndexSql.Parameters(("@path", file.Path)));
+        return LastInsertedId("SELECT id FROM files WHERE path = @path", IndexSql.Parameters((PathParameter, file.Path)));
     }
 
     /// <summary>
@@ -322,7 +332,7 @@ internal sealed class IndexFileWriter
                 VALUES (@file, @key, @name, @qualified, @kind, @namespace, @container, @start, @end, @signature, @doc)
                 """,
                 IndexSql.Parameters(
-                    ("@file", fileId),
+                    (FileParameter, fileId),
                     ("@key", symbol.Key),
                     ("@name", symbol.Name),
                     ("@qualified", symbol.QualifiedName),
@@ -336,7 +346,7 @@ internal sealed class IndexFileWriter
 
             ids.Add(LastInsertedId(
                 "SELECT id FROM symbols WHERE file_id = @file AND key = @key",
-                IndexSql.Parameters(("@file", fileId), ("@key", symbol.Key))));
+                IndexSql.Parameters((FileParameter, fileId), ("@key", symbol.Key))));
         }
 
         return ids;
@@ -366,7 +376,7 @@ internal sealed class IndexFileWriter
                 VALUES (@file, @start, @end, @kind, @symbolKey, @symbolName, @text, @tokens, @sha, @vector)
                 """,
                 IndexSql.Parameters(
-                    ("@file", fileId),
+                    (FileParameter, fileId),
                     ("@start", (long)passage.StartLine),
                     ("@end", (long)passage.EndLine),
                     ("@kind", passage.Kind),
@@ -410,7 +420,7 @@ internal sealed class IndexFileWriter
                 VALUES (@file, @heading, @symbolKey, @start, @end, @text)
                 """,
                 IndexSql.Parameters(
-                    ("@file", fileId),
+                    (FileParameter, fileId),
                     ("@heading", doc.Heading),
                     ("@symbolKey", symbolKey),
                     ("@start", (long)doc.StartLine),

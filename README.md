@@ -207,10 +207,10 @@ the second duplicates settings that would drift.
 - **The gate is "Sonar way",** unmodified: A ratings for reliability, security and maintainability, 80%
   coverage on new code, at most 3% duplication, every security hotspot reviewed. It is computed on every
   run and shown in the badge above.
-- **Where the project stands:** 7 827 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
-  reliability, security and maintainability, 0% duplication, **0 code smells**, and 81.8% coverage
-  (88.5% of lines, 69.7% of branches) across 350 tests. **The gate passes**, including the condition it
-  used to fail: new-code coverage is 91.2% against the 80% it asks for, because the commit that lifted the
+- **Where the project stands:** 9 035 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
+  reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.2% coverage
+  (89.4% of lines, 71.3% of branches) across 359 tests. **The gate passes**, including the condition it
+  used to fail: new-code coverage is 90.9% against the 80% it asks for, because the commit that lifted the
   baseline also carried the tests for it.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
   colouring the badge. Setting the repository variable `SONAR_ENFORCE_GATE` to `false` turns that back
@@ -234,7 +234,7 @@ the second duplicates settings that would drift.
 ## Project status
 
 - `specs/001-coding-agent-core` — the agent loop, providers, tools, sessions and CLI are implemented
-  and covered by the test suite (350 tests, no compiler warnings and no open Sonar findings).
+  and covered by the test suite (359 tests, no compiler warnings and no open Sonar findings).
 - `specs/002-code-evidence-index` — the index foundations (schema, file scanner, tokenizer, extractor,
   embedder, writer lock) and the write path (incremental per-file build, budget-bounded refresh, rebuild,
   verify, prune) are in place; the retrieval legs, the five retrieval tools and the `index` command are the
