@@ -242,6 +242,14 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         var database = lease.Database.Database;
         IndexSchema.EnsureCreated(database, _paths);
 
+        // Rows current with their file can still be stale with the code: a parser or analyzer contract this build
+        // does not share means the stored passages were derived by rules it would not reproduce, and an
+        // incremental pass would keep every one of them because the hashes still match.
+        if (IndexSchema.RowsWereDerivedByAnotherContract(database))
+        {
+            await database.ExecuteBatchSQLAsync(ClearStatements, cancellationToken).ConfigureAwait(false);
+        }
+
         var result = await IndexWriter
             .For(_workspace, database)
             .WriteAsync(budget, buildId, cancellationToken)

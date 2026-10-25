@@ -250,12 +250,13 @@ internal sealed class IndexReader
     /// <param name="value">The raw column value.</param>
     /// <returns>The vector, or <see langword="null"/> when the column was never written.</returns>
     /// <remarks>
-    /// Four shapes have to be accepted, because the engine has handed back three different ones for the same
-    /// column: a <c>float[]</c> (a vector written and read within one handle), the JSON text the writer stores
-    /// (<c>2.1.0-RC.3</c> hands that back unchanged), and a <see cref="JsonElement"/> for that same JSON array
-    /// once the read goes through the 2.1.0 row materializer — which is why an index that rebuilt cleanly can
-    /// still yield passages without a vector if only the first two are handled. The text form of the previous
-    /// writer, the literal string <c>System.Single[]</c>, stays a passage without a vector rather than a crash.
+    /// A <c>float[]</c> is what SharpCoreDB 2.1.1 hands back on the single-file read path this index uses, and
+    /// that is what the writer stores: it binds the embedder's array, and the engine keeps its own binary form.
+    /// The other shapes stay accepted because both are still on disk in some index — a cell written before
+    /// <c>analyzer_contract</c> 3 holds the JSON text of the array, and 2.1.0's row materializer returned that
+    /// text as a <see cref="JsonElement"/> — and because a reader that accepted only one of them once cost the
+    /// vector leg every passage without saying so. The text form of the oldest writer, the literal string
+    /// <c>System.Single[]</c>, stays a passage without a vector rather than a crash.
     /// </remarks>
     private static float[]? AsVector(object? value) => value switch
     {

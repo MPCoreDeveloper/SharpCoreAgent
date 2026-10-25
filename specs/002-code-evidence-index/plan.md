@@ -24,7 +24,7 @@ existing settings, inherited from `src/Directory.Build.props`.
 
 **Primary dependencies**: BCL plus, new in this feature, `SharpCoreDB`, `SharpCoreDB.Search`,
 `SharpCoreDB.VectorSearch`, `SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced`,
-`SharpCoreDB.HybridSearch` — all `2.1.0`, all `net11.0`, all from nuget.org like every other
+`SharpCoreDB.HybridSearch` — all `2.1.1`, all `net11.0`, all from nuget.org like every other
 dependency (see `research.md` D1 and Complexity Tracking below).
 
 **Storage**: one SharpCoreDB database per workspace at `<workspace>/.sharpcoreagent/index/sharpcoreagent.scdb`,
@@ -70,8 +70,8 @@ lexical index; the graph snapshot is `O(edges)` and rebuilt on open.
 | Deviation | Why it is necessary | What was rejected, and why |
 |---|---|---|
 | New project `src/SharpCoreAgent.Indexing` (the constitution names five layers) | It is the only assembly that references SharpCoreDB. Putting the engine in `SharpCoreAgent.Infrastructure` would compile the graph/vector stack into every CLI build and every tool test, and would erase the "one place that knows the storage engine" boundary. | *Engine inside Infrastructure* — rejected for dependency weight and the lost boundary. *Engine inside the CLI* — rejected because the composition root must register it. |
-| Six SharpCoreDB packages at `2.1.0` | A graph + BM25 + vector + community engine from scratch is a multi-month project, and the organisation already ships exactly this one. The BCL cannot satisfy it. | *SQLite + fts5* — no graph, no vectors. *Lucene.NET* — large, still no graph. *Hand-rolled* — out of scope. |
-| A single nuget.org feed (`<clear />` and no folder source) | The six packages are published, so a clone restores them with no sibling checkout and no local feed to keep pointed at the right `.nupkg`. The release also settles what the RC could not: one version, one source. | *Publishing from this feature* — release engineering, not a feature. *Vendoring sources* — two copies of the engine. *A local folder feed* — the RC-era workaround, retired with `2.1.0`. |
+| Six SharpCoreDB packages at `2.1.1` | A graph + BM25 + vector + community engine from scratch is a multi-month project, and the organisation already ships exactly this one. The BCL cannot satisfy it. | *SQLite + fts5* — no graph, no vectors. *Lucene.NET* — large, still no graph. *Hand-rolled* — out of scope. |
+| A single nuget.org feed (`<clear />` and no folder source) | The six packages are published, so a clone restores them with no sibling checkout and no local feed to keep pointed at the right `.nupkg`. The release also settles what the RC could not: one version, one source. | *Publishing from this feature* — release engineering, not a feature. *Vendoring sources* — two copies of the engine. *A local folder feed* — the RC-era workaround, retired with `2.1.0` and still absent at `2.1.1`. |
 | `--embedder provider` (opt-in, M5) | Keeps the door open for better recall without making the default path networked. | *Provider by default* — breaks FR-026 and SC-008. |
 | `symbols.community` and `symbols.centrality` columns | Communities are a whole-graph computation; storing them turns a per-query Louvain run into a column read (research D10). | *Compute per query* — seconds per tool call. *No community signal* — loses the 0.2 term of the GraphRAG shape. |
 

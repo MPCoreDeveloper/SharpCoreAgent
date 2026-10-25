@@ -9,7 +9,7 @@
   <!--
     Where the SharpCoreDB packages come from.
 
-    The default is the package path: the six 2.1.0-rc.3 packages restore from nuget.org, which is what
+    The default is the package path: the six 2.1.1 packages restore from nuget.org, which is what
     CI and every other checkout uses, and it is the only path that proves the shipped artifacts are the
     ones the index was tested against.
 

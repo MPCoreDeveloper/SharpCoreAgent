@@ -5,7 +5,7 @@
 ## 0. Prerequisites
 
 - .NET SDK with `net11.0` (the repository already builds with it).
-- Network access to nuget.org: the six SharpCoreDB packages (`2.1.0`) are published there and
+- Network access to nuget.org: the six SharpCoreDB packages (`2.1.1`) are published there and
   restore like any other dependency. Nothing else has to be checked out first.
 - A provider credential only if you want a real turn; `--provider demo` needs none.
 

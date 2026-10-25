@@ -162,6 +162,10 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     passage is now hashed over its trimmed text, because the engine does not round-trip surrounding
     whitespace. The test that promised "a paraphrase with no shared token" was replaced by one that asserts
     what a hashed bag of words can actually promise: the passage about the question, ordered by cosine.
+    Two of those three deviations were retired by the engine bump to `2.1.1` (2026-10-25): the writer binds
+    the embedder's `float[]` again instead of encoding it as JSON, and `analyzer_contract` is 3 so the cells
+    the old path wrote are re-derived. The C# cosine stays: the repaired planner engages only on a
+    directory-mode database, and this index is one file (`research.md`, D6 re-measurement).
 
 - [x] **T019** Fuse and boost
   - Files: `src/SharpCoreAgent.Indexing/Ranking/ReciprocalRankFusion.cs`, `Ranking/EvidenceRanker.cs`

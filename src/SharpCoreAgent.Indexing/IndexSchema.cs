@@ -26,12 +26,17 @@ internal static class IndexSchema
 
     /// <summary>The chunking and tokenisation contract stored in <c>meta['analyzer_contract']</c>.</summary>
     /// <remarks>
-    /// Raised to 2 when the writer started storing vectors in the text form a <c>VECTOR(n)</c> column actually
-    /// parses. An index built by version 1 holds the literal string <c>System.Single[]</c> in every embedding cell,
-    /// so it has no vectors at all; reporting it as stale is what makes the next open rebuild them instead of
-    /// silently answering with the lexical leg alone.
+    /// Raised to 3 when the writer stopped encoding vectors itself: it now binds the embedder's <c>float[]</c>
+    /// and SharpCoreDB 2.1.1 stores it in the engine's own binary vector format. An index written through the
+    /// old path holds the JSON text of the same array in every embedding cell, so reporting it as stale is
+    /// what makes the next open rebuild those cells rather than read them through a second decoder.
+    /// <para>
+    /// 2 was the version raised when that JSON encoding arrived, at a time when a bound array was persisted
+    /// as the literal text <c>System.Single[]</c>. The numbers therefore record the shape of the stored
+    /// vectors, not the chunker, which has not changed between the two.
+    /// </para>
     /// </remarks>
-    internal const int AnalyzerContract = 2;
+    internal const int AnalyzerContract = 3;
 
     /// <summary>The vector width; it must equal every <c>VECTOR(n)</c> declaration below.</summary>
     internal const int Dimensions = 512;
@@ -170,6 +175,35 @@ internal static class IndexSchema
         database.ExecuteBatchSQL(Statements);
 
         SeedMeta(database, paths);
+    }
+
+    /// <summary>
+    /// Decides whether the stored rows were derived by rules this build does not share.
+    /// </summary>
+    /// <param name="database">An open index database.</param>
+    /// <returns>
+    /// <see langword="true"/> when the stored parser or analyzer contract differs from this build's.
+    /// </returns>
+    /// <remarks>
+    /// An incremental pass would keep every file whose size, timestamp and hash still match, which is exactly
+    /// the wrong answer here: those rows are current with the file and stale with the code. The maintainer
+    /// empties the tables instead, so "the contract changed" means "derive everything again", in the one place
+    /// <c>contracts/index-schema.md</c> describes.
+    /// <para>
+    /// <c>schema_version</c> is deliberately not one of the two: a newer one is refused as corrupt rather than
+    /// quietly rebuilt by an older build, and the version the code knows has no migration to run.
+    /// </para>
+    /// </remarks>
+    internal static bool RowsWereDerivedByAnotherContract(IDatabase database)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+
+        var meta = ReadMeta(database);
+        return Differs(meta, "parser_version", ParserVersion) || Differs(meta, "analyzer_contract", AnalyzerContract);
+
+        static bool Differs(Dictionary<string, string> meta, string key, int expected) =>
+            !meta.TryGetValue(key, out var stored)
+            || !string.Equals(stored, expected.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     /// <summary>

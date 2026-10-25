@@ -284,7 +284,7 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
 - The workspace is a single directory tree on local disk and `.sharpcoreagent/` is writable; when it is not,
   the feature degrades to "index unavailable" rather than failing the turn.
 - Source files are UTF-8 or single-byte; invalid sequences are replaced, not rejected.
-- The SharpCoreDB `2.1.0` packages (`SharpCoreDB`, `.Graph`, `.Graph.Advanced`, `.Search`,
+- The SharpCoreDB `2.1.1` packages (`SharpCoreDB`, `.Graph`, `.Graph.Advanced`, `.Search`,
   `.VectorSearch`, `.HybridSearch`) are published on nuget.org and target `net11.0` like this
   repository.
 - The local embedder is deliberately lexical-hashed rather than neural: zero download, deterministic,
