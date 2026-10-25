@@ -194,20 +194,29 @@ the scanner's Roslyn analyzers attached, runs the tests with coverage, and uploa
 `sonar-project.properties` and no `SonarQube.Analysis.xml`: the .NET scanner does not read the first, and
 the second duplicates settings that would drift.
 
-- **Coverage** comes from Microsoft.Testing.Platform's own coverage extension, not a VSTest data collector,
-  and lands in `TestResults/sonar/coverage.cobertura.xml`. The same file that feeds the dashboard is one
-  command away: `dotnet test --coverage --coverage-output-format cobertura`.
+- **Tests are xUnit v3 on Microsoft.Testing.Platform** — no VSTest in the graph, and no adapter: the test
+  project is an executable that hosts MTP, and `global.json` names the runner so plain `dotnet test` uses
+  it. Coverage comes from MTP's own coverage extension and lands in
+  `TestResults/sonar/coverage.cobertura.xml`, one command away:
+  `dotnet test --coverage --coverage-output-format cobertura`.
 - **The rules also run in the build.** `SonarAnalyzer.CSharp` is pinned to the exact analyzer build the
   scanner provisions (10.35.0.4138), so `dotnet build` reports the same findings without a token.
-- **The gate is "Sonar way",** unmodified and strict: A ratings for reliability, security and
-  maintainability, 80% coverage on new code, at most 3% duplication, every security hotspot reviewed. It
-  is computed on every run and shown in the badge above. Failing the CI job on it is the
-  `SONAR_ENFORCE_GATE` repository variable rather than the default, because the first analysis measured
-  52.9% line coverage (49.7% of branches) and a pipeline that is red for a month teaches people to ignore
-  it; the variable is the ratchet, and coverage is the backlog.
+- **The gate is "Sonar way",** unmodified: A ratings for reliability, security and maintainability, 80%
+  coverage on new code, at most 3% duplication, every security hotspot reviewed. It is computed on every
+  run and shown in the badge above.
+- **Where the project stands:** 8 944 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
+  reliability, security and maintainability, 0.6% duplication, 56 code smells, and 53.0% coverage
+  (54.5% of lines, 49.7% of branches). The gate reports **failed** on one condition: new-code coverage is
+  32.8% against the 80% it asks for.
+- **Why new-code coverage under-reports on refactors.** Sonar counts a changed declaration line as a new
+  line to cover, and no test hits a signature, a brace or a doc comment; a commit that only renames or
+  re-signatures code therefore lands near 30% however well it is tested. Part of that 32.8% is a real gap
+  (the first pass of these changes added tests for `AgentOptions.Validate`, which had none), part is
+  arithmetic. Failing CI on the gate is a switch, not the default: set the repository variable
+  `SONAR_ENFORCE_GATE` to `true` when the number reflects the code instead of the shape of the diff.
 - **Triage is recorded, not silent:** one finding — `csharpsquid:S2068` on the index's
   `NoEncryptionPassword` sentinel, a documented non-secret the storage engine requires when encryption is
-  off — is marked false positive in SonarCloud with the reasoning attached.
+  off — is marked false positive in SonarCloud with the reasoning attached. Nothing else is suppressed.
 
 ## Project status
 
