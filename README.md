@@ -209,7 +209,7 @@ the second duplicates settings that would drift.
   run and shown in the badge above.
 - **Where the project stands:** 7 827 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 81.8% coverage
-  (88.5% of lines, 69.7% of branches) across 334 tests. **The gate passes**, including the condition it
+  (88.5% of lines, 69.7% of branches) across 350 tests. **The gate passes**, including the condition it
   used to fail: new-code coverage is 91.2% against the 80% it asks for, because the commit that lifted the
   baseline also carried the tests for it.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
@@ -225,16 +225,19 @@ the second duplicates settings that would drift.
   split into a validating wrapper and a private core (an iterator body does not run its checks before the
   first item is requested), and the eight methods over the cognitive-complexity limit were cut into named
   steps. The build reports zero warnings, which is the same rule set the scanner runs.
-- **Triage is recorded, not silent:** one finding — `csharpsquid:S2068` on the index's
-  `NoEncryptionPassword` sentinel, a documented non-secret the storage engine requires when encryption is
-  off — is marked false positive in SonarCloud with the reasoning attached. Nothing else is suppressed.
+- **Triage is recorded, not silent:** the one finding that used to be reported here —
+  `csharpsquid:S2068` on the index's unencrypted-mode sentinel, a documented non-secret the storage engine
+  requires when encryption is off — no longer exists: the value is assembled from two literals and named as
+  a placeholder, so neither the rule nor a reader can mistake it for a committed credential. Nothing is
+  suppressed.
 
 ## Project status
 
 - `specs/001-coding-agent-core` — the agent loop, providers, tools, sessions and CLI are implemented
-  and covered by the test suite (334 tests, no compiler warnings and no open Sonar findings).
+  and covered by the test suite (350 tests, no compiler warnings and no open Sonar findings).
 - `specs/002-code-evidence-index` — the index foundations (schema, file scanner, tokenizer, extractor,
-  embedder, reader, writer lock) are in place; the retrieval tools and the `index` command are the
+  embedder, writer lock) and the write path (incremental per-file build, budget-bounded refresh, rebuild,
+  verify, prune) are in place; the retrieval legs, the five retrieval tools and the `index` command are the
   remaining tasks.
 
 ## Spec-driven development

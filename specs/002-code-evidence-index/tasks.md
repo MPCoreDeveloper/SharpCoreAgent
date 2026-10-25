@@ -95,7 +95,7 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Test: `PassageChunkerTests` — a 4 000-line generated block is chunked, not truncated; no passage
     exceeds either cap; no passage starts or ends mid-line; ranges tile the file without gaps.
 
-- [ ] **T012** Write one file as one transaction
+- [x] **T012** Write one file as one transaction
   - Files: `src/SharpCoreAgent.Indexing/SharpCoreDbIndexMaintainer.cs` (write path)
   - Do: skip when size+mtime match and the hash confirms; otherwise delete the file's rows and insert
     chunks/symbols/edges/vectors/docs; recompute `chunks.tokens`; record `state`, counts and `indexed_utc`;
@@ -110,7 +110,7 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Test: `CommunityAssignerTests` — two disjoint clusters get two distinct labels; the same corpus
     produces the same labels twice.
 
-- [ ] **T014** Refresh within a budget
+- [x] **T014** Refresh within a budget
   - Files: `src/SharpCoreAgent.Indexing/SharpCoreDbIndexMaintainer.cs` (`EnsureFreshAsync`, `RebuildAsync`)
   - Do: `EnsureFreshAsync(TimeSpan)` builds or refreshes until the budget expires, then returns
     `Incomplete = true` with `build_state = partial`; `RebuildAsync` clears the tables first; both emit
@@ -118,7 +118,7 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Test: `RefreshBudgetTests` — a budget of 1 ms on a 50-file corpus returns `Incomplete` and leaves a
     usable index; a second call finishes it; a no-op refresh does no writes.
 
-- [ ] **T015** Verify and prune
+- [x] **T015** Verify and prune
   - Files: `src/SharpCoreAgent.Indexing/SharpCoreDbIndexMaintainer.cs` (`VerifyAsync`, `PruneAsync`)
   - Do: compare `files` with the scanner (missing both ways), re-hash stored passages, count orphans, and
     answer `IsHealthy`; `PruneAsync` deletes only rows whose file is gone.

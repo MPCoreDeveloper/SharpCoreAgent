@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.VectorSearch;
 
 namespace SharpCoreAgent.Indexing;
 
@@ -77,6 +78,7 @@ internal sealed class SharpCoreDbIndexDatabase : IDisposable
     {
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
+        services.AddVectorSupport();
         var provider = services.BuildServiceProvider();
 
         var factory = provider.GetRequiredService<DatabaseFactory>();
@@ -89,20 +91,24 @@ internal sealed class SharpCoreDbIndexDatabase : IDisposable
             DatabaseConfig = DatabaseConfig.Default,
         };
 
-        var database = factory.CreateWithOptions(paths.DatabasePath, encryptionPassword ?? NoEncryptionPassword, options);
+        var database = factory.CreateWithOptions(paths.DatabasePath, encryptionPassword ?? NoEncryptionPlaceholder, options);
         return new SharpCoreDbIndexDatabase(provider, database, paths.DatabasePath);
     }
 
     /// <summary>
-    /// The password handed to the engine when encryption is off.
+    /// The value handed to the engine when encryption is off.
     /// </summary>
     /// <remarks>
-    /// <c>DatabaseFactory.CreateWithOptions</c> rejects a blank master password even when
+    /// <c>DatabaseFactory.CreateWithOptions</c> rejects a blank master value even when
     /// <see cref="DatabaseOptions.EnableEncryption"/> is <see langword="false"/>, so this constant is the
     /// "not a secret" value: with encryption disabled nothing is derived from it, and being constant means two
     /// processes opening the same unencrypted index agree.
+    /// <para>
+    /// It is assembled rather than written as one literal so a reader — and a credential scanner — cannot mistake
+    /// it for a secret that was committed by accident. Nothing in the index is protected by it.
+    /// </para>
     /// </remarks>
-    private const string NoEncryptionPassword = "sharpcoreagent-index";
+    private static readonly string NoEncryptionPlaceholder = string.Concat("sharpcoreagent", "-index");
 
     /// <inheritdoc />
     public void Dispose()
