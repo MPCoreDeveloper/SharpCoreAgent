@@ -108,6 +108,16 @@ source, because "it does not work" is not a decision anyone can build on:
    nobody wrote: `e220461e` added a working ~100-line implementation (argument extractor included), and
    `997103be` — "sync docs distributed featurs", 2026-02-23 — replaced it with the stub and four unused
    parameters. `VectorQueryOptimizer` itself is intact; only the wiring is gone.
+   There was a second, independent break behind the same symptom: `SqlParser.VectorQueryOptimizer` was an
+   `internal static` that no code in the engine ever assigned, and no other assembly *could* assign (the
+   parser is `internal`), while `SharpCoreDB.VectorSearch` only registers the optimizer with the DI
+   container. Both consumers were null-conditional, so `CREATE VECTOR INDEX` built nothing either — the
+   whole SQL surface was dead, not just the planner branch. **Repaired upstream** on branch
+   `fix/vector-sql-optimizer` (commit `16cb51d5`): `Database.GetSharedSqlParser` now resolves
+   `IVectorQueryOptimizer` from the service provider and attaches it per parser instance, and the
+   restored method projects onto the SELECT list and refuses `DESC`/`WHERE` (which an ascending top-k
+   cannot answer) instead of returning the wrong shape. Until a package containing it ships, `2.1.0-RC.3`
+   is still what we consume, so the C# leg (D6) stays.
 2. A projection that computes a function is ignored: `SELECT id, vec_distance_cosine(embedding, @q) AS d
    FROM chunks` returns every column of the row and no `d`. The legacy `ExecuteSelect` path never
    projects a single-table select at all (`ProjectColumns` is called only on the join path), so the
@@ -123,9 +133,12 @@ source, because "it does not work" is not a decision anyone can build on:
 
 Two more defects surfaced on the way and were fixed under T018:
 
-- Binding a `float[]` as a parameter stores the literal text `System.Single[]`; the column's accepted
-  textual form is a JSON array (`VectorBinaryCodec.TryParse`), so the writer now sends
-  `VectorSerializer.ToJson(vector)` and `analyzer_contract` is 2 to force older indexes to rebuild.
+- Binding a `float[]` as a parameter stored the literal text `System.Single[]` — not a similarity-score
+  problem but a lost value. The column's accepted textual form is a JSON array. Fixed upstream in
+  `32227696` (2026-10-11), which gave the format and the coercion a single definition
+  (`VectorBinaryCodec`) and routed both parameter binders through it; `2.1.0-RC.3` predates that. The
+  writer still sends `VectorSerializer.ToJson(vector)` explicitly, because it does not depend on the
+  binder at all, and `analyzer_contract` is 2 so indexes written through the old path rebuild.
 - A `TEXT` literal does not survive `INSERT`: the engine's `ParseInsertValues` trims every literal
   ("3. every literal is Trimmed" in its own comment, pinned by its `InsertValuesParsingTests`), so a
   passage that started with indentation or ended with a blank line was stored trimmed and the stored
@@ -135,7 +148,9 @@ Two more defects surfaced on the way and were fixed under T018:
 
 The leg therefore computes cosine over the vectors the snapshot loads, using the same measure the embedder
 uses. That keeps the decision (D6) — vectors in the column, one similarity floor, `4 × K` candidates — and
-moves the arithmetic one layer up until the engine's optimizer lands.
+moves the arithmetic one layer up until a package carrying the repaired optimizer ships (finding 1). When
+it does, the leg can move into SQL without changing the schema or the floor: the same `ORDER BY
+vec_distance_cosine(embedding, @q) LIMIT 4 * K` then becomes an index scan.
 
 ## D7 — Local hashed embedder by default
 
