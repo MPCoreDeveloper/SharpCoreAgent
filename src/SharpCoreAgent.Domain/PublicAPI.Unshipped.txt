@@ -54,6 +54,9 @@ override SharpCoreAgent.Domain.Conversation.ChatMessage.ToString() -> string!
 override SharpCoreAgent.Domain.Conversation.ToolCall.Equals(object? obj) -> bool
 override SharpCoreAgent.Domain.Conversation.ToolCall.GetHashCode() -> int
 override SharpCoreAgent.Domain.Conversation.ToolCall.ToString() -> string!
+override SharpCoreAgent.Domain.Index.CodeContext.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.CodeContext.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.CodeContext.ToString() -> string!
 override SharpCoreAgent.Domain.Index.CodeEvidence.Equals(object? obj) -> bool
 override SharpCoreAgent.Domain.Index.CodeEvidence.GetHashCode() -> int
 override SharpCoreAgent.Domain.Index.CodeEvidence.ToString() -> string!
@@ -276,6 +279,24 @@ SharpCoreAgent.Domain.Errors.ToolArgumentException.ToolName.get -> string!
 SharpCoreAgent.Domain.Errors.ToolNotFoundException
 SharpCoreAgent.Domain.Errors.ToolNotFoundException.ToolName.get -> string!
 SharpCoreAgent.Domain.Errors.ToolNotFoundException.ToolNotFoundException(string! toolName) -> void
+SharpCoreAgent.Domain.Index.CodeContext
+SharpCoreAgent.Domain.Index.CodeContext.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeContext!
+SharpCoreAgent.Domain.Index.CodeContext.CodeContext() -> void
+SharpCoreAgent.Domain.Index.CodeContext.Considered.get -> int
+SharpCoreAgent.Domain.Index.CodeContext.Considered.init -> void
+SharpCoreAgent.Domain.Index.CodeContext.Declarations.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeSymbolRef!>!
+SharpCoreAgent.Domain.Index.CodeContext.Declarations.init -> void
+SharpCoreAgent.Domain.Index.CodeContext.Equals(SharpCoreAgent.Domain.Index.CodeContext? other) -> bool
+SharpCoreAgent.Domain.Index.CodeContext.Focus.get -> SharpCoreAgent.Domain.Index.CodeEvidence?
+SharpCoreAgent.Domain.Index.CodeContext.Focus.init -> void
+SharpCoreAgent.Domain.Index.CodeContext.MinWeight.get -> double
+SharpCoreAgent.Domain.Index.CodeContext.MinWeight.init -> void
+SharpCoreAgent.Domain.Index.CodeContext.Neighbours.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!
+SharpCoreAgent.Domain.Index.CodeContext.Neighbours.init -> void
+SharpCoreAgent.Domain.Index.CodeContext.Subject.get -> SharpCoreAgent.Domain.Index.CodeSymbolRef?
+SharpCoreAgent.Domain.Index.CodeContext.Subject.init -> void
+SharpCoreAgent.Domain.Index.CodeContext.Target.get -> string!
+SharpCoreAgent.Domain.Index.CodeContext.Target.init -> void
 SharpCoreAgent.Domain.Index.CodeEvidence
 SharpCoreAgent.Domain.Index.CodeEvidence.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeEvidence!
 SharpCoreAgent.Domain.Index.CodeEvidence.CodeEvidence() -> void
@@ -357,7 +378,7 @@ SharpCoreAgent.Domain.Index.EvidenceLeg.Vector = 1 -> SharpCoreAgent.Domain.Inde
 SharpCoreAgent.Domain.Index.ICodeIndex
 SharpCoreAgent.Domain.Index.ICodeIndex.FindReferencesAsync(string! symbol, SharpCoreAgent.Domain.Index.ReferenceDirection direction, int maxResults, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
 SharpCoreAgent.Domain.Index.ICodeIndex.FindSymbolsAsync(string! name, string? kind, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeSymbolRef!>!>
-SharpCoreAgent.Domain.Index.ICodeIndex.GetContextAsync(string! target, int hops, int k, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
+SharpCoreAgent.Domain.Index.ICodeIndex.GetContextAsync(string! target, int hops, int k, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.CodeContext!>
 SharpCoreAgent.Domain.Index.ICodeIndex.GetStatusAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexStatus!>
 SharpCoreAgent.Domain.Index.ICodeIndex.SearchAsync(SharpCoreAgent.Domain.Index.CodeQuery! query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
 SharpCoreAgent.Domain.Index.ICodeIndexMaintainer
@@ -398,8 +419,12 @@ SharpCoreAgent.Domain.Index.IndexStatus
 SharpCoreAgent.Domain.Index.IndexStatus.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexStatus!
 SharpCoreAgent.Domain.Index.IndexStatus.BuiltUtc.get -> System.DateTimeOffset?
 SharpCoreAgent.Domain.Index.IndexStatus.BuiltUtc.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Centers.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Centers.init -> void
 SharpCoreAgent.Domain.Index.IndexStatus.Chunks.get -> int
 SharpCoreAgent.Domain.Index.IndexStatus.Chunks.init -> void
+SharpCoreAgent.Domain.Index.IndexStatus.Communities.get -> int
+SharpCoreAgent.Domain.Index.IndexStatus.Communities.init -> void
 SharpCoreAgent.Domain.Index.IndexStatus.Dimensions.get -> int
 SharpCoreAgent.Domain.Index.IndexStatus.Dimensions.init -> void
 SharpCoreAgent.Domain.Index.IndexStatus.Edges.get -> int
@@ -680,6 +705,9 @@ static SharpCoreAgent.Domain.Conversation.ChatMessage.System(string! content) ->
 static SharpCoreAgent.Domain.Conversation.ChatMessage.User(string! content) -> SharpCoreAgent.Domain.Conversation.ChatMessage!
 static SharpCoreAgent.Domain.Conversation.ToolCall.operator !=(SharpCoreAgent.Domain.Conversation.ToolCall? left, SharpCoreAgent.Domain.Conversation.ToolCall? right) -> bool
 static SharpCoreAgent.Domain.Conversation.ToolCall.operator ==(SharpCoreAgent.Domain.Conversation.ToolCall? left, SharpCoreAgent.Domain.Conversation.ToolCall? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeContext.Empty(string! target) -> SharpCoreAgent.Domain.Index.CodeContext!
+static SharpCoreAgent.Domain.Index.CodeContext.operator !=(SharpCoreAgent.Domain.Index.CodeContext? left, SharpCoreAgent.Domain.Index.CodeContext? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeContext.operator ==(SharpCoreAgent.Domain.Index.CodeContext? left, SharpCoreAgent.Domain.Index.CodeContext? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeEvidence.operator !=(SharpCoreAgent.Domain.Index.CodeEvidence? left, SharpCoreAgent.Domain.Index.CodeEvidence? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeEvidence.operator ==(SharpCoreAgent.Domain.Index.CodeEvidence? left, SharpCoreAgent.Domain.Index.CodeEvidence? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeQuery.Create(string! text, string? path = null, string? kind = null, int k = 8, int hops = 1) -> SharpCoreAgent.Domain.Index.CodeQuery!

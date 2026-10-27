@@ -38,9 +38,10 @@ internal sealed record VectorLegResult(IReadOnlyList<VectorMatch> Matches, strin
 /// <remarks>
 /// Three decisions are worth stating.
 /// <list type="number">
-/// <item>The comparison runs over the vectors the snapshot loaded, in this assembly. SharpCoreDB 2.1.1 carries
-/// the repaired planner (<c>16cb51d5</c>), and it does serve <c>ORDER BY vec_distance_cosine(embedding, ?)
-/// LIMIT k</c> from a <c>CREATE VECTOR INDEX … USING FLAT</c> index, distance projected — but only on a
+/// <item>The comparison runs over the vectors the snapshot loaded, in this assembly. SharpCoreDB carries the
+/// repaired planner (<c>16cb51d5</c>, first shipped in <c>2.1.1</c>), and it does serve
+/// <c>ORDER BY vec_distance_cosine(embedding, ?) LIMIT k</c> from a <c>CREATE VECTOR INDEX … USING FLAT</c>
+/// index, distance projected — but only on a
 /// directory-mode database. The index opens as a single <c>.scdb</c> file, and on that route the same statement
 /// comes back with no <c>distance</c> column and its rows in insertion order (an <c>ORDER BY</c> on a function is
 /// still a silent no-op on the scan path), while a <c>WHERE vec_distance_cosine(...)</c> predicate matches

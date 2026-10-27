@@ -56,6 +56,27 @@ public sealed record IndexStatus
     public int Edges { get; init; }
 
     /// <summary>
+    /// Gets how many communities the last build assigned, or 0 when it assigned none.
+    /// </summary>
+    /// <remarks>
+    /// A community is a label the whole-graph pass wrote on <c>symbols.community</c>; this is the number of distinct
+    /// labels, not of declarations. It is 0 for an index whose declarations have no relations yet, because a
+    /// declaration on its own is not a cluster.
+    /// </remarks>
+    public int Communities { get; init; }
+
+    /// <summary>
+    /// Gets how many communities named a centre: a member with a non-zero degree centrality.
+    /// </summary>
+    /// <remarks>
+    /// The centre of a community is its highest-degree declaration, which is what a context answer names when it
+    /// says which cluster a symbol belongs to. In a healthy index this equals <see cref="Communities"/>; the two are
+    /// reported separately because a label stored without a centrality is exactly the drift a single number would
+    /// hide.
+    /// </remarks>
+    public int Centers { get; init; }
+
+    /// <summary>
     /// Gets how many indexed files changed or failed since the last build.
     /// </summary>
     public int StaleFiles { get; init; }

@@ -250,7 +250,7 @@ internal sealed class IndexReader
     /// <param name="value">The raw column value.</param>
     /// <returns>The vector, or <see langword="null"/> when the column was never written.</returns>
     /// <remarks>
-    /// A <c>float[]</c> is what SharpCoreDB 2.1.1 hands back on the single-file read path this index uses, and
+    /// A <c>float[]</c> is what SharpCoreDB hands back on the single-file read path this index uses, and
     /// that is what the writer stores: it binds the embedder's array, and the engine keeps its own binary form.
     /// The other shapes stay accepted because both are still on disk in some index — a cell written before
     /// <c>analyzer_contract</c> 3 holds the JSON text of the array, and 2.1.0's row materializer returned that

@@ -4,14 +4,15 @@ using SharpCoreDB.Interfaces;
 namespace SharpCoreAgent.Indexing;
 
 /// <summary>
-/// The one place a statement is handed to the engine, so parameter binding and value reading look the same
-/// everywhere in this assembly.
+/// The one place a statement or a row is handed to the engine, so parameter binding and value reading look the
+/// same everywhere in this assembly.
 /// </summary>
 /// <remarks>
-/// Two facts about SharpCoreDB 2.1.1 shape this: every overload takes <c>Dictionary&lt;string, object&gt;</c>
-/// even when a column is genuinely <c>NULL</c>, and <c>ExecuteQuery</c> hands back <c>object</c> values whose
-/// runtime type depends on the column, not on the declaration. Binding and reading therefore live here instead
-/// of being re-derived at each call site.
+/// Three facts about SharpCoreDB shape this: every overload takes <c>Dictionary&lt;string, object&gt;</c> even when
+/// a column is genuinely <c>NULL</c>, <c>ExecuteQuery</c> hands back <c>object</c> values whose runtime type depends
+/// on the column rather than the declaration, and a bound value reaches the parser as statement text, rendered back
+/// by the engine's own formatter. Binding and reading therefore live here instead of being re-derived at each call
+/// site.
 /// <para>
 /// No statement text is ever assembled from caller input: the table name in <see cref="Count"/> comes from a
 /// closed enum, so the only values that reach the engine are bound parameters.
@@ -24,17 +25,77 @@ internal static class IndexSql
     /// </summary>
     /// <param name="values">The pairs; names include their <c>@</c> prefix.</param>
     /// <returns>The bag the engine's overloads expect.</returns>
-    public static Dictionary<string, object?> Parameters(params (string Name, object? Value)[] values)
-    {
-        ArgumentNullException.ThrowIfNull(values);
+    public static Dictionary<string, object?> Parameters(params (string Name, object? Value)[] values) =>
+        Build(values);
 
-        var parameters = new Dictionary<string, object?>(values.Length, StringComparer.Ordinal);
-        foreach (var (name, value) in values)
+    /// <summary>
+    /// Builds a row from column/value pairs, for the table API.
+    /// </summary>
+    /// <param name="values">The pairs; names are bare column names.</param>
+    /// <returns>The row the table's insert overload expects.</returns>
+    /// <remarks>
+    /// A <see langword="null"/> value means the column is left out, so it takes its declared default: the
+    /// engine's row dictionaries have no null that survives a flush any better than an omitted column, and
+    /// omitting it is the only way to write "absent" that reads back the same.
+    /// </remarks>
+    public static Dictionary<string, object?> Row(params (string Column, object? Value)[] values) => Build(values);
+
+    /// <summary>
+    /// Inserts one row without going through the statement parser.
+    /// </summary>
+    /// <param name="database">An open index database.</param>
+    /// <param name="table">The table to insert into, from the closed set above.</param>
+    /// <param name="row">The columns to write, as built by <see cref="Row"/>; null values are left out.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="InvalidOperationException">The database has no such table.</exception>
+    /// <remarks>
+    /// The row goes in as data, so no value is rendered into statement text and read back by the literal scanner:
+    /// the writer takes this route for every passage because it is the shortest one, and the only one whose
+    /// correctness does not rest on two pieces of the engine agreeing about escaping. Through <c>2.1.1</c> they did
+    /// not agree — an <c>INSERT … VALUES</c> list was split before the scanner saw what was inside a literal, so a
+    /// passage holding an apostrophe shifted a column left or failed the parse. The pinned <c>2.1.2</c> closes that
+    /// (<c>Services/SqlLiteralScanner.cs</c>, known issue 7) and <c>ProseRoundTripTests</c> holds the shapes it
+    /// listed, so <see cref="Execute"/> carries arbitrary text again; a row insert still has no reason to pay for a
+    /// formatter and a parser first.
+    /// </remarks>
+    public static void Insert(IDatabase database, IndexTable table, Dictionary<string, object?> row)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(row);
+
+        var values = new Dictionary<string, object>(row.Count, StringComparer.Ordinal);
+        foreach (var (column, value) in row)
         {
-            parameters[name] = value;
+            if (value is not null)
+            {
+                values[column] = value;
+            }
         }
 
-        return parameters;
+        Table(database, table).Insert(values);
+    }
+
+    /// <summary>
+    /// Overwrites columns of one row identified by its primary key, without going through the statement parser.
+    /// </summary>
+    /// <param name="database">An open index database.</param>
+    /// <param name="table">The table to update, from the closed set above.</param>
+    /// <param name="key">The primary key value of the row to change.</param>
+    /// <param name="values">The columns to overwrite; a column left out keeps its stored value.</param>
+    /// <returns><see langword="true"/> when the row was found and updated.</returns>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="InvalidOperationException">The database has no such table.</exception>
+    public static bool Update(
+        IDatabase database,
+        IndexTable table,
+        object key,
+        Dictionary<string, object> values)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(values);
+
+        return Table(database, table).UpdateByPrimaryKey(key, values);
     }
 
     /// <summary>
@@ -104,18 +165,8 @@ internal static class IndexSql
     {
         ArgumentNullException.ThrowIfNull(database);
 
-        // A switch, not interpolation: the statement text stays a constant that no caller value can reach.
-        var sql = table switch
-        {
-            IndexTable.Files => "SELECT COUNT(*) FROM files",
-            IndexTable.Chunks => "SELECT COUNT(*) FROM chunks",
-            IndexTable.Symbols => "SELECT COUNT(*) FROM symbols",
-            IndexTable.Edges => "SELECT COUNT(*) FROM edges",
-            IndexTable.Docs => "SELECT COUNT(*) FROM docs",
-            _ => throw new ArgumentOutOfRangeException(nameof(table), table, "Unknown index table."),
-        };
-
-        var rows = Query(database, sql);
+        // The table name comes from a closed switch, so the statement text is never assembled from caller input.
+        var rows = Query(database, "SELECT COUNT(*) FROM " + TableName(table));
         return rows.Count == 0 || rows[0].Count == 0 ? 0 : AsLong(rows[0].Values.First());
     }
 
@@ -154,6 +205,56 @@ internal static class IndexSql
     /// default.
     /// </remarks>
     private static object? Normalise(object? value) => value is DBNull ? null : value;
+
+    /// <summary>
+    /// Copies name/value pairs into the bag shape the engine's overloads share.
+    /// </summary>
+    /// <param name="values">The pairs.</param>
+    /// <returns>A new bag, keyed ordinally like the columns themselves.</returns>
+    private static Dictionary<string, object?> Build((string Name, object? Value)[] values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        var bag = new Dictionary<string, object?>(values.Length, StringComparer.Ordinal);
+        foreach (var (name, value) in values)
+        {
+            bag[name] = value;
+        }
+
+        return bag;
+    }
+
+    /// <summary>
+    /// Opens one table of the index schema.
+    /// </summary>
+    /// <param name="database">An open index database.</param>
+    /// <param name="table">The table, from the closed set above.</param>
+    /// <returns>The table, ready for a parser-free write.</returns>
+    /// <exception cref="InvalidOperationException">The database has no such table.</exception>
+    private static ITable Table(IDatabase database, IndexTable table)
+    {
+        var name = TableName(table);
+        return database.TryGetTable(name, out var found)
+            ? found
+            : throw new InvalidOperationException("The index database has no '" + name + "' table.");
+    }
+
+    /// <summary>
+    /// Maps a table enum to the name the schema created.
+    /// </summary>
+    /// <param name="table">The table, from the closed set above.</param>
+    /// <returns>The stored name.</returns>
+    private static string TableName(IndexTable table) => table switch
+    {
+        IndexTable.Meta => "meta",
+        IndexTable.Files => "files",
+        IndexTable.Chunks => "chunks",
+        IndexTable.Symbols => "symbols",
+        IndexTable.Edges => "edges",
+        IndexTable.NodeEmbeddings => "node_embeddings",
+        IndexTable.Docs => "docs",
+        _ => throw new ArgumentOutOfRangeException(nameof(table), table, "Unknown index table."),
+    };
 }
 
 /// <summary>
@@ -161,6 +262,9 @@ internal static class IndexSql
 /// </summary>
 internal enum IndexTable
 {
+    /// <summary>The key/value rows describing the build that produced the index.</summary>
+    Meta,
+
     /// <summary>The per-file rows.</summary>
     Files,
 
@@ -172,6 +276,9 @@ internal enum IndexTable
 
     /// <summary>The typed relations between declarations.</summary>
     Edges,
+
+    /// <summary>The vectors of the declarations, used by the graph leg.</summary>
+    NodeEmbeddings,
 
     /// <summary>The documentation passages.</summary>
     Docs,
