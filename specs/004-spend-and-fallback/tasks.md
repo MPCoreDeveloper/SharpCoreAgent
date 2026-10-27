@@ -25,6 +25,6 @@ next pass has a real list rather than a memory.
 
 ## Phase 3 — catalogue decisions
 
-- [ ] T015 Decide whether `DeepSeekChatModel.DefaultModelId` moves from `deepseek-chat` to `deepseek-flash`, and whether `GrokChatModel.DefaultModelId` moves from `grok-4` to `grok-4.7`; both are written into transcripts, so the change needs a resume story.
-- [ ] T016 Decide whether `OpenAiCompatibleChatModel.DefaultModelId` stays `gpt-4o-mini` now that OpenAI publishes no standard price for it.
-- [ ] T017 Re-read both pricing pages and refresh `ModelPricing` (rates, as-of date, sources) — the three numbers that a test currently pins.
+- [ ] T015 Decide whether `DeepSeekChatModel.DefaultModelId` moves from `deepseek-chat` to `deepseek-flash`, and whether `GrokChatModel.DefaultModelId` moves from `grok-4` to `grok-4.7`; both are written into transcripts, so the change needs a resume story. (Analysis and the resume story are in `research.md` D6: the resume path resolves the transcript's own identifiers and the older entries stay listed, so a move changes only which model a *new* conversation starts on — plus four alias rows and the docs' examples. Waiting on the repository owner: it changes what `sharpcoreagent chat` talks to with no flags.)
+- [X] T016 Decide whether `OpenAiCompatibleChatModel.DefaultModelId` stays `gpt-4o-mini` now that OpenAI publishes no standard price for it. (Stays: the provider is an endpoint, so the identifier is the server's and no default can be right; `--model` chooses, and the model stays unpriced so `/cost` says `no price known` — `research.md` D3 and D6.)
+- [X] T017 Re-read both pricing pages and refresh `ModelPricing` (rates, as-of date, sources) — the three numbers that a test currently pins. (Re-read 2026-10-27: all three rows unchanged — `deepseek-flash` 0.30/1.20, `deepseek-v4-pro` 1.32/3.96, `grok-4.7` 2.00/6.00 — so the table, the date and the sources stand. `research.md` D6.)

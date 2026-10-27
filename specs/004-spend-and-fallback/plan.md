@@ -108,7 +108,19 @@ Without `--fallback` none of this exists: the resolver returns the retry-wrapped
 before, and every report carries an empty `Fallbacks`.
 
 
-## Phase 3 — catalogue decisions (planned, not built)
+## Phase 3 — catalogue decisions
 
-Whether the default model identifiers move to the current generation, and whether `gpt-4o-mini` stays
-the `openai-compatible` default given that OpenAI no longer publishes a price for it.
+`openai-compatible` keeps `gpt-4o-mini` as its default (T016): the provider is an endpoint, so the
+identifier belongs to whoever runs it and `--model` is how it is chosen; the model stays unpriced, so
+`/cost` says `no price known` rather than quoting a rate nobody published.
+
+The table was re-read on 2026-10-27 (T017). All three rows, the as-of date and the two sources are
+unchanged, and both pages now list exactly the three models the table prices — which is what makes
+the remaining question (T015) sharp: `deepseek-chat` and `grok-4` are still this build's defaults and
+appear on neither page.
+
+Whether the default model identifiers move to the current generation is the one item left to the
+repository owner. The resume story does not block it: a transcript names its own provider and model,
+`ModelCatalog.DescriptorFor` resolves any identifier, and the retired entries stay listed so a resumed
+conversation still opens. A move would change which model a *new* conversation starts on, four alias
+rows (`ds`, `grok`/`g4`) and the examples in `README.md` and `HelpText`. See `research.md` D6.

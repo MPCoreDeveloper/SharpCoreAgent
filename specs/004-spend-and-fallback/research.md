@@ -68,6 +68,42 @@ catalogues they describe, not in `SharpCoreAgent.Domain`.
 `Application` project must not reference `Infrastructure` — the dependency runs the other way. The
 CLI composes the two, which it already does for `ModelCatalog`.
 
+## D6 — Re-read on 2026-10-27: the table is current, the defaults are not
+
+Both pages were read again while Phase 2 was being finished, to check the three rows a test pins:
+
+| Row in `ModelPricing` | Page says | Verdict |
+|---|---|---|
+| `deepseek:deepseek-flash` 0.30 / 1.20 | peak cache-miss $0.30 in, peak output $1.20 (off-peak $0.15 / $0.60) | unchanged |
+| `deepseek:deepseek-v4-pro` 1.32 / 3.96 | peak cache-miss $1.32 in, peak output $3.96 (off-peak $0.66 / $1.98) | unchanged |
+| `grok:grok-4.7` 2.00 / 6.00 | $2.00 in, $6.00 out, 500k context, agentic tool calling | unchanged |
+
+So the as-of date, the currency and the sources stand. One sentence from the DeepSeek page is worth
+recording because it bears on T015: the footnote says the retired legacy names `deepseek-v4-flash` and
+`deepseek-v4-flash-vision-exp` are "still accepted, but the corresponding models have been retired,
+their requests are served by the DeepSeek-V4.1-Flash-1017 model and billed at the Flash price". The
+provider redirects a retired identifier rather than rejecting it — for those names, at least. The two
+identifiers this build still ships as defaults, `deepseek-chat` and `grok-4`, appear on neither page,
+and nothing on either page promises a redirect for them.
+
+**T016 decision — the `openai-compatible` default stays `gpt-4o-mini`.** That provider is an endpoint,
+not a vendor: its model identifier is whatever the server behind `--base-url` serves, so no default
+this build could ship would be right more often than this placeholder, and `--model` is the answer.
+The pricing half of the question was settled in D3: it stays unpriced, so `/cost` prints
+`no price known` rather than a rate nobody published.
+
+**T015 — what moving the defaults would take.** `DeepSeekChatModel.DefaultModelId` and
+`GrokChatModel.DefaultModelId` decide the model for every run that names none, and they are written
+into every transcript. The resume story is already in place and does not depend on the defaults:
+`AgentSession.FromSnapshot` resolves the transcript's own `provider` + `modelId` through
+`ModelCatalog.DescriptorFor`, which accepts any identifier and prefers the catalogue entry, and the
+three older Grok identifiers and the two older DeepSeek identifiers stay listed precisely so a resumed
+transcript still resolves. A move would therefore change only which model a *new* conversation starts
+on, plus four alias rows in `ColorAndModeOptionTests` (`ds`, `grok`/`g4`) and the examples in
+`README.md` and `HelpText`. That is a product decision — it changes what `sharpcoreagent chat` talks
+to on a machine with no flags — so it is recorded here rather than made in passing: see T015 in
+`tasks.md`.
+
 ## D5 — Why not put the price on `ModelDescriptor`
 
 The obvious shape is `ModelDescriptor.Price`. Rejected for two reasons:
