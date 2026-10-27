@@ -130,8 +130,8 @@ public sealed class CodingAgent
 
             var request = new ChatRequest(
                 model,
-                session.Messages,
-                _tools.Definitions,
+                MessagesFor(session),
+                DefinitionsFor(session),
                 _options.Temperature,
                 _options.MaxOutputTokensPerTurn);
 
@@ -321,6 +321,29 @@ public sealed class CodingAgent
         };
     }
 
+    /// <summary>
+    /// Builds the messages one request carries, adding the plan rule while plan mode is on.
+    /// </summary>
+    /// <param name="session">The conversation.</param>
+    /// <returns>The transcript, with the plan instruction in front when the session is planning.</returns>
+    private static IReadOnlyList<ChatMessage> MessagesFor(AgentSession session) =>
+        session.Mode == AgentMode.Plan
+            ? [ChatMessage.System(PromptLibrary.PlanModeInstruction), .. session.Messages]
+            : session.Messages;
+
+    /// <summary>
+    /// Builds the tool list one request advertises.
+    /// </summary>
+    /// <param name="session">The conversation.</param>
+    /// <returns>
+    /// Every definition in act mode; only the read-only ones in plan mode, so a model that ignores the
+    /// instruction still cannot name a tool it was never given.
+    /// </returns>
+    private IReadOnlyList<ToolDefinition> DefinitionsFor(AgentSession session) =>
+        session.Mode == AgentMode.Plan
+            ? [.. _tools.Tools.Where(tool => tool.Safety == ToolSafety.ReadOnly).Select(tool => tool.Definition)]
+            : _tools.Definitions;
+
     private async Task<ToolResult> InvokeAsync(
         AgentSession session,
         ToolCall call,
@@ -345,7 +368,9 @@ public sealed class CodingAgent
             result = ToolResult.Refused(
                 call.Id,
                 call.Name,
-                $"the developer refused this call (approval mode: {session.Approval}). Do not repeat it; explain what you need or use a read-only tool.");
+                session.Mode == AgentMode.Plan
+                    ? "plan mode is on, so every destructive tool is refused. Do not repeat this call; describe the change you would make instead."
+                    : $"the developer refused this call (approval mode: {session.Approval}). Do not repeat it; explain what you need or use a read-only tool.");
         }
         else
         {
@@ -378,12 +403,20 @@ public sealed class CodingAgent
             return ApprovalOutcome.Approved;
         }
 
+        if (session.Mode == AgentMode.Plan)
+        {
+            return ApprovalOutcome.Denied;
+        }
+
         return session.Approval switch
         {
             ApprovalMode.AllowAll => ApprovalOutcome.Approved,
             ApprovalMode.ReadOnly => ApprovalOutcome.Denied,
             _ => await _approver.DecideAsync(
-                new ToolApprovalRequest(call.Name, tool.Safety, Describe(tool, call), call.ArgumentsJson),
+                new ToolApprovalRequest(call.Name, tool.Safety, Describe(tool, call), call.ArgumentsJson)
+                {
+                    Preview = await DescribeChangeAsync(tool, call, session, cancellationToken).ConfigureAwait(false),
+                },
                 cancellationToken).ConfigureAwait(false),
         };
     }
@@ -413,6 +446,38 @@ public sealed class CodingAgent
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SharpCoreAgentException)
         {
             return ToolResult.Failure(call.Id, call.Name, $"{call.Name} failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Asks a tool what it would change, never letting a preview failure become an approval failure.
+    /// </summary>
+    /// <param name="tool">The tool about to run.</param>
+    /// <param name="call">The call to preview.</param>
+    /// <param name="session">The session, for the workspace.</param>
+    /// <param name="cancellationToken">Cancels the preview.</param>
+    /// <returns>The preview, or <see langword="null"/> when the tool has none or could not produce it.</returns>
+    private static async ValueTask<string?> DescribeChangeAsync(
+        ITool tool,
+        ToolCall call,
+        AgentSession session,
+        CancellationToken cancellationToken)
+    {
+        if (tool is not IToolPreview preview)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await preview
+                .DescribeChangeAsync(call, new ToolInvocationContext(session.Workspace), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is ToolArgumentException or IOException or UnauthorizedAccessException or SharpCoreAgentException)
+        {
+            // A preview is a courtesy: the call itself will report the same problem with a better message.
+            return null;
         }
     }
 

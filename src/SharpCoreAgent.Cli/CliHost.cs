@@ -41,9 +41,21 @@ internal static class CliHost
         services.AddSingleton<IToolApprover>(new ConsoleApprover(
             Console.In,
             Console.Error,
-            () => !Console.IsInputRedirected));
+            () => !Console.IsInputRedirected,
+            ThemeFor(options)));
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// Builds the palette a command line asked for.
+    /// </summary>
+    /// <param name="options">The parsed command line.</param>
+    /// <returns>The theme every renderer in this process shares.</returns>
+    public static AnsiTheme ThemeFor(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return AnsiTheme.Create(options.Color, Console.IsOutputRedirected);
     }
 
     /// <summary>

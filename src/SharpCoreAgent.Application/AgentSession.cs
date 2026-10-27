@@ -1,3 +1,4 @@
+using System.Globalization;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Conversation;
@@ -55,6 +56,13 @@ public sealed class AgentSession
     /// <summary>Gets or sets the approval mode. Switching applies to the next tool call.</summary>
     public ApprovalMode Approval { get; set; }
 
+    /// <summary>Gets or sets what the next turn is allowed to do. <c>/mode</c> switches it mid-conversation.</summary>
+    /// <remarks>
+    /// The loop reads this rather than the host's options, so a plan turn and an act turn can share one
+    /// transcript: the developer reads the plan, then says "go" without losing the reasoning behind it.
+    /// </remarks>
+    public AgentMode Mode { get; set; } = AgentMode.Act;
+
     /// <summary>Gets the transcript so far, in order.</summary>
     public IReadOnlyList<ChatMessage> Messages => _messages;
 
@@ -102,6 +110,59 @@ public sealed class AgentSession
             Sum(previous.InputTokens, usage.InputTokens),
             Sum(previous.OutputTokens, usage.OutputTokens),
             previous.Turns + 1);
+    }
+
+    /// <summary>
+    /// Drops the oldest part of the conversation, keeping the system prompts and the most recent messages.
+    /// </summary>
+    /// <param name="keepRecent">How many non-system messages to keep; must be positive.</param>
+    /// <returns>The number of messages removed; zero when the transcript already fits.</returns>
+    /// <remarks>
+    /// Long sessions fail in the same way whether or not a token counter exists: the request grows until
+    /// the provider rejects it or the budget stops the turn. Compaction is the escape hatch the developer
+    /// controls with <c>/compact</c>. It keeps every system prompt verbatim and never leaves a tool
+    /// result without its call, because a window that starts mid-tool-round is not a valid request for
+    /// any provider.
+    /// </remarks>
+    public int Compact(int keepRecent)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(keepRecent, 1);
+
+        var systemCount = 0;
+        while (systemCount < _messages.Count && _messages[systemCount].Role == ChatRole.System)
+        {
+            systemCount++;
+        }
+
+        if (_messages.Count - systemCount <= keepRecent)
+        {
+            return 0;
+        }
+
+        var start = _messages.Count - keepRecent;
+        while (start < _messages.Count && _messages[start].Role == ChatRole.Tool)
+        {
+            start++;
+        }
+
+        if (start >= _messages.Count)
+        {
+            return 0;
+        }
+
+        var removed = start - systemCount;
+        if (removed <= 0)
+        {
+            return 0;
+        }
+
+        _messages.RemoveRange(systemCount, removed);
+        _messages.Insert(
+            systemCount,
+            ChatMessage.System(
+                string.Create(CultureInfo.InvariantCulture, $"Earlier conversation elided: {removed} message(s) were dropped to keep the context window small. Ask again if you need a detail that is no longer here.")));
+
+        return removed;
     }
 
     /// <summary>

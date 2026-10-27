@@ -90,6 +90,12 @@ internal sealed record CliOptions
     /// <summary>Gets a value indicating whether events are emitted as JSON lines.</summary>
     public bool Json { get; init; }
 
+    /// <summary>Gets how the terminal decides whether it may use colour. Default <see cref="ColorChoice.Auto"/>.</summary>
+    public ColorChoice Color { get; init; } = ColorChoice.Auto;
+
+    /// <summary>Gets whether a turn may change the workspace. Default <see cref="AgentMode.Act"/>.</summary>
+    public AgentMode Mode { get; init; } = AgentMode.Act;
+
     /// <summary>Gets a value indicating whether thinking and tool summaries are suppressed.</summary>
     public bool Quiet { get; init; }
 
@@ -378,6 +384,79 @@ internal sealed record CliOptions
         return false;
     }
 
+    /// <summary>
+    /// Parses a mode name.
+    /// </summary>
+    /// <param name="value">The text to parse, case-insensitively.</param>
+    /// <param name="mode">The mode, when the text names one.</param>
+    /// <returns><see langword="true"/> when the text was understood.</returns>
+    public static bool TryParseMode(string? value, out AgentMode mode)
+    {
+        mode = AgentMode.Act;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var text = value.Trim();
+        if (Is(text, "plan") || Is(text, "read-only"))
+        {
+            mode = AgentMode.Plan;
+            return true;
+        }
+
+        if (Is(text, "act") || Is(text, "edit"))
+        {
+            mode = AgentMode.Act;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Parses a colour choice.
+    /// </summary>
+    /// <param name="value">The text to parse, case-insensitively.</param>
+    /// <param name="choice">The choice, when the text names one.</param>
+    /// <returns><see langword="true"/> when the text was understood.</returns>
+    public static bool TryParseColor(string? value, out ColorChoice choice)
+    {
+        choice = ColorChoice.Auto;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var text = value.Trim();
+        if (Is(text, "auto"))
+        {
+            return true;
+        }
+
+        if (Is(text, "always") || Is(text, "on"))
+        {
+            choice = ColorChoice.Always;
+            return true;
+        }
+
+        if (Is(text, "never") || Is(text, "off"))
+        {
+            choice = ColorChoice.Never;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static AgentMode ParseMode(string value) => TryParseMode(value, out var mode)
+        ? mode
+        : throw new CliUsageException($"unknown mode '{value}'.", "Use plan or act.");
+
+    private static ColorChoice ParseColor(string value) => TryParseColor(value, out var choice)
+        ? choice
+        : throw new CliUsageException($"unknown colour mode '{value}'.", "Use auto, always or never.");
+
     private static CliOptions ApplyOption(CliOptions options, string[] args, ref int index, string name)
     {
         switch (name)
@@ -426,6 +505,12 @@ internal sealed record CliOptions
 
             case "--json":
                 return options with { Json = true };
+
+            case "--color":
+                return options with { Color = ParseColor(TakeValue(args, ref index, name)) };
+
+            case "--mode":
+                return options with { Mode = ParseMode(TakeValue(args, ref index, name)) };
 
             case "--quiet":
                 return options with { Quiet = true };

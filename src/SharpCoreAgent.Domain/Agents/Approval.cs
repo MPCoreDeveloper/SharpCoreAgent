@@ -36,7 +36,19 @@ public enum ApprovalOutcome
 /// <param name="Safety">Its safety class, always <see cref="ToolSafety.Destructive"/> here.</param>
 /// <param name="Summary">One line naming the target, so the prompt does not require reading JSON.</param>
 /// <param name="ArgumentsJson">The raw arguments, for the developer who wants the detail.</param>
-public sealed record ToolApprovalRequest(string ToolName, ToolSafety Safety, string Summary, string ArgumentsJson);
+public sealed record ToolApprovalRequest(string ToolName, ToolSafety Safety, string Summary, string ArgumentsJson)
+{
+    /// <summary>
+    /// Gets the change the call would make, rendered for a human, or <see langword="null"/> when the
+    /// tool cannot describe one.
+    /// </summary>
+    /// <remarks>
+    /// A file edit supplies a unified diff here, which is what turns the prompt from "trust this JSON"
+    /// into "read this change". It is optional because a destructive tool without a meaningful preview
+    /// -- deleting a directory, starting a process -- should not pretend to have one.
+    /// </remarks>
+    public string? Preview { get; init; }
+}
 
 /// <summary>
 /// Decides whether a destructive tool may run.

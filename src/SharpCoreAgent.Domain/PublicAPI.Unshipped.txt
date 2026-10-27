@@ -764,3 +764,12 @@ virtual SharpCoreAgent.Domain.Agents.AgentEvent.PrintMembers(System.Text.StringB
 virtual SharpCoreAgent.Domain.Model.ChatStreamEvent.EqualityContract.get -> System.Type!
 virtual SharpCoreAgent.Domain.Model.ChatStreamEvent.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
 virtual SharpCoreAgent.Domain.Model.ChatStreamEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+SharpCoreAgent.Domain.Agents.AgentMode
+SharpCoreAgent.Domain.Agents.AgentMode.Act = 0 -> SharpCoreAgent.Domain.Agents.AgentMode
+SharpCoreAgent.Domain.Agents.AgentMode.Plan = 1 -> SharpCoreAgent.Domain.Agents.AgentMode
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Preview.get -> string?
+SharpCoreAgent.Domain.Agents.ToolApprovalRequest.Preview.init -> void
+SharpCoreAgent.Domain.Text.UnifiedDiff
+SharpCoreAgent.Domain.Tools.IToolPreview
+SharpCoreAgent.Domain.Tools.IToolPreview.DescribeChangeAsync(SharpCoreAgent.Domain.Conversation.ToolCall! toolCall, SharpCoreAgent.Domain.Tools.ToolInvocationContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
+static SharpCoreAgent.Domain.Text.UnifiedDiff.Create(string! path, string! oldText, string! newText, int contextLines = 2, int maxLines = 60) -> string!

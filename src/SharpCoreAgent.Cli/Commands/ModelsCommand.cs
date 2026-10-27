@@ -23,21 +23,23 @@ internal static class ModelsCommand
         ArgumentNullException.ThrowIfNull(cli);
 
         var credentials = new EnvironmentCredentialStore();
+        var theme = CliHost.ThemeFor(cli);
         IReadOnlyList<string> providers = cli.ProviderExplicit ? [cli.Provider] : ModelCatalog.Providers;
 
         foreach (var provider in providers)
         {
             foreach (var model in ModelCatalog.ForProvider(provider))
             {
+                var tools = model.SupportsTools ? "tools=yes" : "tools=no";
                 Console.Out.WriteLine(string.Create(
                     System.Globalization.CultureInfo.InvariantCulture,
-                    $"{model.QualifiedName}  {model.DisplayName}  tools={(model.SupportsTools ? "yes" : "no")}"));
+                    $"{theme.Strong(model.QualifiedName)}  {model.DisplayName}  {theme.Dim(tools)}"));
             }
 
             var names = ModelCatalog.CredentialNames(provider);
             if (names.Count > 0 && !names.Any(credentials.IsConfigured))
             {
-                Console.Out.WriteLine($"note: set {string.Join(" or ", names)} to use {provider}");
+                Console.Out.WriteLine($"{theme.Warning("note:")} set {string.Join(" or ", names)} to use {provider}");
             }
         }
 

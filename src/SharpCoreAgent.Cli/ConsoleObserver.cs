@@ -20,6 +20,7 @@ internal sealed class ConsoleObserver : IAgentObserver
     private readonly TextWriter _error;
     private readonly bool _json;
     private readonly bool _quiet;
+    private readonly AnsiTheme _theme;
     private readonly Dictionary<string, long> _started = new(StringComparer.Ordinal);
     private bool _thinkingOpen;
     private bool _textOpen;
@@ -32,7 +33,8 @@ internal sealed class ConsoleObserver : IAgentObserver
     /// <param name="error">The diagnostics stream, normally <see cref="Console.Error"/>.</param>
     /// <param name="json">Whether to emit JSON lines instead of prose.</param>
     /// <param name="quiet">Whether to suppress thinking deltas, tool lines and the summary.</param>
-    public ConsoleObserver(TextWriter output, TextWriter error, bool json, bool quiet)
+    /// <param name="theme">The palette for glyphs and names; null renders plain text. Ignored when <paramref name="json"/> is set.</param>
+    public ConsoleObserver(TextWriter output, TextWriter error, bool json, bool quiet, AnsiTheme? theme = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
@@ -41,6 +43,7 @@ internal sealed class ConsoleObserver : IAgentObserver
         _error = error;
         _json = json;
         _quiet = quiet;
+        _theme = json ? AnsiTheme.Plain : theme ?? AnsiTheme.Plain;
     }
 
     /// <inheritdoc />
@@ -100,11 +103,11 @@ internal sealed class ConsoleObserver : IAgentObserver
         CloseTextLine();
         if (!_thinkingOpen)
         {
-            _error.Write("· ");
+            _error.Write(_theme.Dim("· "));
             _thinkingOpen = true;
         }
 
-        _error.Write(text);
+        _error.Write(_theme.Dim(text));
     }
 
     private void RenderText(string text)
@@ -151,7 +154,7 @@ internal sealed class ConsoleObserver : IAgentObserver
 
         _output.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
-            $"→ {requested.ToolName}({Compact(requested.ArgumentsJson)})"));
+            $"{_theme.Accent("→")} {_theme.Strong(requested.ToolName)}({_theme.Dim(Compact(requested.ArgumentsJson))})"));
     }
 
     private void RenderFinished(ToolFinished finished)
@@ -182,7 +185,7 @@ internal sealed class ConsoleObserver : IAgentObserver
 
         _output.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
-            $"← {finished.ToolName}: {(finished.IsError ? "error" : "ok")} ({milliseconds:0} ms)"));
+            $"{_theme.Success("←")} {_theme.Strong(finished.ToolName)}: {(finished.IsError ? _theme.Failure("error") : _theme.Success("ok"))} ({_theme.Dim(string.Create(CultureInfo.InvariantCulture, $"{milliseconds:0} ms"))})"));
     }
 
     private void RenderFinished(AgentReport report)
@@ -217,9 +220,9 @@ internal sealed class ConsoleObserver : IAgentObserver
             return;
         }
 
-        _error.WriteLine(string.Create(
+        _error.WriteLine(_theme.Dim(string.Create(
             CultureInfo.InvariantCulture,
-            $"— {Word(report.Outcome)} · {report.Iterations} iteration(s) · {report.Usage}"));
+            $"— {Word(report.Outcome)} · {report.Iterations} iteration(s) · {report.Usage}")));
 
         if (!string.IsNullOrWhiteSpace(report.Detail))
         {

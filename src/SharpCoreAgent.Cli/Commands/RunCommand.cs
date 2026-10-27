@@ -45,8 +45,8 @@ internal static class RunCommand
         // have waited, and the five retrieval tools answer with "missing" for the whole turn.
         await IndexCommand.RefreshAsync(provider, cli, cli.Quiet || cli.Json, Console.Out, cancellationToken).ConfigureAwait(false);
 
-        var session = new AgentSession(workspace!, model, cli.Approval, options.SystemPrompt);
-        var observer = new ConsoleObserver(Console.Out, Console.Error, cli.Json, cli.Quiet || cli.Json);
+        var session = new AgentSession(workspace!, model, cli.Approval, options.SystemPrompt) { Mode = cli.Mode };
+        var observer = new ConsoleObserver(Console.Out, Console.Error, cli.Json, cli.Quiet || cli.Json, CliHost.ThemeFor(cli));
 
         var report = await agent.RunTurnAsync(session, cli.Prompt, observer, cancellationToken).ConfigureAwait(false);
 
@@ -61,7 +61,7 @@ internal static class RunCommand
 
             if (!cli.Json && !cli.Quiet)
             {
-                await Console.Error.WriteLineAsync($"session: {Path.GetFullPath(path)}".AsMemory(), cancellationToken).ConfigureAwait(false);
+                await Console.Error.WriteLineAsync($"{CliHost.ThemeFor(cli).Dim("session:")} {Path.GetFullPath(path)}".AsMemory(), cancellationToken).ConfigureAwait(false);
             }
         }
 

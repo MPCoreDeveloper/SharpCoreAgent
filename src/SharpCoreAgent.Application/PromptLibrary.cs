@@ -19,7 +19,7 @@ public static class PromptLibrary
 
         Operating rules:
         1. Read before you write. Use read_file or search_text to see what a file actually contains; never assume.
-        2. Prefer the smallest edit that accomplishes the task. Do not rewrite a file to change three lines.
+        2. Prefer replace_in_file over write_file: replace the exact fragment you read, and do not rewrite a file to change three lines.
         3. Every path is relative to the workspace root. Paths outside it are rejected, so do not try.
         4. Call one tool when the next step depends on its result; batch only calls that are independent.
         5. After changing code, verify it: run the project's build or tests with run_shell and read the output.
@@ -53,6 +53,23 @@ public static class PromptLibrary
           without a citation is a guess, and the citation is also how the developer checks the claim.
         - If a tool says the index is missing, fall back to read_file or search_text instead of repeating the call, and
           say in your final message that the index was missing.
+        """;
+
+    /// <summary>
+    /// Gets the instruction that turns a turn into a plan.
+    /// </summary>
+    /// <remarks>
+    /// The text is prepended to the transcript for a plan turn rather than appended to
+    /// <see cref="SystemPrompt"/>, because a session can switch modes between turns and the transcript
+    /// must record which rule was in force when each answer was produced.
+    /// </remarks>
+    public const string PlanModeInstruction =
+        """
+        Plan mode:
+        - You may read anything and change nothing. Every write, edit, delete and shell command is refused.
+        - Investigate enough to be specific, then answer with a plan: the files you would change, the change to each, the commands you would run to verify, and the risks.
+        - Do not claim you have made a change. Do not ask for approval to run a tool; describe the step instead.
+        - End with the single sentence the developer would say to start the work.
         """;
 
     /// <summary>

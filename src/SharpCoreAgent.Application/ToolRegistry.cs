@@ -10,6 +10,14 @@ public interface IToolRegistry
     /// <summary>Gets the declarations advertised to the model, ordered by name.</summary>
     IReadOnlyList<ToolDefinition> Definitions { get; }
 
+    /// <summary>Gets every registered tool, ordered by name.</summary>
+    /// <remarks>
+    /// The definitions answer "what may the model call?"; the tools answer "what can this build
+    /// actually do?". Plan mode needs the second: it filters by <see cref="ITool.Safety"/> so the
+    /// advertised list and the enforced list cannot drift apart.
+    /// </remarks>
+    IReadOnlyList<ITool> Tools { get; }
+
     /// <summary>
     /// Finds a tool by the name the model used.
     /// </summary>
@@ -25,6 +33,7 @@ public sealed class ToolRegistry : IToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools;
     private readonly ToolDefinition[] _definitions;
+    private readonly ITool[] _ordered;
 
     /// <summary>
     /// Creates a registry.
@@ -51,10 +60,14 @@ public sealed class ToolRegistry : IToolRegistry
         _definitions = [.. _tools.Values
             .Select(tool => tool.Definition)
             .OrderBy(definition => definition.Name, StringComparer.Ordinal)];
+        _ordered = [.. _tools.Values.OrderBy(tool => tool.Definition.Name, StringComparer.Ordinal)];
     }
 
     /// <inheritdoc />
     public IReadOnlyList<ToolDefinition> Definitions => _definitions;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ITool> Tools => _ordered;
 
     /// <inheritdoc />
     public ITool? Find(string name) => _tools.GetValueOrDefault(name);

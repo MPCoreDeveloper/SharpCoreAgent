@@ -40,6 +40,8 @@ internal static class HelpText
           --session <path>         run, chat   <workspace>/.sharpcoreagent/sessions/<timestamp>.json
           --no-session             run, chat   off         do not write a transcript
           --json                   run, index  off         one JSON object per event, or per index report
+          --color <mode>           all         auto        auto, always, never; auto honours NO_COLOR and pipes
+          --mode <mode>            run, chat   act         plan reads only and answers with a plan
           --quiet                  run, chat   off         no thinking, tool lines or summary
           --verbose                run, chat   off         stack traces for unexpected failures
           --                       run         —           everything after it is part of the prompt
@@ -58,6 +60,7 @@ internal static class HelpText
           SHARPCOREAGENT_PROVIDER      provider used when --provider is absent
           SHARPCOREAGENT_MODEL         model used when --model is absent
           SHARPCOREAGENT_WORKSPACE     workspace used when --workspace is absent
+          NO_COLOR                  any value disables colour, as --color never does
           DEEPSEEK_API_KEY         credential for deepseek
           XAI_API_KEY, GROK_API_KEY  credential for grok, either spelling
           OPENAI_API_KEY           credential for openai-compatible; SHARPCOREAGENT_API_KEY also works
@@ -87,6 +90,8 @@ internal static class HelpText
           /model <id>              switch model, keeping the provider
           /model <provider>:<id>   switch provider and model
           /approval <mode>         readonly, ask or allow; applies to the next tool call
+          /mode <mode>             plan or act; plan refuses every write and answers with a plan
+          /compact [n]             drop old messages, keeping the system prompts and the last n (default 8)
           /usage                   tokens reported per model, and the total
           /files                   files and commands from the last turn
           /session                 where the transcript is being written

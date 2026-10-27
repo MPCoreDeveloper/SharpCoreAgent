@@ -47,7 +47,8 @@ internal static class ChatCommand
         var store = provider.GetRequiredService<ISessionStore>();
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
-        var observer = new ConsoleObserver(Console.Out, Console.Error, json: false, cli.Quiet);
+        var theme = CliHost.ThemeFor(cli);
+        var observer = new ConsoleObserver(Console.Out, Console.Error, json: false, cli.Quiet, theme);
         var path = Path.GetFullPath(
             cli.SessionPath ?? CliOptions.DefaultSessionPath(workspace!.Root, DateTimeOffset.UtcNow));
 
@@ -60,10 +61,10 @@ internal static class ChatCommand
 
         if (!cli.Quiet)
         {
-            await WriteErrorLineAsync($"workspace: {session.Workspace.Root}", scope.ExitToken).ConfigureAwait(false);
+            await WriteErrorLineAsync($"{theme.Dim("workspace:")} {session.Workspace.Root}", scope.ExitToken).ConfigureAwait(false);
         }
 
-        return await RunLoopAsync(provider, cli, scope, session, store, agent, observer, path).ConfigureAwait(false);
+        return await RunLoopAsync(provider, cli, scope, session, store, agent, observer, path, theme).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -77,6 +78,8 @@ internal static class ChatCommand
     /// <param name="agent">The agent that runs a turn.</param>
     /// <param name="observer">Where the turn's events go.</param>
     /// <param name="path">The transcript path, already absolute.</param>
+    /// <param name="theme">The palette the loop's own lines are rendered with.</param>
+
     /// <returns>The process exit code.</returns>
     private static async Task<int> RunLoopAsync(
         IServiceProvider provider,
@@ -86,12 +89,13 @@ internal static class ChatCommand
         ISessionStore store,
         CodingAgent agent,
         IAgentObserver observer,
-        string path)
+        string path,
+        AnsiTheme theme)
     {
         AgentReport? last = null;
         while (true)
         {
-            var line = await ReadLineAsync(session, scope).ConfigureAwait(false);
+            var line = await ReadLineAsync(session, scope, theme).ConfigureAwait(false);
 
             // null is end of input (Ctrl+Z on Windows, Ctrl+D elsewhere) or Ctrl+C at the prompt,
             // which means "leave": there is no turn to abandon.
@@ -107,7 +111,7 @@ internal static class ChatCommand
 
             if (line[0] == '/')
             {
-                var (keepGoing, updated) = HandleCommand(line, session, last, cli, path);
+                var (keepGoing, updated) = HandleCommand(line, session, last, cli, path, theme);
                 if (!keepGoing)
                 {
                     break;
@@ -168,10 +172,13 @@ internal static class ChatCommand
     /// </summary>
     /// <param name="session">The conversation, for the model name in the prompt.</param>
     /// <param name="scope">Cancelled by Ctrl+C, which ends the conversation.</param>
+    /// <param name="theme">The palette for the prompt.</param>
     /// <returns>The trimmed line, or <see langword="null"/> when the developer left.</returns>
-    private static async Task<string?> ReadLineAsync(AgentSession session, CancellationScope scope)
+    private static async Task<string?> ReadLineAsync(AgentSession session, CancellationScope scope, AnsiTheme theme)
     {
-        await WriteErrorAsync($"{session.ActiveModel.QualifiedName} › ", scope.ExitToken).ConfigureAwait(false);
+        await WriteErrorAsync(
+            $"{theme.Dim(session.ActiveModel.QualifiedName)} {theme.Accent("›")} ",
+            scope.ExitToken).ConfigureAwait(false);
         await Console.Error.FlushAsync(scope.ExitToken).ConfigureAwait(false);
 
         try
@@ -264,7 +271,7 @@ internal static class ChatCommand
         {
             // A named but missing transcript starts a new conversation at the same path, so the first
             // turn writes a file the developer already knows how to find.
-            return (new AgentSession(workspace, model, cli.Approval, options.SystemPrompt), ExitCodes.Success);
+            return (new AgentSession(workspace, model, cli.Approval, options.SystemPrompt) { Mode = cli.Mode }, ExitCodes.Success);
         }
 
         var snapshot = await CliHost.TryLoadSessionAsync(store, path, Console.Error).ConfigureAwait(false);
@@ -282,6 +289,7 @@ internal static class ChatCommand
                 ? Workspace.Create(snapshot.WorkspaceRoot)
                 : workspace;
             var session = AgentSession.FromSnapshot(snapshot, resumedWorkspace, resumedModel);
+            session.Mode = cli.Mode;
 
             if (!CliHost.TryEnsureCredentials(resumedModel, credentials, Console.Error))
             {
@@ -312,13 +320,15 @@ internal static class ChatCommand
     /// <param name="last">The most recent turn's report.</param>
     /// <param name="cli">The parsed command line, for the transcript path and quiet flag.</param>
     /// <param name="path">The absolute transcript path.</param>
+    /// <param name="theme">The palette the command's own lines are rendered with.</param>
     /// <returns>Whether to keep reading, and the report <c>/files</c> should describe.</returns>
     private static (bool KeepGoing, AgentReport? Last) HandleCommand(
         string line,
         AgentSession session,
         AgentReport? last,
         CliOptions cli,
-        string path)
+        string path,
+        AnsiTheme theme)
     {
         var space = line.IndexOf(' ', StringComparison.Ordinal);
         var command = space < 0 ? line : line[..space];
@@ -337,7 +347,7 @@ internal static class ChatCommand
 
         if (Is(command, "/model"))
         {
-            SwitchModel(session, argument);
+            SwitchModel(session, argument, theme);
             return (true, last);
         }
 
@@ -346,7 +356,7 @@ internal static class ChatCommand
             if (CliOptions.TryParseApproval(argument, out var mode))
             {
                 session.Approval = mode;
-                Console.Error.WriteLine($"approval: {Name(mode)}");
+                Console.Error.WriteLine($"{theme.Dim("approval:")} {Name(mode)}");
             }
             else
             {
@@ -356,15 +366,43 @@ internal static class ChatCommand
             return (true, last);
         }
 
+        if (Is(command, "/mode"))
+        {
+            if (argument.Length == 0)
+            {
+                Console.Out.WriteLine($"{theme.Dim("mode:")} {Name(session.Mode)}");
+            }
+            else if (CliOptions.TryParseMode(argument, out var mode))
+            {
+                session.Mode = mode;
+                Console.Error.WriteLine($"{theme.Dim("mode:")} {Name(mode)}");
+            }
+            else
+            {
+                Console.Error.WriteLine("usage: /mode plan|act");
+            }
+
+            return (true, last);
+        }
+
+        if (Is(command, "/compact"))
+        {
+            var removed = session.Compact(argument.Length == 0 ? 8 : ParseKeep(argument));
+            Console.Out.WriteLine(removed == 0
+                ? "nothing to compact: the transcript already fits"
+                : $"compacted: dropped {removed} old message(s), kept the system prompts and the last 8");
+            return (true, last);
+        }
+
         if (Is(command, "/usage"))
         {
-            PrintUsage(session);
+            PrintUsage(session, theme);
             return (true, last);
         }
 
         if (Is(command, "/files"))
         {
-            PrintFiles(last);
+            PrintFiles(last, theme);
             return (true, last);
         }
 
@@ -383,17 +421,24 @@ internal static class ChatCommand
     /// </summary>
     /// <param name="session">The conversation to switch.</param>
     /// <param name="argument">The argument, or empty to report the active model.</param>
-    private static void SwitchModel(AgentSession session, string argument)
+    /// <param name="theme">The palette the confirmation is rendered with.</param>
+    private static void SwitchModel(AgentSession session, string argument, AnsiTheme theme)
     {
         if (argument.Length == 0)
         {
-            Console.Out.WriteLine(session.ActiveModel.QualifiedName);
+            Console.Out.WriteLine(theme.Strong(session.ActiveModel.QualifiedName));
             return;
         }
 
         if (ModelCatalog.TryParseQualified(argument, out var qualified))
         {
-            Apply(session, qualified!);
+            Apply(session, qualified!, theme);
+            return;
+        }
+
+        if (ModelCatalog.TryResolveAlias(argument, out var aliasProvider, out var aliasModel))
+        {
+            Apply(session, ModelCatalog.DescriptorFor(aliasProvider, aliasModel), theme);
             return;
         }
 
@@ -406,7 +451,7 @@ internal static class ChatCommand
         // A bare identifier keeps the provider: "/model deepseek-reasoner" while on deepseek.
         try
         {
-            Apply(session, ModelCatalog.DescriptorFor(session.ActiveModel.Provider, argument));
+            Apply(session, ModelCatalog.DescriptorFor(session.ActiveModel.Provider, argument), theme);
         }
         catch (ArgumentException ex)
         {
@@ -414,7 +459,7 @@ internal static class ChatCommand
         }
     }
 
-    private static void Apply(AgentSession session, ModelDescriptor model)
+    private static void Apply(AgentSession session, ModelDescriptor model, AnsiTheme theme)
     {
         if (!model.SupportsTools)
         {
@@ -426,15 +471,15 @@ internal static class ChatCommand
         }
 
         session.SwitchModel(model);
-        Console.Out.WriteLine($"model: {model.QualifiedName}");
+        Console.Out.WriteLine($"{theme.Dim("model:")} {theme.Strong(model.QualifiedName)}");
     }
 
-    private static void PrintUsage(AgentSession session)
+    private static void PrintUsage(AgentSession session, AnsiTheme theme)
     {
         var usage = session.UsageByModel;
         if (usage.Count == 0)
         {
-            Console.Out.WriteLine("no usage reported yet");
+            Console.Out.WriteLine(theme.Dim("no usage reported yet"));
             return;
         }
 
@@ -442,17 +487,17 @@ internal static class ChatCommand
         {
             Console.Out.WriteLine(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{row.ModelId}  {Count(row.InputTokens)} in / {Count(row.OutputTokens)} out  {row.Turns} turn(s)"));
+                $"{theme.Strong(row.ModelId)}  {Count(row.InputTokens)} in / {Count(row.OutputTokens)} out  {theme.Dim(string.Create(CultureInfo.InvariantCulture, $"{row.Turns} turn(s)"))}"));
         }
 
-        Console.Out.WriteLine($"total  {session.TotalUsage}");
+        Console.Out.WriteLine($"{theme.Dim("total")}  {session.TotalUsage}");
     }
 
-    private static void PrintFiles(AgentReport? last)
+    private static void PrintFiles(AgentReport? last, AnsiTheme theme)
     {
         if (last is null)
         {
-            Console.Out.WriteLine("no turn has run yet");
+            Console.Out.WriteLine(theme.Dim("no turn has run yet"));
             return;
         }
 
@@ -460,18 +505,18 @@ internal static class ChatCommand
         var commands = last.CommandsRun;
         if (files.Count == 0 && commands.Count == 0)
         {
-            Console.Out.WriteLine("the last turn changed no files and ran no commands");
+            Console.Out.WriteLine(theme.Dim("the last turn changed no files and ran no commands"));
             return;
         }
 
         foreach (var file in files)
         {
-            Console.Out.WriteLine($"file     {file}");
+            Console.Out.WriteLine($"{theme.Dim("file   ")} {theme.Path(file)}");
         }
 
         foreach (var command in commands)
         {
-            Console.Out.WriteLine($"command  {command}");
+            Console.Out.WriteLine($"{theme.Dim("command")} {command}");
         }
     }
 
@@ -483,6 +528,18 @@ internal static class ChatCommand
         ApprovalMode.AllowAll => "allow",
         _ => "ask",
     };
+
+    private static string Name(AgentMode mode) => mode == AgentMode.Plan ? "plan" : "act";
+
+    /// <summary>
+    /// Reads <c>/compact</c>'s optional window, clamped to a range that keeps a conversation usable.
+    /// </summary>
+    /// <param name="argument">The text after the command; anything unparsable keeps the default.</param>
+    /// <returns>The number of recent messages to keep.</returns>
+    private static int ParseKeep(string argument) =>
+        int.TryParse(argument, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? Math.Clamp(value, 1, 200)
+            : 8;
 
     private static bool Is(string value, string expected) =>
         string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);

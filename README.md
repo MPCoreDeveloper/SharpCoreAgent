@@ -43,6 +43,13 @@ OpenAI-compatible endpoint is reachable through configuration — no rebuild, no
   and enforced, so a confused model cannot spend the night on your account.
 - **Streaming is the default.** Text, reasoning deltas and tool calls arrive as they happen, in
   human-readable form or as one JSON event per line (`--json`).
+- **Colour when it helps, never when it hurts.** Glyphs, tools, paths, timings and diffs are coloured on
+  a terminal; `NO_COLOR`, `--color never` and any redirected stream keep the output plain UTF-8, and
+  `--json` never carries an escape.
+- **Edits are fragments, not rewrites.** `replace_in_file` changes only the text the model matched, and
+  the approval prompt shows a unified diff of the change before the answer is read.
+- **Plan before act.** `--mode plan` (or `/mode plan`) hides every destructive tool and asks for a plan,
+  so a risky change can be reviewed in the same transcript that then carries it out.
 
 ## Requirements
 
@@ -122,6 +129,8 @@ sharpcoreagent --help | --version
 | `--session <path>` | run, chat | `<workspace>/.sharpcoreagent/sessions/<timestamp>.json` |
 | `--no-session` | run, chat | off — write no transcript |
 | `--json` | run, index | off — one JSON object per event, or per index report |
+| `--color <mode>` | run, chat, models | `auto` — `auto`, `always`, `never`; `auto` honours `NO_COLOR`, `TERM=dumb` and redirection |
+| `--mode <mode>` | run, chat | `act` — `plan` advertises and allows only read-only tools |
 | `--quiet` / `--verbose` | run, chat | off / off |
 | `--` | run | everything after it is part of the prompt |
 | `--no-index` | run, chat | off — no index read, write or refresh in this process |
@@ -136,7 +145,8 @@ sharpcoreagent --help | --version
 Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_WORKSPACE`.
 
 In `chat`, the loop understands `/model grok:grok-4` (switch provider and model without losing the
-conversation), `/approval`, `/usage`, `/files`, `/session`, `/help` and `/exit` (or `/quit`).
+conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/approval`, `/mode plan|act`,
+`/compact [n]`, `/usage`, `/files`, `/session`, `/help` and `/exit` (or `/quit`).
 
 Exit codes: `0` turn completed, `1` turn failed, `2` bad command line, `3` missing credential,
 `4` budget exhausted or interrupted, `5` transcript I/O, `6` the index could not be created, written or
@@ -153,7 +163,12 @@ build wants that answer in its control flow.
 
 ## Tools
 
-`list_directory`, `read_file`, `search_text`, `write_file`, `delete_file`, `run_shell`.
+`list_directory`, `read_file`, `search_text`, `write_file`, `replace_in_file`, `delete_file`,
+`run_shell`.
+
+`replace_in_file` is the edit the agent is told to prefer: it replaces an exact fragment and leaves the
+rest of the file byte-identical, refuses an ambiguous match instead of guessing, and offers a unified
+diff to the approval prompt, so `ask` shows the change rather than the arguments.
 
 Five more answer questions about the code itself from the index instead of from the filesystem:
 `search_code` (a question, in words), `find_symbol` (a declaration by name), `find_references`
@@ -185,7 +200,7 @@ passages and 5 284 edges, measured on 2026-10-27 — because every file is hashe
 row by row; a build where nothing changed is 4 s. `run` and `chat` bring the index up to date before
 the turn, bounded by `--index-budget`; when that budget runs out the last complete build stays readable
 and the next run continues where it stopped. `--no-index` turns the whole feature off for one process,
-and the six workspace tools still answer.
+and the seven workspace tools still answer.
 
 `specs/002-code-evidence-index/quickstart.md` is the walkthrough, including the ways the index can
 fail: exit code `6` means it could not be created, written or read, and `state corrupt` means
@@ -253,8 +268,9 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 460 tests — the five retrieval tools, the `index` command and their
-  tests — so the next scan moves both the line count and the percentage. **The gate passes**, including
+  scan; the suite has since grown to 497 tests — the five retrieval tools, the `index` command, the
+  colour palette, fragment edits and plan mode, with the tests that cover them — so the next scan moves
+  both the line count and the percentage. **The gate passes**, including
   new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
   colouring the badge. Setting the repository variable `SONAR_ENFORCE_GATE` to `false` turns that back
@@ -284,7 +300,11 @@ the second duplicates settings that would drift.
   budget-bounded refresh, rebuild, verify, prune), the retrieval pipeline (lexical and vector legs,
   reciprocal-rank fusion, boosts, graph expansion, selection budget), the five retrieval tools
   (`search_code`, `find_symbol`, `find_references`, `code_context`, `index_status`), the `index` command
-  and the agent-facing wiring. The suite is 460 tests, all green, with no compiler warnings.
+  and the agent-facing wiring.
+- `specs/003-terminal-console-agent` — P0–P2 are complete (one ANSI palette with `NO_COLOR` and pipe
+  detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
+  `/compact` and model aliases. The suite is 497 tests, all green, with no compiler warnings. Checkpoints,
+  `--resume`, live-catalogue refresh, `/cost` and MCP are listed in that spec's `tasks.md` as not started.
 
 ## Spec-driven development
 
