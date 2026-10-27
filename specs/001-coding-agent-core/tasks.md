@@ -135,7 +135,7 @@ quickstart has not been walked end to end in one pass.
 - [x] **T090** `README.md` — what it is, providers, quickstart, approval modes, security notes.
 - [x] **T091** Build clean: `dotnet build .\SharpCoreAgent.slnx -c Release` with zero warnings.
 - [x] **T092** `dotnet test` offline, under 60 s.
-- [ ] **T093** Verify quickstart steps 2, 3, 4, 7 and 9 end to end.
+- [x] **T093** Verify quickstart steps 2, 3, 4, 7 and 9 end to end. (2026-10-27: all five re-run on the fallback commit. Three steps were stale and are corrected in `quickstart.md`: step 1's `dotnet test` command passed both a solution and `--project`, which MTP rejects; step 4's expected `models` list predates `deepseek-flash`, `deepseek-v4-pro`, `grok-4.7` and the `note: set … to use …` wording; step 7's iteration-budget case needed `--max-iterations 1`, since the demo now answers on its second call.)
 - [x] **T094** Keep the Principle VII deviation for the Application snapshot recorded in `plan.md`
       (drafted) and referenced under `## Deferred`.
 

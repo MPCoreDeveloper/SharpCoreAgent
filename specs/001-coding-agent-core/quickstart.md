@@ -14,11 +14,13 @@ marked **LIVE**, which spend money and are therefore not part of the automated s
 ```powershell
 cd d:\repos\MPCoreDeveloper\SharpCoreAgent
 dotnet build .\SharpCoreAgent.slnx -c Release
-dotnet test .\SharpCoreAgent.slnx -c Release --project tests\SharpCoreAgent.Tests
+dotnet test .\SharpCoreAgent.slnx -c Release
 ```
 
-Expected: `Build succeeded`, `0 Warning(s)`, `0 Error(s)`, all tests pass, wall clock under 60 s,
-no outbound connection (the test project has no credential and no live URL).
+Expected: `Build succeeded`, `0 Warning(s)`, `0 Error(s)`, all tests pass, wall clock well under a
+minute, no outbound connection (the test project has no credential and no live URL). `dotnet test`
+takes the solution or `--project tests\SharpCoreAgent.Tests`, not both: the two together are rejected
+with "Specify either the project, solution, directory, or test modules option."
 
 ## 2. Prove the loop without credentials
 
@@ -28,7 +30,8 @@ dotnet run --project src\SharpCoreAgent.Cli -- run "list the files in this repos
 
 Expected: `TurnStarted demo:demo-scripted`, one `→ list_directory({})`, a `← list_directory: ok`
 line, a streamed summary naming files that really exist, and an exit code of 0 with a transcript
-written under `.sharpcoreagent/sessions/`.
+written under `.sharpcoreagent/sessions/`. When the index is enabled (the default) the run starts with
+one `index · fresh (N files, M passages, …)` line before the first tool call.
 
 ```powershell
 $LASTEXITCODE   # 0
@@ -51,17 +54,19 @@ dotnet run --project src\SharpCoreAgent.Cli -- models
 dotnet run --project src\SharpCoreAgent.Cli -- models --provider grok
 ```
 
-Expected: `deepseek:deepseek-chat`, `deepseek:deepseek-reasoner  tools=no`, `grok:grok-4`,
-`demo:demo-scripted`, and — when the key is unset — a note reading
-`note: XAI_API_KEY is not set; grok runs will fail until it is`.
+Expected: the four `deepseek:` models (with `tools=no` on `deepseek-reasoner`), the four `grok:`
+models, `openai-compatible:gpt-4o-mini`, and `demo:demo-scripted`; and — for every provider whose key
+is unset — a note reading `note: set XAI_API_KEY or GROK_API_KEY to use grok` (the names are the
+provider's own, joined with `or`).
 
-Interactive switch (**LIVE** for the second half):
+Interactive switch (**LIVE** only for the turn; switching and `/exit` spend nothing):
 
 ```powershell
 dotnet run --project src\SharpCoreAgent.Cli -- chat --provider demo
 > hello                                  # answered by demo:demo-scripted
 > /model grok:grok-4                      # switched, transcript preserved
 > /usage                                  # demo and grok figures listed separately
+> /cost                                   # priced from the dated table; `no price known` where it must be
 > /exit
 ```
 
@@ -89,9 +94,9 @@ DeepSeek-shaped.
 ## 7. Prove the budgets and the guard rails
 
 ```powershell
-# iteration budget
-dotnet run --project src\SharpCoreAgent.Cli -- run "keep listing files" --provider demo --max-iterations 2
-$LASTEXITCODE   # 4, report names "iterations"
+# iteration budget: the demo lists once and then answers, so one call is one too few
+dotnet run --project src\SharpCoreAgent.Cli -- run "keep listing files" --provider demo --max-iterations 1
+$LASTEXITCODE   # 4, report reads "the iteration budget of 1 model calls ran out…"
 
 # path escape is refused, not executed
 dotnet run --project src\SharpCoreAgent.Cli -- run "read ../../Windows/win.ini" --provider demo --approval allow
@@ -99,7 +104,7 @@ dotnet run --project src\SharpCoreAgent.Cli -- run "read ../../Windows/win.ini" 
 # missing credential names the variable, and never prints a value
 $env:DEEPSEEK_API_KEY = ""
 dotnet run --project src\SharpCoreAgent.Cli -- run "hi" --provider deepseek
-$LASTEXITCODE   # 3, message names DEEPSEEK_API_KEY
+$LASTEXITCODE   # 3, message reads "deepseek needs a credential and none is set for deepseek:deepseek-chat. Set DEEPSEEK_API_KEY…"
 ```
 
 ## 8. Resume a session
@@ -126,5 +131,7 @@ Select-String -Path .sharpcoreagent\sessions\*.json -Pattern "Authorization"    
 | exit 3, `DEEPSEEK_API_KEY is not set` | credential missing | export the variable, or use `--provider demo` |
 | exit 2, `unknown provider` | typo | `sharpcoreagent models` lists valid names |
 | `model grok:grok-4 cannot honour this request` | `SupportsTools=false` on the selected model | pick a tool-capable model |
+| `'openai:gpt-4o-mini' is not a fallback this build can use` | `--fallback` named a provider key this build does not serve, or omitted the `provider:` prefix | `sharpcoreagent models` lists the provider keys; the form is `--fallback grok:grok-4.7` |
+| exit 3, `grok needs a credential and none is set for grok:grok-4.7` | `--fallback` names a provider whose key is unset | set the key, or name a fallback you can actually reach — a fallback that cannot start is worse than none |
 | tool refuses a path inside the workspace | symlink resolves outside | move the file into a real directory inside the root |
 | `run_shell` reports a timeout | command exceeded 120 s | raise `timeout_seconds` (max 600) or run the build yourself |
