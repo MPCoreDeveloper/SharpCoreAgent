@@ -86,6 +86,19 @@ provider redirects a retired identifier rather than rejecting it — for those n
 identifiers this build still ships as defaults, `deepseek-chat` and `grok-4`, appear on neither page,
 and nothing on either page promises a redirect for them.
 
+**Re-checked live on 2026-10-27, once a `DEEPSEEK_API_KEY` was in place.** The page says nothing about
+the two identifiers this build used to default to, so they were asked directly rather than read about.
+`deepseek-chat` and `deepseek-reasoner` both answer `200`, and the response body reports
+`"model": "deepseek-flash"`: the provider resolves them as aliases of Flash and bills Flash's price. An
+identifier that exists not at all (`deepseek-nonsense-xyz`) is rejected with `400` — "The supported API
+model names are deepseek-flash, deepseek-v4-pro" — so the redirect is a deliberate alias, not a
+catch-all. Two consequences. The T015 move stands: a default that names an alias is worse than one that
+names the model the alias resolves to. But the framing above of the old default as "a first-run failure
+waiting for the developer who types nothing" was too strong; `deepseek-chat` still answers, it just no
+longer names a model of its own. And `deepseek-reasoner` returned a `tool_calls` payload when asked to
+call a tool — because what answered was Flash, which is the model its `SupportsTools` flag is now
+describing; that flag is the open question in 003 T036.
+
 **T016 decision — the `openai-compatible` default stays `gpt-4o-mini`.** That provider is an endpoint,
 not a vendor: its model identifier is whatever the server behind `--base-url` serves, so no default
 this build could ship would be right more often than this placeholder, and `--model` is the answer.
