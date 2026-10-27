@@ -387,10 +387,11 @@ internal static class ChatCommand
 
         if (Is(command, "/compact"))
         {
-            var removed = session.Compact(argument.Length == 0 ? 8 : ParseKeep(argument));
+            var keep = argument.Length == 0 ? 8 : ParseKeep(argument);
+            var removed = session.Compact(keep);
             Console.Out.WriteLine(removed == 0
                 ? "nothing to compact: the transcript already fits"
-                : $"compacted: dropped {removed} old message(s), kept the system prompts and the last 8");
+                : $"compacted: dropped {removed} old message(s), kept the system prompts and the last {keep}");
             return (true, last);
         }
 
