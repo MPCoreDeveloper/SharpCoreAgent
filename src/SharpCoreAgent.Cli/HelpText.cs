@@ -38,6 +38,7 @@ internal static class HelpText
           --max-total-tokens <n>   run, chat   250000
           --temperature <x>        run, chat   0.2
           --base-url <url>         run, chat   none        required by openai-compatible
+          --credential-file <path> all         none        NAME=value keys, read first; they win over the environment
           --session <path>         run, chat   <workspace>/.sharpcoreagent/sessions/<timestamp>.json
           --no-session             run, chat   off         do not write a transcript
           --json                   run, index  off         one JSON object per event, or per index report
@@ -64,16 +65,20 @@ internal static class HelpText
           SHARPCOREAGENT_PROVIDER      provider used when --provider is absent
           SHARPCOREAGENT_MODEL         model used when --model is absent
           SHARPCOREAGENT_WORKSPACE     workspace used when --workspace is absent
+          SHARPCOREAGENT_CREDENTIAL_FILE  credential file used when --credential-file is absent
           NO_COLOR                  any value disables colour, as --color never does
           DEEPSEEK_API_KEY         credential for deepseek
           XAI_API_KEY, GROK_API_KEY  credential for grok, either spelling
           OPENAI_API_KEY           credential for openai-compatible; SHARPCOREAGENT_API_KEY also works
 
+          A credential file holds one NAME=value per line, with # comments and an optional export
+          prefix; its keys win over the environment, and a blank value counts as unset.
+
         Exit codes
           0  the turn completed and the transcript was written
           1  the turn failed: provider error, tool crash or unexpected exception
           2  the command line could not be understood
-          3  a credential is missing
+          3  a credential is missing, or the credential file cannot be read
           4  a budget ran out, or the developer interrupted the turn
           5  the transcript could not be read or written
           6  the index could not be created, written or read

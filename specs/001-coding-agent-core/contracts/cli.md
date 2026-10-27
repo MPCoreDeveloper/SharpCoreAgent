@@ -25,6 +25,7 @@ sharpcoreagent --help | --version
 | `--max-total-tokens <n>` | run, chat | `250000` | Session token budget |
 | `--temperature <x>` | run, chat | `0.2` | Sampling temperature |
 | `--base-url <url>` | run, chat | — | Required for `openai-compatible` |
+| `--credential-file <path>` | all | — | `NAME=value` keys read before the environment; they win over it |
 | `--session <path>` | run, chat | `.sharpcoreagent/sessions/<timestamp>.json` | Transcript file; `chat` resumes one that exists |
 | `--no-session` | run, chat | — | Do not write a transcript |
 | `--json` | run | — | Emit a machine-readable event stream on stdout |
@@ -33,8 +34,16 @@ sharpcoreagent --help | --version
 
 Parsing rules: options may appear before or after the prompt; `--` ends option parsing; an unknown
 option is a usage error, never ignored; a missing value for an option is a usage error;
-`--provider` values are matched case-insensitively. `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL` and
-`SHARPCOREAGENT_WORKSPACE` are honoured as defaults, with explicit arguments winning.
+`--provider` values are matched case-insensitively. `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`,
+`SHARPCOREAGENT_WORKSPACE` and `SHARPCOREAGENT_CREDENTIAL_FILE` are honoured as defaults, with explicit
+arguments winning.
+
+A credential file holds one `NAME=value` per line. Blank lines and lines starting with `#` are
+ignored, an optional `export ` prefix is dropped, and a value may be wrapped in matching single or
+double quotes; nothing is expanded or escaped. A key in the file wins over the same variable in the
+environment, and a blank value counts as unset. The file is read once per command, and a missing or
+malformed file exits `3` before the first request with a message naming the file and the line — never
+the line's content.
 
 ## Interactive commands (`chat`)
 
@@ -70,7 +79,7 @@ Ctrl+C during a turn cancels the turn and returns to the prompt; a second Ctrl+C
 | 0 | turn completed and the session saved |
 | 1 | turn failed (model error, tool crash, unexpected exception) |
 | 2 | usage error (bad option, missing prompt, unknown provider) |
-| 3 | missing credentials (the message names the environment variable) |
+| 3 | missing credentials, or a credential file that cannot be read (the message names the variable, and the file and line) |
 | 4 | budget exhausted or turn cancelled |
 | 5 | session file could not be written or read |
 

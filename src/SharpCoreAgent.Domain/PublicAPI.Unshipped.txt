@@ -299,6 +299,8 @@ SharpCoreAgent.Domain.Errors.ModelRequestException.Provider.get -> string!
 SharpCoreAgent.Domain.Errors.ModelRequestException.StatusCode.get -> int
 SharpCoreAgent.Domain.Errors.SessionFormatException
 SharpCoreAgent.Domain.Errors.SessionFormatException.SessionFormatException(string! message, System.Exception? innerException = null) -> void
+SharpCoreAgent.Domain.Errors.CredentialFileException
+SharpCoreAgent.Domain.Errors.CredentialFileException.CredentialFileException(string! message, System.Exception? innerException = null) -> void
 SharpCoreAgent.Domain.Errors.SharpCoreAgentException
 SharpCoreAgent.Domain.Errors.SharpCoreAgentException.SharpCoreAgentException(string! message, System.Exception? innerException) -> void
 SharpCoreAgent.Domain.Errors.SharpCoreAgentException.SharpCoreAgentException(string! message) -> void

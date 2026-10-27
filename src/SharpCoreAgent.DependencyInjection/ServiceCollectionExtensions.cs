@@ -87,7 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(options);
         services.AddSingleton(agentOptions);
         services.AddSingleton(descriptor);
-        services.AddSingleton<ICredentialStore>(_ => new EnvironmentCredentialStore());
+        services.AddSingleton<ICredentialStore>(_ => EnvironmentCredentialStore.FromFile(options.CredentialFilePath));
         services.AddSingleton<ISessionStore, JsonFileSessionStore>();
 
         services.AddHttpClient(HttpClientName, client => client.Timeout = options.HttpTimeout);

@@ -38,9 +38,6 @@ internal static class Program
             case CliCommand.Version:
                 await Console.Out.WriteLineAsync(HelpText.VersionLine).ConfigureAwait(false);
                 return ExitCodes.Success;
-
-            case CliCommand.Models:
-                return ModelsCommand.Execute(options);
         }
 
         using var scope = new CancellationScope();
@@ -57,6 +54,11 @@ internal static class Program
             return options.Command switch
             {
                 CliCommand.Run => await RunCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+
+                // `models` reads the same credential store `run` does, so a file it cannot read has to
+                // reach the catch below: it used to be dispatched above, where a bad path crashed the
+                // process instead of exiting 3.
+                CliCommand.Models => ModelsCommand.Execute(options),
                 CliCommand.Index => await IndexCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
                 _ => await ChatCommand.ExecuteAsync(options, scope).ConfigureAwait(false),
             };
@@ -70,6 +72,14 @@ internal static class Program
         {
             await Console.Error.WriteLineAsync("cancelled.").ConfigureAwait(false);
             return ExitCodes.Budget;
+        }
+        catch (CredentialFileException ex)
+        {
+            // A named file that cannot be read is a credential problem, not a usage problem: the
+            // command line was understood, the keys just are not there. Exit 3 is what a script that
+            // retries after "log in" already branches on.
+            await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
+            return ExitCodes.Credentials;
         }
         catch (ModelCredentialException ex)
         {

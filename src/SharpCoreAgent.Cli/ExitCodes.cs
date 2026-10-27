@@ -22,7 +22,7 @@ internal static class ExitCodes
     /// <summary>The command line could not be understood.</summary>
     public const int Usage = 2;
 
-    /// <summary>A provider credential is missing.</summary>
+    /// <summary>A provider credential is missing, or its file cannot be read.</summary>
     public const int Credentials = 3;
 
     /// <summary>A budget ran out, or the developer interrupted the turn.</summary>

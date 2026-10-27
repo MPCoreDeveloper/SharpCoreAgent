@@ -22,7 +22,7 @@ internal static class ModelsCommand
     {
         ArgumentNullException.ThrowIfNull(cli);
 
-        var credentials = new EnvironmentCredentialStore();
+        var credentials = EnvironmentCredentialStore.FromFile(cli.CredentialFile);
         var theme = CliHost.ThemeFor(cli);
         IReadOnlyList<string> providers = cli.ProviderExplicit ? [cli.Provider] : ModelCatalog.Providers;
 

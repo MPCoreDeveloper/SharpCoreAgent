@@ -53,6 +53,17 @@ public sealed record SharpCoreAgentOptions
     public string? BaseUrl { get; init; }
 
     /// <summary>
+    /// Gets the path of a credential file whose keys win over the environment, or <see langword="null"/>
+    /// when the environment is the only source.
+    /// </summary>
+    /// <remarks>
+    /// A path, not a value: the record stays free of secrets, so it can still be printed, logged or
+    /// compared. The file is read when the credential store is resolved, which means a malformed file
+    /// fails the command before the first request instead of halfway through a turn.
+    /// </remarks>
+    public string? CredentialFilePath { get; init; }
+
+    /// <summary>
     /// Gets the model a refused request is replayed at, or <see langword="null"/> when a failed turn is
     /// reported rather than retried elsewhere.
     /// </summary>

@@ -83,6 +83,17 @@ internal sealed record CliOptions
     public string? BaseUrl { get; init; }
 
     /// <summary>
+    /// Gets the path of a credential file, or <see langword="null"/> when the environment is the only
+    /// source.
+    /// </summary>
+    /// <remarks>
+    /// Supplied by <c>--credential-file</c> or <c>SHARPCOREAGENT_CREDENTIAL_FILE</c>. Parsing stores the
+    /// path and reads nothing: whether the file exists is a question for the command that needs a key,
+    /// where the failure can name the file the developer asked for.
+    /// </remarks>
+    public string? CredentialFile { get; init; }
+
+    /// <summary>
     /// Gets the model a turn that failed with 401 or 5xx is replayed at, or null for no fallback.
     /// </summary>
     /// <remarks>
@@ -150,6 +161,7 @@ internal sealed record CliOptions
         MaxTotalTokens = MaxTotalTokens,
         Temperature = Temperature,
         BaseUrl = BaseUrl,
+        CredentialFilePath = CredentialFile,
         Fallback = Fallback,
         IndexEnabled = IndexEnabled,
         IndexBudget = TimeSpan.FromMilliseconds(IndexBudgetMs),
@@ -210,6 +222,7 @@ internal sealed record CliOptions
         ProviderExplicit = Trim(environment("SHARPCOREAGENT_PROVIDER")) is not null,
         Model = Trim(environment("SHARPCOREAGENT_MODEL")),
         Workspace = Trim(environment("SHARPCOREAGENT_WORKSPACE")) ?? Directory.GetCurrentDirectory(),
+        CredentialFile = Trim(environment("SHARPCOREAGENT_CREDENTIAL_FILE")),
     };
 
     /// <summary>
@@ -526,6 +539,9 @@ internal sealed record CliOptions
 
             case "--base-url":
                 return options with { BaseUrl = TakeValue(args, ref index, name) };
+
+            case "--credential-file":
+                return options with { CredentialFile = TakeValue(args, ref index, name) };
 
             case "--fallback":
                 return options with { Fallback = ParseFallback(TakeValue(args, ref index, name)) };

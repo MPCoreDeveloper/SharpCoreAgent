@@ -35,6 +35,23 @@ public sealed class EnvironmentCredentialStore : ICredentialStore
         _readEnvironment = readEnvironment ?? Environment.GetEnvironmentVariable;
     }
 
+    /// <summary>
+    /// Creates a store that reads a credential file, or the environment alone when no file is named.
+    /// </summary>
+    /// <param name="path">
+    /// The file named by <c>--credential-file</c> or <c>SHARPCOREAGENT_CREDENTIAL_FILE</c>, or
+    /// <see langword="null"/> when the environment is the only source.
+    /// </param>
+    /// <returns>
+    /// A store whose configuration is the file: a key in it wins over the same key in the environment.
+    /// </returns>
+    /// <exception cref="Domain.Errors.CredentialFileException">
+    /// The file is missing, unreadable or malformed. It is read here, once, so a bad file fails the
+    /// command before the first request rather than mid-turn.
+    /// </exception>
+    public static EnvironmentCredentialStore FromFile(string? path) =>
+        new(string.IsNullOrWhiteSpace(path) ? null : CredentialFile.Read(path));
+
     /// <inheritdoc />
     public string? Find(string name)
     {

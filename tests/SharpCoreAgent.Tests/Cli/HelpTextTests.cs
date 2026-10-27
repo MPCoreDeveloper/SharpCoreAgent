@@ -93,4 +93,20 @@ public sealed class HelpTextTests
         var seven = "\n  7  ";
         Assert.DoesNotContain(seven, HelpText.Usage, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheUsageBlockDocumentsTheCredentialFile()
+    {
+        // The option exists to remove a restart, so both halves are named: the flag a script passes and
+        // the variable a developer sets once. Exit code 3 is where a bad file is reported, so its row
+        // says so rather than leaving scripts to discover it.
+        Assert.Contains("--credential-file", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("SHARPCOREAGENT_CREDENTIAL_FILE", HelpText.Usage, StringComparison.Ordinal);
+
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.TrimStart().StartsWith("3 ", StringComparison.Ordinal));
+
+        Assert.Contains("credential file", row, StringComparison.Ordinal);
+    }
 }

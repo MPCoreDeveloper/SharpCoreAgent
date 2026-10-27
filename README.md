@@ -97,6 +97,19 @@ dotnet run --project src\SharpCoreAgent.Cli -- chat --provider grok --model grok
 dotnet run --project src\SharpCoreAgent.Cli -- chat --provider deepseek --fallback grok:grok-4.7
 ```
 
+A key in the environment is inherited only by processes started after it was set, so a new editor
+window or a restarted terminal may not see one. A credential file has neither problem, and its keys
+win over the environment when both are present:
+
+```powershell
+# .\.secrets.env, which .gitignore already covers: one NAME=value per line.
+# DEEPSEEK_API_KEY=<your key>
+dotnet run --project src\SharpCoreAgent.Cli -- run "fix the failing test in src" --credential-file .\.secrets.env
+
+# Or name the file once for every future shell and every editor.
+setx SHARPCOREAGENT_CREDENTIAL_FILE "D:\keys\.secrets.env"
+```
+
 ## Providers
 
 | Provider key | Models | Credential |
@@ -340,7 +353,7 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 634 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 666 tests, all green, with no compiler
   warnings.
 - `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
   reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;
@@ -349,6 +362,10 @@ the second duplicates settings that would drift.
   the providers publish — `deepseek-flash` and `grok-4.7` — with the retired identifiers still listed
   so an older transcript resumes on the model it was using. Checkpoints, `--resume` and MCP are listed
   in those specs' `tasks.md` as not started.
+- `specs/005-credential-file` — the second half of principle VIII is implemented: `--credential-file`
+  (or `SHARPCOREAGENT_CREDENTIAL_FILE`) names a `NAME=value` file whose keys win over the environment,
+  which is what makes a key survive a new terminal, a restarted editor and `setx`. A missing or
+  malformed file exits `3` before the first request, naming the file and the line and never echoing it.
 
 ## Spec-driven development
 

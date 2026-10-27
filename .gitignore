@@ -13,8 +13,8 @@ TestResults/
 ## Agent transcripts: they contain prompts, tool output and file contents, and they are per-machine.
 .sharpcoreagent/
 
-## Local credentials. The product reads keys from the environment; this is only a safety net for a
-## developer who insisted on a file.
+## Local credentials. The product reads keys from the environment or from a file named by
+## `--credential-file` / SHARPCOREAGENT_CREDENTIAL_FILE; these patterns keep either out of the repository.
 *.env
 .env
 secrets.json

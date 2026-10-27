@@ -139,6 +139,52 @@ public sealed class ProgramTests
         Assert.Equal(0, result.ExitCode);
     }
 
+    [Fact]
+    public async Task AMissingCredentialFileExitsWithTheCredentialCode()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "keys.env");
+
+        var result = await RunAsync(["models", "--credential-file", path]);
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains(path, result.Error, StringComparison.Ordinal);
+        Assert.Contains("could not be read", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AMalformedCredentialFileNamesTheLineAndNotItsContent()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "keys.env");
+        await File.WriteAllTextAsync(
+            path,
+            "DEEPSEEK_API_KEY sk-not-a-real-key" + Environment.NewLine,
+            TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(
+            ["run", "hi", "--provider", "deepseek", "--workspace", directory.Path, "--credential-file", path, "--no-session"]);
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains("line 1", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-not-a-real-key", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelsFindsTheKeyInTheFileAndPrintsNoNote()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "keys.env");
+        await File.WriteAllLinesAsync(
+            path,
+            ["# rotated today", "DEEPSEEK_API_KEY=sk-not-a-real-key"],
+            TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(["models", "--provider", "deepseek", "--credential-file", path]);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain("note:", result.Out, StringComparison.Ordinal);
+    }
+
     private static async Task<(int ExitCode, string Out, string Error)> RunAsync(string[] args, string? input = null)
     {
         using var console = new ConsoleScope(input ?? string.Empty);
