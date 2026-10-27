@@ -85,10 +85,10 @@ internal static class PassageChunker
                 EndLine = end + 1,
                 Kind = kind,
 
-                // Trimmed at the edges, because the engine does not round-trip surrounding whitespace: a TEXT value
-                // that begins with indentation comes back without it. Hashing what is actually stored is the only way
-                // `verify` can mean anything, and the indentation of the first line is the only thing this costs —
-                // every later line keeps its own.
+                // Trimmed at the edges so the passage is the declaration rather than the indentation in front of
+                // it, and so `verify` hashes exactly the text a reader is shown. This is the chunker's choice, not
+                // a workaround: the engine used to strip surrounding whitespace off a bound TEXT by itself — which
+                // is why trimming was introduced — and 2.1.2 round-trips it (ProseRoundTripTests covers the shape).
                 Text = string.Join('\n', lines.Skip(start).Take(end - start + 1)).Trim(),
                 SymbolKey = declaration?.Key,
                 SymbolName = declaration?.QualifiedName,
