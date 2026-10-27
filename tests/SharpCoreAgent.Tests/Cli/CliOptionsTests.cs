@@ -16,9 +16,9 @@ namespace SharpCoreAgent.Tests.Cli;
 public sealed class CliOptionsTests
 {
     [Fact]
-    public void NoArgumentsAsksForHelp()
+    public void NoArgumentsWithoutATerminalAsksForHelp()
     {
-        var options = CliOptions.Parse([]);
+        var options = CliOptions.Parse([], NoEnvironment, NotInteractive);
 
         Assert.Equal(CliCommand.Help, options.Command);
         Assert.Equal(string.Empty, options.Prompt);
@@ -27,7 +27,7 @@ public sealed class CliOptionsTests
     [Fact]
     public void DefaultsMatchTheContract()
     {
-        var options = CliOptions.Parse([], NoEnvironment);
+        var options = CliOptions.Parse([], NoEnvironment, NotInteractive);
 
         Assert.Equal(CliCommand.Help, options.Command);
         Assert.Equal(ModelCatalog.DefaultProvider, options.Provider);
@@ -283,6 +283,8 @@ public sealed class CliOptionsTests
     }
 
     private static string? NoEnvironment(string name) => null;
+
+    private static bool NotInteractive() => false;
 
 
     private static Func<string, string?> Environment(params (string Name, string Value)[] pairs) =>

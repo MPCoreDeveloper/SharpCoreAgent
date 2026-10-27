@@ -21,11 +21,17 @@ internal static class HelpText
         sharpcoreagent — a coding agent for the terminal
 
         Usage
+          sharpcoreagent [options]                     a session in the current directory
           sharpcoreagent run "<prompt>" [options]      one turn, then exit
           sharpcoreagent chat [options]                interactive loop
           sharpcoreagent models [--provider <name>]    list the models this build knows
           sharpcoreagent index [options]               build, inspect or repair the code index
+          sharpcoreagent config [show|get|set|unset|path]
+                                                       settings, and where each value comes from
           sharpcoreagent --help | --version
+
+          With no command and a terminal on both ends, a session starts. When either stream is
+          redirected there is nobody to prompt, so this usage block is printed instead.
 
         Options
           --provider <name>        run, chat   deepseek    deepseek, grok, openai-compatible, demo
@@ -47,6 +53,23 @@ internal static class HelpText
           --quiet                  run, chat   off         no thinking, tool lines or summary
           --verbose                run, chat   off         stack traces for unexpected failures
           --                       run         —           everything after it is part of the prompt
+
+        Config
+          sharpcoreagent config                     every setting, its value and its source
+          sharpcoreagent config get <name>          one value, alone, for a script
+          sharpcoreagent config set <name> <value>  write it to the settings file
+          sharpcoreagent config unset <name>        remove it; the default applies again
+          sharpcoreagent config path                the settings file in use
+
+          Settings are provider, model, base-url, approval, mode, temperature, max-iterations,
+          max-output-tokens, max-total-tokens and credential-file; each accepts what its flag
+          accepts. The file is %APPDATA%\sharpcoreagent\config.json on Windows and
+          $XDG_CONFIG_HOME/sharpcoreagent/config.json (or ~/.config/sharpcoreagent/config.json)
+          elsewhere; SHARPCOREAGENT_CONFIG names a different one. The command line beats the
+          environment, which beats the file, which beats the built-in default.
+
+          A key never belongs in it: 'config set api-key' is refused, because that file is copied
+          and committed. Use --credential-file for the key and this file for the preferences.
 
         Index options
           --status                 index       off         print coverage and freshness; never writes
@@ -82,6 +105,7 @@ internal static class HelpText
           4  a budget ran out, or the developer interrupted the turn
           5  the transcript could not be read or written
           6  the index could not be created, written or read
+          7  the settings file could not be read, written or understood
 
         Examples
           sharpcoreagent run "summarise what changed in src" --workspace .

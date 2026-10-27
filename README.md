@@ -83,6 +83,14 @@ dotnet run --project src\SharpCoreAgent.Cli -- models
 dotnet run --project src\SharpCoreAgent.Cli -- run "list the files in this repository" --provider demo --approval readonly
 ```
 
+Start a session the way every other agent in a terminal starts one — type the name. With a terminal on
+both ends it opens the interactive loop and says what it is using; with either stream redirected it
+prints the usage block instead, so a script never hangs on a prompt:
+
+```powershell
+dotnet run --project src\SharpCoreAgent.Cli -- --provider demo --workspace .
+```
+
 A live DeepSeek turn, and the same prompt on Grok. Neither names a model, so each runs on the default
 the provider publishes today — `deepseek-flash` and `grok-4.7`:
 
@@ -125,12 +133,36 @@ whether each model accepts tool calls.
 ## Commands and options
 
 ```
+sharpcoreagent [options]                     a session in the current directory
 sharpcoreagent run "<prompt>" [options]      one turn, then exit
 sharpcoreagent chat [options]                interactive loop
 sharpcoreagent models [--provider <name>]    list the models this build knows
 sharpcoreagent index [options]               build, inspect or repair the code index
+sharpcoreagent config [show|get|set|unset|path]   settings, and where each value comes from
 sharpcoreagent --help | --version
 ```
+
+### Settings you keep
+
+Flags describe one invocation; `config` describes this developer. It writes one JSON document —
+`%APPDATA%\sharpcoreagent\config.json` on Windows, `$XDG_CONFIG_HOME/sharpcoreagent/config.json` or
+`~/.config/sharpcoreagent/config.json` elsewhere, or whatever `SHARPCOREAGENT_CONFIG` names:
+
+```powershell
+sharpcoreagent config                              # every setting, its value and its source
+sharpcoreagent config set provider grok
+sharpcoreagent config set approval readonly
+sharpcoreagent config set model grok-4.7
+sharpcoreagent config get provider                 # one value, alone, for a script
+sharpcoreagent config unset approval               # the built-in default applies again
+```
+
+The command line beats the environment, which beats the file, which beats the built-in default, and
+`config show` prints which layer each value came from. The file never holds a key: `config set api-key`
+is refused, because a preferences file is copied and committed — `--credential-file` is where a key
+goes. `config show` reports only whether the provider's credential is *present*, never its value, and a
+file the build cannot apply exits 7 with the key named, so `config set`/`config unset`/`config path`
+keep working on the file that needs repairing.
 
 | Option | Commands | Default |
 |---|---|---|
@@ -144,6 +176,7 @@ sharpcoreagent --help | --version
 | `--max-total-tokens <n>` | run, chat | `250000` |
 | `--temperature <x>` | run, chat | `0.2` |
 | `--base-url <url>` | run, chat | none — required by `openai-compatible` |
+| `--credential-file <path>` | all | none — `NAME=value` keys read first; they win over the environment |
 | `--session <path>` | run, chat | `<workspace>/.sharpcoreagent/sessions/<timestamp>.json` |
 | `--no-session` | run, chat | off — write no transcript |
 | `--json` | run, index | off — one JSON object per event, or per index report |
@@ -313,10 +346,11 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 634 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 708 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
-  its dated price table, `--fallback` and the replay that reports both attempts, and the tests that
-  cover them — so the next scan moves both the line count and
+  its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
+  the settings file and the bare-start rules — and the tests that cover them — so the next scan moves
+  both the line count and
   the percentage. **The gate
   passes**, including
   new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
@@ -353,7 +387,7 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 666 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 708 tests, all green, with no compiler
   warnings.
 - `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
   reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;
@@ -362,10 +396,15 @@ the second duplicates settings that would drift.
   the providers publish — `deepseek-flash` and `grok-4.7` — with the retired identifiers still listed
   so an older transcript resumes on the model it was using. Checkpoints, `--resume` and MCP are listed
   in those specs' `tasks.md` as not started.
-- `specs/005-credential-file` — the second half of principle VIII is implemented: `--credential-file`
-  (or `SHARPCOREAGENT_CREDENTIAL_FILE`) names a `NAME=value` file whose keys win over the environment,
-  which is what makes a key survive a new terminal, a restarted editor and `setx`. A missing or
-  malformed file exits `3` before the first request, naming the file and the line and never echoing it.
+- `specs/005-credential-file` — `--credential-file` (and `SHARPCOREAGENT_CREDENTIAL_FILE`) reads
+  `NAME=value` keys from a file that survives a restart, a new shell and a second machine; its keys win
+  over the environment, a bad file exits 3 naming the file and the line, and `models` uses the same
+  store so both commands agree about whether a key is configured.
+- `specs/006-interactive-start-and-config` — a bare `sharpcoreagent` starts a session when both streams
+  are terminals (and prints the usage block when either is redirected), the session says which model,
+  mode, workspace and transcript it is using before the first prompt, and `config show|get|set|unset|path`
+  keeps this developer's defaults in one JSON document with the layer each value came from. A file the
+  build cannot apply exits 7 and is still repairable from the tool.
 
 ## Spec-driven development
 

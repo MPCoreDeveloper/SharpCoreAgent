@@ -38,6 +38,14 @@ internal static class ExitCodes
     /// </remarks>
     public const int IndexUnavailable = 6;
 
+    /// <summary>The settings file could not be read, written or understood.</summary>
+    /// <remarks>
+    /// Separate from <see cref="Usage"/> because a script that retried a typo would retry a broken file
+    /// forever, and separate from <see cref="Credentials"/> because the two are fixed by different
+    /// people: one by exporting a key, this one by running <c>config unset</c>.
+    /// </remarks>
+    public const int Configuration = 7;
+
     /// <summary>
     /// Maps a turn's outcome onto its exit code.
     /// </summary>

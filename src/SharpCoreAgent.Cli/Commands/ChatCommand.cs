@@ -61,11 +61,64 @@ internal static class ChatCommand
 
         if (!cli.Quiet)
         {
-            await WriteErrorLineAsync($"{theme.Dim("workspace:")} {session.Workspace.Root}", scope.ExitToken).ConfigureAwait(false);
+            if (cli.CommandExplicit)
+            {
+                await WriteErrorLineAsync(WorkspaceLine(session, theme), scope.ExitToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await WriteBannerAsync(session, cli, path, theme, scope.ExitToken).ConfigureAwait(false);
+            }
         }
 
         return await RunLoopAsync(provider, cli, scope, session, store, agent, observer, path, theme).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Says what this session is, before the first prompt.
+    /// </summary>
+    /// <param name="session">The conversation, for the model and the workspace.</param>
+    /// <param name="cli">The command line, for the approval and agent modes.</param>
+    /// <param name="path">The transcript path, already absolute.</param>
+    /// <param name="theme">The palette the chrome is rendered with.</param>
+    /// <param name="cancellationToken">Cancelled when the developer leaves.</param>
+    /// <returns>The pending writes.</returns>
+    /// <remarks>
+    /// Only a session the developer did not ask for by name gets this: someone who typed <c>chat</c> has
+    /// already decided what they wanted, while someone who typed the product name is looking at an
+    /// answer they did not request and needs to know what it is, what it costs and how to leave.
+    /// </remarks>
+    private static async Task WriteBannerAsync(
+        AgentSession session,
+        CliOptions cli,
+        string path,
+        AnsiTheme theme,
+        CancellationToken cancellationToken)
+    {
+        await WriteErrorLineAsync(HelpText.VersionLine, cancellationToken).ConfigureAwait(false);
+        await WriteErrorLineAsync(
+            $"{theme.Dim("model:")} {session.ActiveModel.QualifiedName}  {theme.Dim("approval:")} {Name(cli.Approval)}  {theme.Dim("mode:")} {Name(cli.Mode)}",
+            cancellationToken).ConfigureAwait(false);
+        await WriteErrorLineAsync(WorkspaceLine(session, theme), cancellationToken).ConfigureAwait(false);
+
+        if (cli.SaveSession)
+        {
+            await WriteErrorLineAsync($"{theme.Dim("session:")} {path}", cancellationToken).ConfigureAwait(false);
+        }
+
+        await WriteErrorLineAsync(
+            theme.Dim("Type a request, or /help for the commands; /exit leaves. Ctrl+C cancels a turn."),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Renders the workspace line both session starts share.
+    /// </summary>
+    /// <param name="session">The conversation, for the workspace root.</param>
+    /// <param name="theme">The palette the label is rendered with.</param>
+    /// <returns>The line, without its newline.</returns>
+    private static string WorkspaceLine(AgentSession session, AnsiTheme theme) =>
+        $"{theme.Dim("workspace:")} {session.Workspace.Root}";
 
     /// <summary>
     /// Prompts, runs a turn, saves the transcript — until the developer leaves.

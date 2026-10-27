@@ -128,8 +128,11 @@ internal static class CliHost
             return true;
         }
 
+        // Three routes, because "set the variable" is the least durable one and a developer who just
+        // watched a session refuse to start deserves to know the one that survives a restart.
         error.WriteLine(
-            $"error: {model.Provider} needs a credential and none is set for {model.QualifiedName}. Set {string.Join(" or ", names)} and try again.");
+            $"error: {model.Provider} needs a credential and none is set for {model.QualifiedName}.");
+        error.WriteLine($"hint: set {string.Join(" or ", names)}, or write it to a file as {names[0]}=<key> and pass --credential-file <path>, or run 'sharpcoreagent config set credential-file <path>' once.");
         return false;
     }
 

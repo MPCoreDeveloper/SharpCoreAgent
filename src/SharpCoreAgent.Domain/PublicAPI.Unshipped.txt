@@ -842,4 +842,5 @@ SharpCoreAgent.Domain.Tools.IToolOutputSink.WriteAsync(string! text, System.Thre
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Output.get -> SharpCoreAgent.Domain.Tools.IToolOutputSink?
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Output.init -> void
 static SharpCoreAgent.Domain.Text.FragmentFinder.Find(string! text, string! find) -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Text.FragmentMatch!>!
-
+SharpCoreAgent.Domain.Errors.ConfigurationFileException
+SharpCoreAgent.Domain.Errors.ConfigurationFileException.ConfigurationFileException(string! message, System.Exception? innerException = null) -> void

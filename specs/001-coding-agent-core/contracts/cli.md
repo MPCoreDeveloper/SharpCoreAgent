@@ -6,11 +6,19 @@ no agent logic beyond parsing, rendering and approval prompting.
 ## Synopsis
 
 ```
+sharpcoreagent [options]                     # a session in the current directory (006)
 sharpcoreagent run "<prompt>" [options]      # one turn, then exit
 sharpcoreagent chat [options]                # interactive loop
 sharpcoreagent models [--provider <name>]    # list known models
+sharpcoreagent index [options]               # build, inspect or repair the index (002)
+sharpcoreagent config [show|get|set|unset|path]   # settings and their provenance (006)
 sharpcoreagent --help | --version
 ```
+
+A bare `sharpcoreagent` starts a session only when both standard streams are terminals; with either
+stream redirected it prints the usage block and exits 0, so a script never blocks on a prompt. The
+settings file, its precedence and its exit code are in
+`specs/006-interactive-start-and-config/contracts/cli-config.md`.
 
 ## Options
 
@@ -82,6 +90,8 @@ Ctrl+C during a turn cancels the turn and returns to the prompt; a second Ctrl+C
 | 3 | missing credentials, or a credential file that cannot be read (the message names the variable, and the file and line) |
 | 4 | budget exhausted or turn cancelled |
 | 5 | session file could not be written or read |
+| 6 | the code index could not be created, written or read (002) |
+| 7 | the settings file could not be read, written or understood (006) |
 
 `chat` exits 0 on `/exit` regardless of earlier turn outcomes; the exit code reflects the last turn
 only when the process ends because of that turn.

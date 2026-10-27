@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using SharpCoreAgent.DependencyInjection;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Infrastructure.Providers;
@@ -27,6 +28,28 @@ internal enum CliCommand
 
     /// <summary>Build, inspect or repair the code index.</summary>
     Index,
+
+    /// <summary>Read or write the settings file.</summary>
+    Config,
+}
+
+/// <summary>What <c>config</c> was asked to do.</summary>
+internal enum ConfigAction
+{
+    /// <summary>Print every setting, its value and where the value came from.</summary>
+    Show,
+
+    /// <summary>Print one value.</summary>
+    Get,
+
+    /// <summary>Write one value.</summary>
+    Set,
+
+    /// <summary>Remove one value.</summary>
+    Unset,
+
+    /// <summary>Print the file in use.</summary>
+    Path,
 }
 
 /// <summary>
@@ -42,6 +65,34 @@ internal sealed record CliOptions
 {
     /// <summary>Gets the command.</summary>
     public CliCommand Command { get; init; } = CliCommand.Help;
+
+    /// <summary>
+    /// Gets a value indicating whether the command was typed rather than defaulted.
+    /// </summary>
+    /// <remarks>
+    /// A bare <c>sharpcoreagent</c> starts a session for the same reason <c>chat</c> does, but only a
+    /// developer who typed nothing needs to be told what the session is: the banner explains a
+    /// default, and would be noise in front of a command that already said what it wanted.
+    /// </remarks>
+    public bool CommandExplicit { get; init; } = true;
+
+    /// <summary>Gets which verb <c>config</c> runs. Default <see cref="ConfigAction.Show"/>.</summary>
+    public ConfigAction ConfigAction { get; init; } = ConfigAction.Show;
+
+    /// <summary>Gets the setting <c>config get</c>, <c>set</c> or <c>unset</c> names.</summary>
+    public string? ConfigName { get; init; }
+
+    /// <summary>Gets the value <c>config set</c> writes.</summary>
+    public string? ConfigValue { get; init; }
+
+    /// <summary>
+    /// Gets the settings that were named on this command line, by canonical name.
+    /// </summary>
+    /// <remarks>
+    /// Kept so <c>config show</c> can say which layer a value came from without a second parse: a name
+    /// in this set is here because a flag said so, and a flag beats both the environment and a file.
+    /// </remarks>
+    public IReadOnlySet<string> CommandLineSettings { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>Gets the prompt for <see cref="CliCommand.Run"/>; empty for other commands.</summary>
     public string Prompt { get; init; } = string.Empty;
@@ -186,13 +237,25 @@ internal sealed record CliOptions
     /// </summary>
     /// <param name="args">The arguments, without the program name.</param>
     /// <param name="readEnvironment">The environment reader; defaults to the process environment.</param>
+    /// <param name="isInteractive">The terminal probe; defaults to the process's own console.</param>
+    /// <param name="loadSettings">
+    /// Loads the settings document, or <see langword="null"/> for a process with no settings file. It is
+    /// a loader rather than an instance so the file is only read by the commands that read settings: a
+    /// broken file must not stop <c>config set</c> from repairing it.
+    /// </param>
     /// <returns>The parsed options.</returns>
     /// <exception cref="CliUsageException">An argument is unknown, incomplete or contradictory.</exception>
-    public static CliOptions Parse(string[] args, Func<string, string?>? readEnvironment = null)
+    /// <exception cref="SharpCoreAgent.Domain.Errors.ConfigurationFileException">The settings file cannot be applied.</exception>
+    public static CliOptions Parse(
+        string[] args,
+        Func<string, string?>? readEnvironment = null,
+        Func<bool>? isInteractive = null,
+        Func<CliSettings>? loadSettings = null)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var options = FromEnvironment(readEnvironment ?? Environment.GetEnvironmentVariable);
+        var environment = readEnvironment ?? Environment.GetEnvironmentVariable;
+        var options = FromEnvironment(environment);
 
         // A shell alias may leave the product's former name in front of the command, so `ariadne index` must behave
         // exactly like `sharpcoreagent index`. Only a leading token is dropped, which keeps a prompt that happens to
@@ -202,13 +265,127 @@ internal sealed record CliOptions
             args = args[1..];
         }
 
+        var interactive = isInteractive ?? Terminal.Interactive;
+        CliOptions parsed;
         if (args.Length == 0)
         {
-            return options with { Command = CliCommand.Help };
+            parsed = options with
+            {
+                Command = interactive() ? CliCommand.Chat : CliCommand.Help,
+                CommandExplicit = false,
+            };
+        }
+        else
+        {
+            parsed = ScanArguments(args, options, interactive) with
+            {
+                CommandLineSettings = CommandLineNames(args),
+            };
         }
 
-        return ScanArguments(args, options);
+        return ApplySettings(parsed, loadSettings, environment);
     }
+
+    /// <summary>
+    /// Gets the names <c>config</c> accepts, in the order <c>config show</c> prints them.
+    /// </summary>
+    /// <remarks>
+    /// The list is the flags that describe a developer's defaults rather than one invocation. Everything
+    /// left out (<c>--quiet</c>, <c>--json</c>, <c>--color</c>, <c>--session</c>, the index flags) is a
+    /// property of the run it appears on; a persisted <c>--json</c> would be a bug waiting for the
+    /// developer who pipes one command.
+    /// </remarks>
+    public static IReadOnlyList<string> SettableNames { get; } =
+    [
+        "provider",
+        "model",
+        "base-url",
+        "approval",
+        "mode",
+        "temperature",
+        "max-iterations",
+        "max-output-tokens",
+        "max-total-tokens",
+        "credential-file",
+    ];
+
+    /// <summary>
+    /// Applies one setting to a set of options, through the option parser.
+    /// </summary>
+    /// <param name="options">The options to change.</param>
+    /// <param name="name">A name from <see cref="SettableNames"/>.</param>
+    /// <param name="value">The text the developer or the settings file supplied.</param>
+    /// <returns>The options with that one setting replaced.</returns>
+    /// <exception cref="CliUsageException">The value is one the equivalent flag would reject.</exception>
+    /// <remarks>
+    /// The value is validated by re-entering the scanner with the equivalent flag, so a value that
+    /// arrives from a file and one that arrives on the command line cannot drift apart: there is one
+    /// parser and therefore one set of rules, one message and one range.
+    /// </remarks>
+    public static CliOptions WithSetting(CliOptions options, string name, string value)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var flag = FlagFor(name)
+            ?? throw new CliUsageException(
+                $"'{name}' is not a setting.",
+                $"Settings are {string.Join(", ", SettableNames)}.");
+
+        return Scan([flag, value], options).Options;
+    }
+
+    /// <summary>
+    /// Returns the canonical name of a setting, or throws the reason it is not one.
+    /// </summary>
+    /// <param name="name">The name as the developer typed it, in any case, with either separator.</param>
+    /// <returns>The canonical kebab-case name.</returns>
+    /// <exception cref="CliUsageException">The name is unknown, or is a credential.</exception>
+    /// <remarks>
+    /// A credential is refused with its own message rather than lumped in with the unknown names: the
+    /// developer is not confused about the spelling, they are trying to do something the file must not
+    /// do, and the answer is a different command.
+    /// </remarks>
+    public static string EnsureSettable(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        if (CanonicalName(name) is { } canonical)
+        {
+            return canonical;
+        }
+
+        if (IsCredentialName(NormalizeName(name)))
+        {
+            throw new CliUsageException(
+                $"'{name}' is a credential, and the settings file is not a home for one.",
+                "Put it in a NAME=value file and pass --credential-file, or export it; the settings file is for preferences.");
+        }
+
+        throw new CliUsageException(
+            $"'{name}' is not a setting.",
+            $"Settings are {string.Join(", ", SettableNames)}.");
+    }
+
+    /// <summary>
+    /// Folds a name onto the setting it means.
+    /// </summary>
+    /// <param name="name">The name as written, in any case, with either separator.</param>
+    /// <returns>The canonical kebab-case name, or <see langword="null"/> when it names no setting.</returns>
+    public static string? CanonicalName(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? null
+            : SettableNames.FirstOrDefault(setting =>
+                string.Equals(NormalizeName(setting), NormalizeName(name), StringComparison.Ordinal));
+
+    /// <summary>
+    /// Compares two names without caring about case or separator.
+    /// </summary>
+    /// <param name="left">One name.</param>
+    /// <param name="right">The other.</param>
+    /// <returns><see langword="true"/> when both fold to the same text.</returns>
+    public static bool IsSameName(string left, string right) =>
+        string.Equals(NormalizeName(left), NormalizeName(right), StringComparison.Ordinal);
 
     /// <summary>
     /// Reads the defaults the environment supplies.
@@ -230,9 +407,30 @@ internal sealed record CliOptions
     /// </summary>
     /// <param name="args">The arguments, without the program name.</param>
     /// <param name="options">The options to start from.</param>
+    /// <param name="interactive">The terminal probe, asked only when no command was named.</param>
     /// <returns>The parsed options.</returns>
     /// <exception cref="CliUsageException">An argument is unknown or incomplete.</exception>
-    private static CliOptions ScanArguments(string[] args, CliOptions options)
+    private static CliOptions ScanArguments(string[] args, CliOptions options, Func<bool> interactive)
+    {
+        var (scanned, command, positionals) = Scan(args, options);
+        return Finish(scanned, command, positionals, interactive);
+    }
+
+    /// <summary>
+    /// Walks the arguments, applying options and collecting the command and its positionals.
+    /// </summary>
+    /// <param name="args">The arguments, without the program name.</param>
+    /// <param name="options">The options to start from.</param>
+    /// <returns>The options the flags produced, the command, and the arguments that were not options.</returns>
+    /// <exception cref="CliUsageException">An argument is unknown or incomplete.</exception>
+    /// <remarks>
+    /// Split from <see cref="Finish"/> because a settings value has to travel through the same flag
+    /// handling without deciding a command: <c>--approval ask</c> from a file and from a prompt must be
+    /// validated identically, and only the prompt version gets to name a command.
+    /// </remarks>
+    private static (CliOptions Options, CliCommand? Command, List<string> Positionals) Scan(
+        string[] args,
+        CliOptions options)
     {
         CliCommand? command = null;
         var positionals = new List<string>();
@@ -244,7 +442,7 @@ internal sealed record CliOptions
 
             if (!optionsEnded && TryParseFlag(argument, out var flag))
             {
-                return options with { Command = flag };
+                return (options with { Command = flag }, flag, positionals);
             }
 
             if (!optionsEnded && string.Equals(argument, "--", StringComparison.Ordinal))
@@ -275,7 +473,7 @@ internal sealed record CliOptions
             positionals.Add(argument);
         }
 
-        return Finish(options, command, positionals);
+        return (options, command, positionals);
     }
 
     /// <summary>
@@ -284,16 +482,31 @@ internal sealed record CliOptions
     /// <param name="options">The options the flags produced.</param>
     /// <param name="command">The command, or <see langword="null"/> when none was named.</param>
     /// <param name="positionals">The arguments that were not options.</param>
+    /// <param name="interactive">The terminal probe, which decides what "no command" means.</param>
     /// <returns>The parsed options.</returns>
     /// <exception cref="CliUsageException">The command and its arguments contradict each other.</exception>
-    private static CliOptions Finish(CliOptions options, CliCommand? command, List<string> positionals)
+    private static CliOptions Finish(
+        CliOptions options,
+        CliCommand? command,
+        List<string> positionals,
+        Func<bool> interactive)
     {
         switch (command)
         {
             case null:
+                // Nothing was typed. With a keyboard attached that is a request for a conversation; from
+                // a pipe, a here-document or a CI runner there is nobody to prompt, so it stays an
+                // explanation. A REPL that cannot be typed into is not a REPL, and `sharpcoreagent` in a
+                // script must never block.
+                return options with
+                {
+                    Command = interactive() ? CliCommand.Chat : CliCommand.Help,
+                    CommandExplicit = false,
+                };
+
             case CliCommand.Help:
             case CliCommand.Version:
-                return options with { Command = command ?? CliCommand.Help };
+                return options with { Command = command.Value };
 
             case CliCommand.Run:
                 RejectIndexFlags(options);
@@ -343,6 +556,17 @@ internal sealed record CliOptions
 
                 return options with { Command = CliCommand.Index };
 
+            case CliCommand.Config:
+                RejectIndexFlags(options);
+                if (options.Json)
+                {
+                    throw new CliUsageException(
+                        "--json is only valid with run and index.",
+                        "Use 'sharpcoreagent config get <name>' for one value a script can read.");
+                }
+
+                return FinishConfig(options, positionals);
+
             default:
                 RejectIndexFlags(options);
                 if (positionals.Count > 0)
@@ -353,6 +577,299 @@ internal sealed record CliOptions
                 return options with { Command = CliCommand.Models };
         }
     }
+
+    /// <summary>
+    /// Reads the verb and the arguments of <c>config</c>.
+    /// </summary>
+    /// <param name="options">The options the flags produced.</param>
+    /// <param name="positionals">The arguments after the command.</param>
+    /// <returns>The options with the action and its operands.</returns>
+    /// <exception cref="CliUsageException">The verb is unknown, or its operands do not fit it.</exception>
+    private static CliOptions FinishConfig(CliOptions options, List<string> positionals)
+    {
+        if (positionals.Count == 0)
+        {
+            return options with { Command = CliCommand.Config, ConfigAction = ConfigAction.Show };
+        }
+
+        var rest = positionals.Skip(1).ToList();
+        switch (positionals[0].ToLowerInvariant())
+        {
+            case "show":
+                RejectConfigArguments("show", rest);
+                return options with { Command = CliCommand.Config, ConfigAction = ConfigAction.Show };
+
+            case "path":
+                RejectConfigArguments("path", rest);
+                return options with { Command = CliCommand.Config, ConfigAction = ConfigAction.Path };
+
+            case "get":
+                return options with
+                {
+                    Command = CliCommand.Config,
+                    ConfigAction = ConfigAction.Get,
+                    ConfigName = EnsureSettable(ConfigOperand("get", rest)),
+                };
+
+            case "unset":
+                // Any name is accepted: this is the verb that removes a key a newer build wrote, or a
+                // typo, so it must not be the verb that refuses one.
+                return options with
+                {
+                    Command = CliCommand.Config,
+                    ConfigAction = ConfigAction.Unset,
+                    ConfigName = ConfigOperand("unset", rest),
+                };
+
+            case "set":
+                if (rest.Count < 2)
+                {
+                    throw new CliUsageException(
+                        "config set needs a setting and a value.",
+                        "For example: sharpcoreagent config set approval readonly");
+                }
+
+                return options with
+                {
+                    Command = CliCommand.Config,
+                    ConfigAction = ConfigAction.Set,
+                    ConfigName = EnsureSettable(rest[0]),
+                    ConfigValue = string.Join(' ', rest.Skip(1)).Trim(),
+                };
+
+            default:
+                throw new CliUsageException(
+                    $"'{positionals[0]}' is not a config action.",
+                    "Actions are show, get, set, unset and path.");
+        }
+    }
+
+    /// <summary>
+    /// Refuses an operand on a verb that takes none.
+    /// </summary>
+    /// <param name="verb">The verb, for the message.</param>
+    /// <param name="rest">The operands it was given.</param>
+    /// <exception cref="CliUsageException">There was at least one.</exception>
+    private static void RejectConfigArguments(string verb, List<string> rest)
+    {
+        if (rest.Count > 0)
+        {
+            throw new CliUsageException($"config {verb} does not take '{rest[0]}'.");
+        }
+    }
+
+    /// <summary>
+    /// Takes the one setting name a verb needs.
+    /// </summary>
+    /// <param name="verb">The verb, for the messages.</param>
+    /// <param name="rest">The operands it was given.</param>
+    /// <returns>The name, unchanged.</returns>
+    /// <exception cref="CliUsageException">There was not exactly one operand.</exception>
+    private static string ConfigOperand(string verb, List<string> rest) => rest.Count == 1
+        ? rest[0]
+        : throw new CliUsageException(
+            $"config {verb} needs one setting name.",
+            $"For example: sharpcoreagent config {verb} provider");
+
+    /// <summary>
+    /// Applies the settings file underneath the environment and the command line.
+    /// </summary>
+    /// <param name="options">What the environment and the arguments already decided.</param>
+    /// <param name="loadSettings">The loader, or <see langword="null"/> for no file.</param>
+    /// <param name="environment">The environment reader, which outranks the file.</param>
+    /// <returns>The options a command should run with.</returns>
+    /// <exception cref="ConfigurationFileException">A value in the file is not one this build accepts.</exception>
+    private static CliOptions ApplySettings(
+        CliOptions options,
+        Func<CliSettings>? loadSettings,
+        Func<string, string?> environment)
+    {
+        if (loadSettings is null)
+        {
+            return options;
+        }
+
+        // Help and the version are questions about the build, not about this developer's setup: they must
+        // answer even when the file that says which model to use cannot be read.
+        if (options.Command is CliCommand.Help or CliCommand.Version)
+        {
+            return options;
+        }
+
+        // The verbs that write or locate the file read it as a document only. A value this build cannot
+        // apply must never be the reason its own repair command refuses to run.
+        if (options.Command == CliCommand.Config
+            && options.ConfigAction is ConfigAction.Set or ConfigAction.Unset or ConfigAction.Path)
+        {
+            return options;
+        }
+
+        var settings = loadSettings();
+        if (settings.Values.Count == 0)
+        {
+            return options;
+        }
+
+        var merged = options;
+        foreach (var (rawName, value) in settings.Values)
+        {
+            var name = SettableNameIn(rawName, settings.Path);
+            if (options.CommandLineSettings.Contains(name)
+                || (EnvironmentVariableFor(name) is { } variable && !string.IsNullOrWhiteSpace(environment(variable))))
+            {
+                // A flag the developer typed, or an export in the shell, is a decision about this run: the
+                // file is a default, and a default never beats a decision.
+                continue;
+            }
+
+            try
+            {
+                merged = WithSetting(merged, name, value);
+            }
+            catch (CliUsageException ex)
+            {
+                throw new ConfigurationFileException(
+                    $"the settings file '{settings.Path}' sets '{name}' to a value this build refuses: {ex.Message}",
+                    ex);
+            }
+        }
+
+        EnsureUsable(merged, settings.Path);
+        return merged;
+    }
+
+    /// <summary>
+    /// Canonicalises a name from the file, or reports the file's mistake.
+    /// </summary>
+    /// <param name="rawName">The key as written.</param>
+    /// <param name="path">The file it came from, for the message.</param>
+    /// <returns>The canonical name.</returns>
+    /// <exception cref="ConfigurationFileException">The key names no setting this build has.</exception>
+    private static string SettableNameIn(string rawName, string path)
+    {
+        try
+        {
+            return EnsureSettable(rawName);
+        }
+        catch (CliUsageException ex)
+        {
+            throw new ConfigurationFileException(
+                $"the settings file '{path}' cannot be applied: {ex.Message}",
+                ex);
+        }
+    }
+
+    /// <summary>
+    /// Checks that the file's budgets and temperature describe a session this build can run.
+    /// </summary>
+    /// <param name="options">The merged options.</param>
+    /// <param name="path">The file, for the message.</param>
+    /// <exception cref="ConfigurationFileException">A limit is outside its range.</exception>
+    /// <remarks>
+    /// The ranges live in <c>AgentOptions.Validate</c>, not here: a file that says
+    /// <c>"temperature": "5"</c> would otherwise be accepted at parse time and fail at the first turn,
+    /// where the message no longer knows which file to blame.
+    /// </remarks>
+    private static void EnsureUsable(CliOptions options, string path)
+    {
+        try
+        {
+            options.ToSharpCoreAgentOptions().ToAgentOptions();
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ConfigurationFileException(
+                $"the settings file '{path}' holds a value this build refuses: {ex.Message}",
+                ex);
+        }
+    }
+
+    /// <summary>
+    /// Names the settings that were given as flags.
+    /// </summary>
+    /// <param name="args">The arguments, after the product name was dropped.</param>
+    /// <returns>The canonical names, in no particular order.</returns>
+    private static HashSet<string> CommandLineNames(string[] args)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var argument in args)
+        {
+            if (SettingFor(argument) is { } name)
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
+    private static string? SettingFor(string flag) => flag switch
+    {
+        "--provider" => "provider",
+        "--model" => "model",
+        "--base-url" => "base-url",
+        "--approval" => "approval",
+        "--mode" => "mode",
+        "--temperature" => "temperature",
+        "--max-iterations" => "max-iterations",
+        "--max-output-tokens" => "max-output-tokens",
+        "--max-total-tokens" => "max-total-tokens",
+        "--credential-file" => "credential-file",
+        _ => null,
+    };
+
+    private static string? FlagFor(string name) => name switch
+    {
+        "provider" => "--provider",
+        "model" => "--model",
+        "base-url" => "--base-url",
+        "approval" => "--approval",
+        "mode" => "--mode",
+        "temperature" => "--temperature",
+        "max-iterations" => "--max-iterations",
+        "max-output-tokens" => "--max-output-tokens",
+        "max-total-tokens" => "--max-total-tokens",
+        "credential-file" => "--credential-file",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Folds a setting name to the form two spellings can be compared in.
+    /// </summary>
+    /// <param name="name">The name as written.</param>
+    /// <returns>Its letters and digits, lower-cased.</returns>
+    /// <remarks>
+    /// <c>maxIterations</c>, <c>max-iterations</c> and <c>MAX_ITERATIONS</c> are one setting; refusing
+    /// one of them would be a spelling lesson rather than a configuration.
+    /// </remarks>
+    private static string NormalizeName(string name) =>
+        new([.. name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant)]);
+
+    /// <summary>
+    /// Recognises a name that is a secret rather than a setting.
+    /// </summary>
+    /// <param name="normalized">A name folded by <see cref="NormalizeName"/>.</param>
+    /// <returns><see langword="true"/> when the name is a credential.</returns>
+    private static bool IsCredentialName(string normalized) =>
+        normalized.EndsWith("key", StringComparison.Ordinal)
+        || normalized.EndsWith("secret", StringComparison.Ordinal)
+        || normalized is "token" or "authtoken" or "password"
+        || ModelCatalog.Providers.Any(provider => ModelCatalog
+            .CredentialNames(provider)
+            .Any(name => string.Equals(NormalizeName(name), normalized, StringComparison.Ordinal)));
+
+    /// <summary>
+    /// Names the environment variable that supplies a setting, when one exists.
+    /// </summary>
+    /// <param name="name">The canonical setting name.</param>
+    /// <returns>The variable, or <see langword="null"/> when the environment cannot supply it.</returns>
+    public static string? EnvironmentVariableFor(string name) => name switch
+    {
+        "provider" => "SHARPCOREAGENT_PROVIDER",
+        "model" => "SHARPCOREAGENT_MODEL",
+        "credential-file" => "SHARPCOREAGENT_CREDENTIAL_FILE",
+        _ => null,
+    };
 
     /// <summary>
     /// Rejects the flags that only make sense on <c>index</c> when they appear on a turn command.
@@ -638,6 +1155,11 @@ internal sealed record CliOptions
             return CliCommand.Index;
         }
 
+        if (Is(argument, "config"))
+        {
+            return CliCommand.Config;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -650,7 +1172,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models and index.");
+            "Commands are run, chat, models, index and config.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)

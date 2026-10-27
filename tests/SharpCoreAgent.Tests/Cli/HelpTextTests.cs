@@ -82,16 +82,35 @@ public sealed class HelpTextTests
     }
 
     [Fact]
-    public void TheExitCodeTableRunsFromZeroToSix()
+    public void TheExitCodeTableRunsFromZeroToSeven()
     {
-        for (var code = 0; code <= 6; code++)
+        for (var code = 0; code <= 7; code++)
         {
             var row = string.Create(CultureInfo.InvariantCulture, $"\n  {code}  ");
             Assert.Contains(row, HelpText.Usage, StringComparison.Ordinal);
         }
 
-        var seven = "\n  7  ";
-        Assert.DoesNotContain(seven, HelpText.Usage, StringComparison.Ordinal);
+        var eight = "\n  8  ";
+        Assert.DoesNotContain(eight, HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheExitCodeTableDocumentsTheSettingsFailure()
+    {
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.TrimStart().StartsWith("7 ", StringComparison.Ordinal));
+
+        Assert.Contains("settings file", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheUsageBlockDocumentsTheBareStartAndTheConfigCommand()
+    {
+        Assert.Contains("sharpcoreagent [options]", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("sharpcoreagent config set <name> <value>", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("SHARPCOREAGENT_CONFIG", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("config set api-key", HelpText.Usage, StringComparison.Ordinal);
     }
 
     [Fact]
