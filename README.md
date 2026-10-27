@@ -97,8 +97,8 @@ dotnet run --project src\SharpCoreAgent.Cli -- chat --provider grok --model grok
 
 | Provider key | Models | Credential |
 |---|---|---|
-| `deepseek` | `deepseek-chat` (tools), `deepseek-reasoner` (no tools) | `DEEPSEEK_API_KEY` |
-| `grok` | `grok-4`, `grok-3`, `grok-3-mini` | `XAI_API_KEY` or `GROK_API_KEY` |
+| `deepseek` | `deepseek-chat` (tools), `deepseek-reasoner` (no tools), `deepseek-flash`, `deepseek-v4-pro` | `DEEPSEEK_API_KEY` |
+| `grok` | `grok-4`, `grok-3`, `grok-3-mini`, `grok-4.7` | `XAI_API_KEY` or `GROK_API_KEY` |
 | `openai-compatible` | any model the endpoint serves (`--base-url` required) | `OPENAI_API_KEY`, `SHARPCOREAGENT_OPENAI_COMPATIBLE_API_KEY` or `SHARPCOREAGENT_API_KEY` |
 | `demo` | `demo-scripted` (deterministic, for tests and demos) | none |
 
@@ -146,7 +146,16 @@ Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_
 
 In `chat`, the loop understands `/model grok:grok-4` (switch provider and model without losing the
 conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/approval`, `/mode plan|act`,
-`/compact [n]`, `/usage`, `/files`, `/session`, `/help` and `/exit` (or `/quit`).
+`/compact [n]`, `/usage`, `/cost`, `/files`, `/session`, `/help` and `/exit` (or `/quit`).
+
+`/usage` counts tokens; `/cost` prices them. The price table is one file with one date, printed with
+every report, and each entry names the page it was read from — as of 2026-10-27 that prices
+`deepseek-flash`, `deepseek-v4-pro` and `grok-4.7`. Two rules keep the number honest: a model with no
+published price reports `no price known` rather than `$0.00`, and a provider that reported no usage
+reports `cost unknown`; when no line can be measured at all, the total itself reads `unknown`.
+DeepSeek bills an off-peak and a peak tier with peak at exactly double, and a usage report says
+neither which tier ran nor whether the prompt hit the cache, so the table holds the peak cache-miss
+rate: the report is the ceiling of what the turn could have cost.
 
 Exit codes: `0` turn completed, `1` turn failed, `2` bad command line, `3` missing credential,
 `4` budget exhausted or interrupted, `5` transcript I/O, `6` the index could not be created, written or
@@ -277,9 +286,10 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 576 tests — the five retrieval tools, the `index` command, the
-  colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, with the
-  tests that cover them — so the next scan moves both the line count and the percentage. **The gate
+  scan; the suite has since grown to 609 tests — the five retrieval tools, the `index` command, the
+  colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
+  its dated price table, and the tests that cover them — so the next scan moves both the line count and
+  the percentage. **The gate
   passes**, including
   new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
@@ -315,9 +325,13 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 576 tests, all green, with no compiler
-  warnings. Checkpoints, `--resume`, live-catalogue refresh, `/cost` and MCP are listed in that spec's
-  `tasks.md` as not started.
+  of fragments matched through a four-rung ladder. The suite is 609 tests, all green, with no compiler
+  warnings.
+- `specs/004-spend-and-fallback` — Phase 1 is complete: `/cost` prices the tokens the session reported
+  from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`, and the
+  catalogues gained `deepseek-flash`, `deepseek-v4-pro` and `grok-4.7` so there is something current to
+  price. Checkpoints, `--resume`, provider fallback, the default-model decision and MCP are listed in
+  those specs' `tasks.md` as not started.
 
 ## Spec-driven development
 

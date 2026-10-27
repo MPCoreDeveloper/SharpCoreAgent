@@ -56,6 +56,9 @@ internal static class HelpText
           --embedder <mode>        index       hashed-local  hashed-local; provider and off are not in this build
           --tier <name>            index       lean        lean; rich is not in this build
 
+        Chat
+          /help                    every chat command, including /cost and /usage
+
         Environment
           SHARPCOREAGENT_PROVIDER      provider used when --provider is absent
           SHARPCOREAGENT_MODEL         model used when --model is absent
@@ -93,6 +96,7 @@ internal static class HelpText
           /mode <mode>             plan or act; plan refuses every write and answers with a plan
           /compact [n]             drop old messages, keeping the system prompts and the last n (default 8)
           /usage                   tokens reported per model, and the total
+          /cost                    what the reported tokens cost, from a dated table (peak rate where tiered)
           /files                   files and commands from the last turn
           /session                 where the transcript is being written
           /help                    this list

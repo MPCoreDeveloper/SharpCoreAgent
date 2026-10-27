@@ -52,11 +52,20 @@ public sealed class DeepSeekChatModel : OpenAiCompatibleModelBase
     /// Context windows are the advertised ones. <c>deepseek-reasoner</c> declares
     /// <see cref="ModelDescriptor.SupportsTools"/> false because the provider rejects tool definitions
     /// on that model; the agent turns that into a clear refusal instead of a bad request.
+    /// <para>
+    /// The first two identifiers are the ones this build shipped before the provider's page moved on:
+    /// <c>deepseek-chat</c> is still the default because a transcript records it, and a build that
+    /// could not name it could not resume the sessions it wrote. The two below them are what the
+    /// published model list now contains (1M context, tool calls, thinking by default), added so
+    /// <c>/cost</c> can price a model a developer can actually choose.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
         new(ProviderKey, "deepseek-chat", "DeepSeek Chat", ContextWindow: 128_000),
         new(ProviderKey, "deepseek-reasoner", "DeepSeek Reasoner", ContextWindow: 128_000, SupportsTools: false, EmitsThinking: true),
+        new(ProviderKey, "deepseek-flash", "DeepSeek Flash", ContextWindow: 1_000_000, EmitsThinking: true),
+        new(ProviderKey, "deepseek-v4-pro", "DeepSeek V4 Pro", ContextWindow: 1_000_000, EmitsThinking: true),
     ];
 
     /// <summary>

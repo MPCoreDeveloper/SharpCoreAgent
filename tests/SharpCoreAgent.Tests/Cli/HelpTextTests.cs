@@ -51,6 +51,17 @@ public sealed class HelpTextTests
     }
 
     [Fact]
+    public void TheChatCommandsDocumentTheCostReport()
+    {
+        // `/cost` prints a number a developer plans a session on, so the two qualifiers travel with it:
+        // the table is dated, and it bills the peak rate where a provider has tiers.
+        Assert.Contains("/cost", HelpText.ChatCommands, StringComparison.Ordinal);
+        Assert.Contains("peak rate", HelpText.ChatCommands, StringComparison.Ordinal);
+        Assert.Contains("dated", HelpText.ChatCommands, StringComparison.Ordinal);
+        Assert.Contains("/help", HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheExitCodeTableDocumentsTheIndexFailure()
     {
         var row = Assert.Single(

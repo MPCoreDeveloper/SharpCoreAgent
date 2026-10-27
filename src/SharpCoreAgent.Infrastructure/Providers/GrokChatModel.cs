@@ -50,11 +50,18 @@ public sealed class GrokChatModel : OpenAiCompatibleModelBase
     public static IReadOnlyList<string> CredentialNames { get; } = ["XAI_API_KEY", "GROK_API_KEY"];
 
     /// <summary>Gets the models this adapter knows, in display order.</summary>
+    /// <remarks>
+    /// <c>grok-4</c> stays the default because transcripts and sessions name it; <c>grok-4.7</c> is
+    /// what the provider's model page now lists (500k context, agentic tool calling), added so a
+    /// developer can select and price it. The three older identifiers remain listed because a resumed
+    /// session that used one must still resolve.
+    /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
         new(ProviderKey, "grok-4", "Grok 4", ContextWindow: 256_000),
         new(ProviderKey, "grok-3", "Grok 3", ContextWindow: 131_072),
         new(ProviderKey, "grok-3-mini", "Grok 3 Mini", ContextWindow: 131_072),
+        new(ProviderKey, "grok-4.7", "Grok 4.7", ContextWindow: 500_000),
     ];
 
     /// <summary>

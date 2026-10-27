@@ -401,6 +401,12 @@ internal static class ChatCommand
             return (true, last);
         }
 
+        if (Is(command, "/cost"))
+        {
+            PrintCost(session, theme);
+            return (true, last);
+        }
+
         if (Is(command, "/files"))
         {
             PrintFiles(last, theme);
@@ -493,6 +499,82 @@ internal static class ChatCommand
 
         Console.Out.WriteLine($"{theme.Dim("total")}  {session.TotalUsage}");
     }
+
+    /// <summary>
+    /// Prints <c>/cost</c>: what the tokens reported so far would cost at the prices this build knows.
+    /// </summary>
+    /// <param name="session">The session whose per-model usage is priced.</param>
+    /// <param name="theme">The palette the lines are rendered with.</param>
+    /// <remarks>
+    /// The as-of date is printed before any number, because the number is only as good as the table
+    /// behind it. A line the build cannot price, and a line the provider never measured, say so in
+    /// words: neither is ever rendered as <c>$0.00</c>, which would read as a measurement. The same
+    /// rule applies to the total — it is printed as an amount only when at least one line could be
+    /// priced and measured.
+    /// </remarks>
+    private static void PrintCost(AgentSession session, AnsiTheme theme)
+    {
+        var report = CostReport.Create(session.UsageByModel);
+        if (report.Lines.Count == 0)
+        {
+            Console.Out.WriteLine(theme.Dim("no usage reported yet, so no cost is known"));
+            return;
+        }
+
+        Console.Out.WriteLine(theme.Dim(string.Create(
+            CultureInfo.InvariantCulture,
+            $"prices as of {ModelPricing.AsOf:yyyy-MM-dd}, {ModelPricing.Currency} per million tokens; the peak rate is used where the provider publishes tiers")));
+
+        foreach (var line in report.Lines)
+        {
+            var tokens = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{Count(line.Usage.InputTokens)} in / {Count(line.Usage.OutputTokens)} out");
+
+            Console.Out.WriteLine($"{theme.Strong(line.ModelId)}  {tokens}  {Amount(line, theme)}");
+        }
+
+        var total = report.Measured == 0
+            ? $"{theme.Dim("total")}  {theme.Dim("unknown: no line could be priced and measured")}"
+            : $"{theme.Dim("total")}  {Money(report.Total)}";
+
+        if (!report.IsComplete)
+        {
+            total += theme.Dim(string.Create(
+                CultureInfo.InvariantCulture,
+                $"  partial: {report.Unpriced} model(s) unpriced, {report.UnknownUsage} without reported usage"));
+        }
+
+        Console.Out.WriteLine(total);
+    }
+
+    /// <summary>
+    /// Renders one report line's money, or the reason there is none.
+    /// </summary>
+    /// <param name="line">The line to render.</param>
+    /// <param name="theme">The palette the reason is rendered with.</param>
+    /// <returns>The amount, or a dimmed explanation.</returns>
+    private static string Amount(CostLine line, AnsiTheme theme)
+    {
+        if (!line.IsPriced)
+        {
+            return theme.Dim("no price known");
+        }
+
+        return line.Cost is { } value ? Money(value) : theme.Dim("cost unknown: the provider reported no usage");
+    }
+
+    /// <summary>
+    /// Formats an amount in the table's currency, at the precision a cheap session needs.
+    /// </summary>
+    /// <param name="value">The amount.</param>
+    /// <returns>Four decimals at most, without a trailing-zero tail.</returns>
+    /// <remarks>
+    /// A single turn on a small model costs well under a cent, so two decimals would print
+    /// <c>$0.00</c> for a session that did cost something — the same lie the unknown paths avoid.
+    /// </remarks>
+    private static string Money(decimal value) =>
+        "$" + value.ToString("0.00####", CultureInfo.InvariantCulture);
 
     private static void PrintFiles(AgentReport? last, AnsiTheme theme)
     {
