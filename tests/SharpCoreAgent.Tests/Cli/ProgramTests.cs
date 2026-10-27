@@ -31,7 +31,8 @@ public sealed class ProgramTests
         var result = await RunAsync(["--version"]);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.StartsWith("sharpcoreagent ", result.Out, StringComparison.Ordinal);
+        Assert.StartsWith("Ariadne ", result.Out, StringComparison.Ordinal);
+        Assert.Contains("(SharpCoreAgent)", result.Out, StringComparison.Ordinal);
     }
 
     [Fact]

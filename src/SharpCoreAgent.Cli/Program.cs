@@ -36,7 +36,7 @@ internal static class Program
                 return ExitCodes.Success;
 
             case CliCommand.Version:
-                await Console.Out.WriteLineAsync($"sharpcoreagent {HelpText.Version}").ConfigureAwait(false);
+                await Console.Out.WriteLineAsync(HelpText.VersionLine).ConfigureAwait(false);
                 return ExitCodes.Success;
 
             case CliCommand.Models:
@@ -54,9 +54,12 @@ internal static class Program
         Console.CancelKeyPress += handler;
         try
         {
-            return options.Command == CliCommand.Run
-                ? await RunCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false)
-                : await ChatCommand.ExecuteAsync(options, scope).ConfigureAwait(false);
+            return options.Command switch
+            {
+                CliCommand.Run => await RunCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+                CliCommand.Index => await IndexCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+                _ => await ChatCommand.ExecuteAsync(options, scope).ConfigureAwait(false),
+            };
         }
         catch (CliUsageException ex)
         {

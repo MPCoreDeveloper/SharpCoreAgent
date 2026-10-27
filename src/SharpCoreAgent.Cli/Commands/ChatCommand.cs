@@ -63,12 +63,13 @@ internal static class ChatCommand
             await WriteErrorLineAsync($"workspace: {session.Workspace.Root}", scope.ExitToken).ConfigureAwait(false);
         }
 
-        return await RunLoopAsync(cli, scope, session, store, agent, observer, path).ConfigureAwait(false);
+        return await RunLoopAsync(provider, cli, scope, session, store, agent, observer, path).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Prompts, runs a turn, saves the transcript — until the developer leaves.
     /// </summary>
+    /// <param name="provider">The container the turn runs in.</param>
     /// <param name="cli">The parsed command line.</param>
     /// <param name="scope">The Ctrl+C split between cancelling a turn and leaving.</param>
     /// <param name="session">The conversation, mutated in place.</param>
@@ -78,6 +79,7 @@ internal static class ChatCommand
     /// <param name="path">The transcript path, already absolute.</param>
     /// <returns>The process exit code.</returns>
     private static async Task<int> RunLoopAsync(
+        IServiceProvider provider,
         CliOptions cli,
         CancellationScope scope,
         AgentSession session,
@@ -115,7 +117,7 @@ internal static class ChatCommand
                 continue;
             }
 
-            last = await RunTurnAsync(agent, session, line, observer, scope).ConfigureAwait(false);
+            last = await RunTurnAsync(provider, cli, agent, session, line, observer, scope).ConfigureAwait(false);
 
             if (cli.SaveSession
                 && !await CliHost.TrySaveSessionAsync(store, session, path, Console.Error).ConfigureAwait(false))
@@ -203,13 +205,22 @@ internal static class ChatCommand
     /// <summary>
     /// Runs one turn inside the cancellation scope's turn split.
     /// </summary>
+    /// <param name="provider">The container the turn runs in.</param>
+    /// <param name="cli">The parsed command line, for the index budget.</param>
     /// <param name="agent">The agent that runs the turn.</param>
     /// <param name="session">The conversation to append to.</param>
     /// <param name="prompt">What the developer typed.</param>
     /// <param name="observer">Where the turn's events go.</param>
     /// <param name="scope">Supplies the turn's token and restores the exit split afterwards.</param>
     /// <returns>The turn's report.</returns>
+    /// <remarks>
+    /// The refresh runs here rather than once at startup because a turn can change the workspace: a file written by
+    /// <c>write_file</c> in one turn is stale evidence in the next, and this is the seam that notices. It is silent while
+    /// nothing changed, so a steady session pays one metadata read per turn and prints nothing.
+    /// </remarks>
     private static async Task<AgentReport> RunTurnAsync(
+        IServiceProvider provider,
+        CliOptions cli,
         CodingAgent agent,
         AgentSession session,
         string prompt,
@@ -219,6 +230,8 @@ internal static class ChatCommand
         var turn = scope.BeginTurn();
         try
         {
+            await IndexCommand.RefreshAsync(provider, cli, cli.Quiet, Console.Out, turn).ConfigureAwait(false);
+
             return await agent.RunTurnAsync(session, prompt, observer, turn).ConfigureAwait(false);
         }
         finally

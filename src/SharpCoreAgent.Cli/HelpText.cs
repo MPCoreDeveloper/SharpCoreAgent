@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Globalization;
+using System.Reflection;
 
 namespace SharpCoreAgent.Cli;
 
@@ -23,12 +24,13 @@ internal static class HelpText
           sharpcoreagent run "<prompt>" [options]      one turn, then exit
           sharpcoreagent chat [options]                interactive loop
           sharpcoreagent models [--provider <name>]    list the models this build knows
+          sharpcoreagent index [options]               build, inspect or repair the code index
           sharpcoreagent --help | --version
 
         Options
           --provider <name>        run, chat   deepseek    deepseek, grok, openai-compatible, demo
           --model <id>             run, chat   provider default
-          --workspace <path>       run, chat   current directory
+          --workspace <path>       all         current directory
           --approval <mode>        run, chat   ask         readonly, ask, allow
           --max-iterations <n>     run, chat   24
           --max-output-tokens <n>  run, chat   8000
@@ -37,10 +39,20 @@ internal static class HelpText
           --base-url <url>         run, chat   none        required by openai-compatible
           --session <path>         run, chat   <workspace>/.sharpcoreagent/sessions/<timestamp>.json
           --no-session             run, chat   off         do not write a transcript
-          --json                   run         off         one JSON object per event on stdout
+          --json                   run, index  off         one JSON object per event, or per index report
           --quiet                  run, chat   off         no thinking, tool lines or summary
           --verbose                run, chat   off         stack traces for unexpected failures
           --                       run         —           everything after it is part of the prompt
+
+        Index options
+          --status                 index       off         print coverage and freshness; never writes
+          --rebuild                index       off         delete every row and build from scratch
+          --verify                 index       off         report drift against the workspace; never writes
+          --prune                  index       off         drop rows for files that no longer exist
+          --no-index               run, chat   off         no index read, write or refresh in this process
+          --index-budget <ms>      run, chat   3000        refresh ceiling; 0 keeps reads and stops refresh
+          --embedder <mode>        index       hashed-local  hashed-local; provider and off are not in this build
+          --tier <name>            index       lean        lean; rich is not in this build
 
         Environment
           SHARPCOREAGENT_PROVIDER      provider used when --provider is absent
@@ -57,11 +69,14 @@ internal static class HelpText
           3  a credential is missing
           4  a budget ran out, or the developer interrupted the turn
           5  the transcript could not be read or written
+          6  the index could not be created, written or read
 
         Examples
           sharpcoreagent run "summarise what changed in src" --workspace .
           sharpcoreagent chat --provider grok --model grok-4
           sharpcoreagent models --provider demo
+          sharpcoreagent index --status --json
+          sharpcoreagent index --rebuild --workspace .
           sharpcoreagent run "find the TODO comments" --provider openai-compatible --base-url http://localhost:1234/v1
         """;
 
@@ -81,6 +96,16 @@ internal static class HelpText
 
     /// <summary>Gets the product version, read from the assembly's informational version.</summary>
     public static string Version { get; } = ReadVersion();
+
+    /// <summary>
+    /// Gets the line <c>sharpcoreagent --version</c> prints.
+    /// </summary>
+    /// <remarks>
+    /// The former name leads because a developer who installed it under that name is looking for it here; the current
+    /// one is in parentheses so a bug report quoting the line says both. The line is a property rather than a format
+    /// string in <c>Program</c> so the test that pins its shape pins what is actually printed.
+    /// </remarks>
+    public static string VersionLine { get; } = string.Create(CultureInfo.InvariantCulture, $"Ariadne {Version} (SharpCoreAgent)");
 
     private static string ReadVersion()
     {

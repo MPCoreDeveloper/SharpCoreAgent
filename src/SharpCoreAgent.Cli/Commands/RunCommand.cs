@@ -40,6 +40,11 @@ internal static class RunCommand
 
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
+
+        // Before the first model call, not after: a model that is handed an empty index has no way to know it should
+        // have waited, and the five retrieval tools answer with "missing" for the whole turn.
+        await IndexCommand.RefreshAsync(provider, cli, cli.Quiet || cli.Json, Console.Out, cancellationToken).ConfigureAwait(false);
+
         var session = new AgentSession(workspace!, model, cli.Approval, options.SystemPrompt);
         var observer = new ConsoleObserver(Console.Out, Console.Error, cli.Json, cli.Quiet || cli.Json);
 

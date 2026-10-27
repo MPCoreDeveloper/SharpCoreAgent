@@ -15,6 +15,7 @@
     <ProjectReference Include="..\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
     <ProjectReference Include="..\SharpCoreAgent.Infrastructure\SharpCoreAgent.Infrastructure.csproj" />
     <ProjectReference Include="..\SharpCoreAgent.DependencyInjection\SharpCoreAgent.DependencyInjection.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Indexing\SharpCoreAgent.Indexing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

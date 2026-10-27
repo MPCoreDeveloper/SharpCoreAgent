@@ -58,6 +58,25 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the system prompt override; <see langword="null"/> keeps the built-in one.</summary>
     public string? SystemPrompt { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the code index may be read in this process. Default <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>--no-index</c> clears this, and the composition root then registers no <c>ICodeIndex</c> at all. That is a
+    /// stronger guarantee than a flag the tools check: a tool cannot read, refresh or accidentally create an index file
+    /// that was never given to it, and it answers with the documented "disabled" failure instead.
+    /// </remarks>
+    public bool IndexEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Gets the wall-clock ceiling for the pre-turn index refresh. Default three seconds.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TimeSpan.Zero"/> disables the refresh and keeps every read, which is the setting for a host that
+    /// indexes out of band and does not want a turn to wait for a scan.
+    /// </remarks>
+    public TimeSpan IndexBudget { get; init; } = TimeSpan.FromSeconds(3);
+
     /// <summary>Gets the descriptor for <see cref="Provider"/> and <see cref="ModelId"/>.</summary>
     /// <exception cref="ArgumentException">The provider is not one this build serves.</exception>
     public ModelDescriptor Descriptor => ModelCatalog.DescriptorFor(Provider, ModelId);
@@ -76,7 +95,6 @@ public sealed record SharpCoreAgentOptions
     /// <exception cref="ArgumentOutOfRangeException">A budget is outside its documented range.</exception>
     public AgentOptions ToAgentOptions()
     {
-        var defaults = new AgentOptions();
         return new AgentOptions
         {
             MaxIterations = MaxIterations,
@@ -85,7 +103,9 @@ public sealed record SharpCoreAgentOptions
             MaxToolResultChars = MaxToolResultChars,
             Temperature = Temperature,
             Approval = Approval,
-            SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt) ? defaults.SystemPrompt : SystemPrompt,
+            SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt)
+                ? PromptLibrary.SystemPromptFor(IndexEnabled)
+                : SystemPrompt,
         }.Validate();
     }
 }

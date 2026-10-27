@@ -4,9 +4,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Indexing;
 using SharpCoreAgent.Infrastructure.Credentials;
 using SharpCoreAgent.Infrastructure.Providers;
 using SharpCoreAgent.Infrastructure.Sessions;
@@ -96,6 +98,11 @@ public static class ServiceCollectionExtensions
 
         AddTools(services);
 
+        if (options.IndexEnabled)
+        {
+            AddSharpCoreAgentIndex(services, options);
+        }
+
         // TryAdd, so a host that registered its own approver first is not overruled; a host that
         // registers one afterwards wins because the last registration is the one that resolves.
         services.TryAddSingleton<IToolApprover>(DenyAllApprover.Instance);
@@ -105,12 +112,14 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the six workspace tools and the registry that advertises them.
+    /// Registers the eleven workspace tools and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
     /// The tools are singletons because they are stateless: each call resolves every path through the
-    /// workspace it is handed, so one instance serves every session in the process.
+    /// workspace it is handed, so one instance serves every session in the process. The five index-backed
+    /// tools take an optional <c>ICodeIndex</c>, which the built-in container leaves null when the host
+    /// registered none — that is how <c>--no-index</c> reaches them without a flag they have to check.
     /// </remarks>
     private static void AddTools(IServiceCollection services)
     {
@@ -120,9 +129,49 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, WriteFileTool>();
         services.AddSingleton<ITool, DeleteFileTool>();
         services.AddSingleton<ITool, RunShellCommandTool>();
+        services.AddSingleton<ITool, SearchCodeTool>();
+        services.AddSingleton<ITool, FindSymbolTool>();
+        services.AddSingleton<ITool, FindReferencesTool>();
+        services.AddSingleton<ITool, CodeContextTool>();
+        services.AddSingleton<ITool, IndexStatusTool>();
 
         // Built once from the registered tools; ToolRegistry rejects duplicate names, which turns a
         // copy-pasted registration into a startup failure instead of a model-visible ambiguity.
         services.AddSingleton<IToolRegistry>(provider => new ToolRegistry(provider.GetServices<ITool>()));
+    }
+
+    /// <summary>
+    /// Registers the code index: one handle, two views, and the workspace it describes.
+    /// </summary>
+    /// <param name="services">The container to add to.</param>
+    /// <param name="options">The host's settings; <see cref="SharpCoreAgentOptions.WorkspaceRoot"/> names the tree.</param>
+    /// <returns>The same container, so calls can be chained.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="services"/> or <paramref name="options"/> is null.
+    /// </exception>
+    /// <remarks>
+    /// The handle is a singleton because the index is one file with one writer lock: two instances in one process would
+    /// be two handles on the same lock, and a build could deadlock against itself. Both interfaces resolve to that one
+    /// instance, so a tool and a turn-start refresh share the connection instead of racing for it.
+    /// <para>
+    /// Opening is lazy — standing up this registration creates no directory and reads no file — so a host that never
+    /// indexes anything costs one object.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddSharpCoreAgentIndex(
+        this IServiceCollection services,
+        SharpCoreAgentOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var workspace = options.CreateWorkspace();
+
+        services.AddSingleton(_ => SharpCoreAgentIndex.Open(workspace));
+        services.AddSingleton<ICodeIndex>(provider => provider.GetRequiredService<SharpCoreAgentIndex>());
+        services.AddSingleton<ICodeIndexMaintainer>(provider => provider.GetRequiredService<SharpCoreAgentIndex>());
+        services.AddSingleton(workspace);
+
+        return services;
     }
 }

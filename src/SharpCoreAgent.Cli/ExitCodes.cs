@@ -31,6 +31,13 @@ internal static class ExitCodes
     /// <summary>The transcript could not be read or written.</summary>
     public const int SessionIo = 5;
 
+    /// <summary>The index could not be created, written or read.</summary>
+    /// <remarks>
+    /// The one code this feature adds, and the one a script needs to tell apart from a failed build: retrying a
+    /// permissions problem or a full disk is pointless, while retrying a lock conflict is exactly right.
+    /// </remarks>
+    public const int IndexUnavailable = 6;
+
     /// <summary>
     /// Maps a turn's outcome onto its exit code.
     /// </summary>

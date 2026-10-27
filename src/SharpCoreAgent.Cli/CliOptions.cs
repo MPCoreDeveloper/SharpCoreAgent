@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using SharpCoreAgent.DependencyInjection;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.Cli;
@@ -22,6 +23,9 @@ internal enum CliCommand
 
     /// <summary>List the catalogue.</summary>
     Models,
+
+    /// <summary>Build, inspect or repair the code index.</summary>
+    Index,
 }
 
 /// <summary>
@@ -92,6 +96,30 @@ internal sealed record CliOptions
     /// <summary>Gets a value indicating whether diagnostics are shown.</summary>
     public bool Verbose { get; init; }
 
+    /// <summary>Gets a value indicating whether the index may be read, refreshed or built. <c>--no-index</c> clears it.</summary>
+    public bool IndexEnabled { get; init; } = true;
+
+    /// <summary>Gets the wall-clock ceiling for the pre-turn refresh, in milliseconds. Default 3000; 0 disables it.</summary>
+    public int IndexBudgetMs { get; init; } = 3000;
+
+    /// <summary>Gets the embedder the index uses. Default <see cref="EmbedderKind.Local"/>.</summary>
+    public EmbedderKind Embedder { get; init; } = EmbedderKind.Local;
+
+    /// <summary>Gets the detail tier the index keeps. Default <see cref="IndexTier.Lean"/>.</summary>
+    public IndexTier Tier { get; init; } = IndexTier.Lean;
+
+    /// <summary>Gets a value indicating whether <c>index</c> should print coverage and freshness.</summary>
+    public bool IndexStatus { get; init; }
+
+    /// <summary>Gets a value indicating whether <c>index</c> should throw the index away and build it again.</summary>
+    public bool IndexRebuild { get; init; }
+
+    /// <summary>Gets a value indicating whether <c>index</c> should report drift without writing.</summary>
+    public bool IndexVerify { get; init; }
+
+    /// <summary>Gets a value indicating whether <c>index</c> should drop rows for vanished files.</summary>
+    public bool IndexPrune { get; init; }
+
     /// <summary>Projects the command line onto the container's options.</summary>
     /// <returns>The options <c>AddSharpCoreAgent</c> consumes.</returns>
     public SharpCoreAgentOptions ToSharpCoreAgentOptions() => new()
@@ -105,6 +133,8 @@ internal sealed record CliOptions
         MaxTotalTokens = MaxTotalTokens,
         Temperature = Temperature,
         BaseUrl = BaseUrl,
+        IndexEnabled = IndexEnabled,
+        IndexBudget = TimeSpan.FromMilliseconds(IndexBudgetMs),
     };
 
     /// <summary>
@@ -133,6 +163,14 @@ internal sealed record CliOptions
         ArgumentNullException.ThrowIfNull(args);
 
         var options = FromEnvironment(readEnvironment ?? Environment.GetEnvironmentVariable);
+
+        // A shell alias may leave the product's former name in front of the command, so `ariadne index` must behave
+        // exactly like `sharpcoreagent index`. Only a leading token is dropped, which keeps a prompt that happens to
+        // start with the word intact.
+        if (args.Length > 0 && Is(args[0], "ariadne"))
+        {
+            args = args[1..];
+        }
 
         if (args.Length == 0)
         {
@@ -227,6 +265,7 @@ internal sealed record CliOptions
                 return options with { Command = command ?? CliCommand.Help };
 
             case CliCommand.Run:
+                RejectIndexFlags(options);
                 var prompt = string.Join(' ', positionals).Trim();
                 if (prompt.Length == 0)
                 {
@@ -238,6 +277,7 @@ internal sealed record CliOptions
                 return options with { Command = CliCommand.Run, Prompt = prompt };
 
             case CliCommand.Chat:
+                RejectIndexFlags(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException(
@@ -252,13 +292,53 @@ internal sealed record CliOptions
 
                 return options with { Command = CliCommand.Chat };
 
+            case CliCommand.Index:
+                if (positionals.Count > 0)
+                {
+                    throw new CliUsageException(
+                        $"index does not take '{positionals[0]}'.",
+                        "Use --status, --rebuild, --verify or --prune.");
+                }
+
+                if (!options.IndexEnabled)
+                {
+                    throw new CliUsageException("the index command always uses the index.");
+                }
+
+                if (options.IndexRebuild && (options.IndexStatus || options.IndexVerify || options.IndexPrune))
+                {
+                    throw new CliUsageException("--rebuild cannot be combined with --status, --verify or --prune.");
+                }
+
+                return options with { Command = CliCommand.Index };
+
             default:
+                RejectIndexFlags(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException($"models does not take '{positionals[0]}'.");
                 }
 
                 return options with { Command = CliCommand.Models };
+        }
+    }
+
+    /// <summary>
+    /// Rejects the flags that only make sense on <c>index</c> when they appear on a turn command.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">One of the index action flags was given.</exception>
+    /// <remarks>
+    /// Silently ignoring <c>--rebuild</c> on <c>run</c> would be the worst outcome: the developer would believe the
+    /// index was rebuilt and read stale answers for the rest of the session.
+    /// </remarks>
+    private static void RejectIndexFlags(CliOptions options)
+    {
+        if (options.IndexStatus || options.IndexRebuild || options.IndexVerify || options.IndexPrune)
+        {
+            throw new CliUsageException(
+                "--status, --rebuild, --verify and --prune belong to the index command.",
+                "For example: sharpcoreagent index --verify");
         }
     }
 
@@ -353,6 +433,30 @@ internal sealed record CliOptions
             case "--verbose":
                 return options with { Verbose = true };
 
+            case "--no-index":
+                return options with { IndexEnabled = false };
+
+            case "--index-budget":
+                return options with { IndexBudgetMs = ParseBudget(name, TakeValue(args, ref index, name)) };
+
+            case "--embedder":
+                return options with { Embedder = ParseEmbedder(TakeValue(args, ref index, name)) };
+
+            case "--tier":
+                return options with { Tier = ParseTier(TakeValue(args, ref index, name)) };
+
+            case "--status":
+                return options with { IndexStatus = true };
+
+            case "--rebuild":
+                return options with { IndexRebuild = true };
+
+            case "--verify":
+                return options with { IndexVerify = true };
+
+            case "--prune":
+                return options with { IndexPrune = true };
+
             default:
                 throw new CliUsageException(
                     $"unknown option '{name}'.",
@@ -395,6 +499,11 @@ internal sealed record CliOptions
             return CliCommand.Models;
         }
 
+        if (Is(argument, "index"))
+        {
+            return CliCommand.Index;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -407,7 +516,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat and models.");
+            "Commands are run, chat, models and index.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)
@@ -455,6 +564,73 @@ internal sealed record CliOptions
         }
 
         return parsed;
+    }
+
+    /// <summary>
+    /// Parses the refresh budget, which may be zero but never negative.
+    /// </summary>
+    /// <param name="name">The option name, used in the error message.</param>
+    /// <param name="value">The text to parse.</param>
+    /// <returns>The budget in milliseconds.</returns>
+    /// <exception cref="CliUsageException">The text is not a whole number, or is negative.</exception>
+    private static int ParseBudget(string name, string value)
+    {
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) || parsed < 0)
+        {
+            throw new CliUsageException(
+                $"option '{name}' needs a whole number of milliseconds, zero or greater, but got '{value}'.");
+        }
+
+        return parsed;
+    }
+
+    /// <summary>
+    /// Parses the embedder mode.
+    /// </summary>
+    /// <param name="value">The text to parse, case-insensitively.</param>
+    /// <returns>The embedder.</returns>
+    /// <exception cref="CliUsageException">The text names no mode this build knows.</exception>
+    private static EmbedderKind ParseEmbedder(string value)
+    {
+        if (Is(value, "hashed-local") || Is(value, "local"))
+        {
+            return EmbedderKind.Local;
+        }
+
+        if (Is(value, "provider"))
+        {
+            return EmbedderKind.Provider;
+        }
+
+        if (Is(value, "off"))
+        {
+            return EmbedderKind.Off;
+        }
+
+        throw new CliUsageException(
+            $"unknown embedder '{value}'.",
+            "Use hashed-local, provider or off.");
+    }
+
+    /// <summary>
+    /// Parses the detail tier.
+    /// </summary>
+    /// <param name="value">The text to parse, case-insensitively.</param>
+    /// <returns>The tier.</returns>
+    /// <exception cref="CliUsageException">The text names no tier this build knows.</exception>
+    private static IndexTier ParseTier(string value)
+    {
+        if (Is(value, "lean"))
+        {
+            return IndexTier.Lean;
+        }
+
+        if (Is(value, "rich"))
+        {
+            return IndexTier.Rich;
+        }
+
+        throw new CliUsageException($"unknown tier '{value}'.", "Use lean or rich.");
     }
 
     private static string NormalizeProvider(string? provider)
