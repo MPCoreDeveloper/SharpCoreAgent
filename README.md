@@ -83,14 +83,15 @@ dotnet run --project src\SharpCoreAgent.Cli -- models
 dotnet run --project src\SharpCoreAgent.Cli -- run "list the files in this repository" --provider demo --approval readonly
 ```
 
-A live DeepSeek turn, and the same prompt on Grok:
+A live DeepSeek turn, and the same prompt on Grok. Neither names a model, so each runs on the default
+the provider publishes today — `deepseek-flash` and `grok-4.7`:
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "<your key>"
-dotnet run --project src\SharpCoreAgent.Cli -- run "fix the failing test in src" --provider deepseek --model deepseek-chat
+dotnet run --project src\SharpCoreAgent.Cli -- run "fix the failing test in src" --provider deepseek
 
 $env:XAI_API_KEY = "<your key>"
-dotnet run --project src\SharpCoreAgent.Cli -- chat --provider grok --model grok-4
+dotnet run --project src\SharpCoreAgent.Cli -- chat --provider grok --model grok-4.7
 
 # DeepSeek now, Grok if DeepSeek returns 401 or 5xx: both keys must be set.
 dotnet run --project src\SharpCoreAgent.Cli -- chat --provider deepseek --fallback grok:grok-4.7
@@ -100,8 +101,8 @@ dotnet run --project src\SharpCoreAgent.Cli -- chat --provider deepseek --fallba
 
 | Provider key | Models | Credential |
 |---|---|---|
-| `deepseek` | `deepseek-chat` (tools), `deepseek-reasoner` (no tools), `deepseek-flash`, `deepseek-v4-pro` | `DEEPSEEK_API_KEY` |
-| `grok` | `grok-4`, `grok-3`, `grok-3-mini`, `grok-4.7` | `XAI_API_KEY` or `GROK_API_KEY` |
+| `deepseek` | `deepseek-flash` (default), `deepseek-v4-pro`, `deepseek-chat`, `deepseek-reasoner` (no tools) | `DEEPSEEK_API_KEY` |
+| `grok` | `grok-4.7` (default), `grok-4`, `grok-3`, `grok-3-mini` | `XAI_API_KEY` or `GROK_API_KEY` |
 | `openai-compatible` | any model the endpoint serves (`--base-url` required) | `OPENAI_API_KEY`, `SHARPCOREAGENT_OPENAI_COMPATIBLE_API_KEY` or `SHARPCOREAGENT_API_KEY` |
 | `demo` | `demo-scripted` (deterministic, for tests and demos) | none |
 
@@ -299,7 +300,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 628 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 634 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, and the tests that
   cover them — so the next scan moves both the line count and
@@ -339,15 +340,15 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 628 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 634 tests, all green, with no compiler
   warnings.
-- `specs/004-spend-and-fallback` — Phase 1 and Phase 2 are complete: `/cost` prices the tokens the
-  session reported from a dated table that prints `no price known` (and `total unknown`) rather than
-  `$0.00`, the catalogues gained `deepseek-flash`, `deepseek-v4-pro` and `grok-4.7` so there is
-  something current to price, and `--fallback provider:model` replays a 401 or 5xx turn once at a model
-  the developer named, recording both attempts and billing the answer to the model that gave it.
-  Checkpoints, `--resume`, the default-model decisions and MCP are listed in those specs' `tasks.md` as
-  not started.
+- `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
+  reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;
+  `--fallback provider:model` replays a 401 or 5xx turn once at a model the developer named, recording
+  both attempts and billing the answer to the model that gave it; and the defaults are now the models
+  the providers publish — `deepseek-flash` and `grok-4.7` — with the retired identifiers still listed
+  so an older transcript resumes on the model it was using. Checkpoints, `--resume` and MCP are listed
+  in those specs' `tasks.md` as not started.
 
 ## Spec-driven development
 

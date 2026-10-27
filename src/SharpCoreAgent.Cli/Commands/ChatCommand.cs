@@ -451,7 +451,7 @@ internal static class ChatCommand
 
         if (argument.Contains(':', StringComparison.Ordinal))
         {
-            Console.Error.WriteLine($"unknown model '{argument}'. Name a known provider, for example grok:grok-4.");
+            Console.Error.WriteLine($"unknown model '{argument}'. Name a known provider, for example grok:grok-4.7.");
             return;
         }
 

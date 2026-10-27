@@ -74,7 +74,7 @@ dotnet run --project src\SharpCoreAgent.Cli -- chat --provider demo
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "<your key>"
-dotnet run --project src\SharpCoreAgent.Cli -- run "create src/demo/Hello.cs printing 'hi' and run the build" --provider deepseek --model deepseek-chat --approval ask
+dotnet run --project src\SharpCoreAgent.Cli -- run "create src/demo/Hello.cs printing 'hi' and run the build" --provider deepseek --model deepseek-flash --approval ask
 ```
 
 Expected: streamed reasoning-free text, a `write_file` approval prompt (answer `y`), a
@@ -85,10 +85,10 @@ Expected: streamed reasoning-free text, a `write_file` approval prompt (answer `
 
 ```powershell
 $env:XAI_API_KEY = "<your key>"
-dotnet run --project src\SharpCoreAgent.Cli -- run "list the top-level directories" --provider grok --model grok-4 --approval readonly
+dotnet run --project src\SharpCoreAgent.Cli -- run "list the top-level directories" --provider grok --model grok-4.7 --approval readonly
 ```
 
-Expected: identical tool behaviour, `grok:grok-4` in the report — proof the port is not
+Expected: identical tool behaviour, `grok:grok-4.7` in the report — proof the port is not
 DeepSeek-shaped.
 
 ## 7. Prove the budgets and the guard rails

@@ -29,7 +29,7 @@ internal static class HelpText
 
         Options
           --provider <name>        run, chat   deepseek    deepseek, grok, openai-compatible, demo
-          --model <id>             run, chat   provider default
+          --model <id>             run, chat   provider default (deepseek-flash, grok-4.7)
           --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
           --approval <mode>        run, chat   ask         readonly, ask, allow
@@ -80,7 +80,7 @@ internal static class HelpText
 
         Examples
           sharpcoreagent run "summarise what changed in src" --workspace .
-          sharpcoreagent chat --provider grok --model grok-4
+          sharpcoreagent chat --provider grok --model grok-4.7
           sharpcoreagent models --provider demo
           sharpcoreagent index --status --json
           sharpcoreagent index --rebuild --workspace .

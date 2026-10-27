@@ -53,7 +53,7 @@ pass has a real list rather than a memory.
 
 - [X] T035 Add `ModelCatalog.TryResolveAlias` (`ds`, `r1`/`reasoner`, `grok`/`g4`, `g3`) and resolve aliases before bare identifiers in `/model`.
 - [ ] T036 Re-verify `deepseek-reasoner` tool-call support against the live API and flip `SupportsTools` if it changed. (2026-10-27: the provider's model page no longer lists the identifier at all, so this needs a credential and a request, not a documentation read — see `004/research.md`.)
-- [ ] T037 Refresh both catalogues against the providers' current model lists, with a test that pins the identifiers. (Half done in `004`: `deepseek-flash`, `deepseek-v4-pro` and `grok-4.7` are listed and pinned by tests; whether the *defaults* move is `004` T015.)
+- [ ] T037 Refresh both catalogues against the providers' current model lists, with a test that pins the identifiers. (Done in `004` for the identifiers and the defaults: `deepseek-flash`, `deepseek-v4-pro` and `grok-4.7` are listed and pinned, the retired identifiers stay listed so transcripts resume, and `004` T015 moved both defaults to the current models. What remains here is a live re-check after the next provider revision.)
 - [X] T038 Add `/cost` backed by per-model prices, or state in the help that no price is known. (Done in `004-spend-and-fallback`: a dated table that prints `no price known` where it has nothing, and never `$0.00`.)
 - [X] T039 Add an explicit fallback chain for 401/5xx (`--fallback grok:grok-4`) that records both attempts in the report. (Done in `004-spend-and-fallback`: `--fallback provider:model` replays 401/5xx once, `FallbackChatModel` reports both attempts through `AgentReport.Fallbacks`, and the answering model is what `/cost` bills.)
 

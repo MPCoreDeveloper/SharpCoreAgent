@@ -92,17 +92,18 @@ this build could ship would be right more often than this placeholder, and `--mo
 The pricing half of the question was settled in D3: it stays unpriced, so `/cost` prints
 `no price known` rather than a rate nobody published.
 
-**T015 — what moving the defaults would take.** `DeepSeekChatModel.DefaultModelId` and
-`GrokChatModel.DefaultModelId` decide the model for every run that names none, and they are written
-into every transcript. The resume story is already in place and does not depend on the defaults:
-`AgentSession.FromSnapshot` resolves the transcript's own `provider` + `modelId` through
-`ModelCatalog.DescriptorFor`, which accepts any identifier and prefers the catalogue entry, and the
-three older Grok identifiers and the two older DeepSeek identifiers stay listed precisely so a resumed
-transcript still resolves. A move would therefore change only which model a *new* conversation starts
-on, plus four alias rows in `ColorAndModeOptionTests` (`ds`, `grok`/`g4`) and the examples in
-`README.md` and `HelpText`. That is a product decision — it changes what `sharpcoreagent chat` talks
-to on a machine with no flags — so it is recorded here rather than made in passing: see T015 in
-`tasks.md`.
+**T015 decision — both defaults move.** `DeepSeekChatModel.DefaultModelId` becomes `deepseek-flash` and
+`GrokChatModel.DefaultModelId` becomes `grok-4.7`, because a default that names a model its provider no
+longer lists is a first-run failure waiting for the developer who types nothing. The resume story is
+what makes the move safe: `AgentSession.FromSnapshot` resolves the transcript's own `provider` +
+`modelId` through `ModelCatalog.DescriptorFor`, which accepts any identifier and prefers the catalogue
+entry, and the three older Grok identifiers and the two older DeepSeek identifiers stay listed so a
+resumed conversation still opens on the model it was using. `ModelCatalogTests` pins both halves — the
+defaults are today's models, and every retired identifier still resolves — and the catalogue lists each
+provider's default first, so the model a run would pick is the one `models` prints first. The four
+alias rows in `ColorAndModeOptionTests` (`ds`, `grok`, `g4`) follow the defaults; `r1`/`reasoner` and
+`g3` keep naming what they named before.
+
 
 ## D5 — Why not put the price on `ModelDescriptor`
 

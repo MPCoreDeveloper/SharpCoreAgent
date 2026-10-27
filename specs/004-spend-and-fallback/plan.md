@@ -119,8 +119,10 @@ unchanged, and both pages now list exactly the three models the table prices —
 the remaining question (T015) sharp: `deepseek-chat` and `grok-4` are still this build's defaults and
 appear on neither page.
 
-Whether the default model identifiers move to the current generation is the one item left to the
-repository owner. The resume story does not block it: a transcript names its own provider and model,
-`ModelCatalog.DescriptorFor` resolves any identifier, and the retired entries stay listed so a resumed
-conversation still opens. A move would change which model a *new* conversation starts on, four alias
-rows (`ds`, `grok`/`g4`) and the examples in `README.md` and `HelpText`. See `research.md` D6.
+The defaults moved (T015, on the owner's decision): `deepseek-flash` and `grok-4.7` now answer a run
+that names no model, and each provider's catalogue leads with its default so `models` prints the model
+a run would pick first. The resume story is what makes the move safe and it was already in place: a
+transcript names its own provider and model, `ModelCatalog.DescriptorFor` resolves any identifier, and
+the five retired identifiers stay listed so a resumed conversation still opens where it left off.
+`ModelCatalogTests` pins both halves — today's defaults, and every retired identifier still resolving —
+so a future move cannot quietly strand a transcript.

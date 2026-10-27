@@ -141,7 +141,7 @@ public static class ModelCatalog
     /// <summary>
     /// Splits a <c>provider:id</c> name, which is how <c>/model</c> takes its argument.
     /// </summary>
-    /// <param name="text">The text to split, for example <c>grok:grok-4</c>.</param>
+    /// <param name="text">The text to split, for example <c>grok:grok-4.7</c>.</param>
     /// <param name="descriptor">The descriptor, when the text names a known provider.</param>
     /// <returns><see langword="true"/> when the text was a <c>provider:id</c> pair.</returns>
     public static bool TryParseQualified(string? text, out ModelDescriptor? descriptor)

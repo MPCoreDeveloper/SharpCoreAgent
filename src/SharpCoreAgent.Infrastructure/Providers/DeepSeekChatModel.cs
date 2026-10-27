@@ -36,8 +36,14 @@ public sealed class DeepSeekChatModel : OpenAiCompatibleModelBase
     /// <summary>Gets the provider key. <c>deepseek</c>.</summary>
     public const string ProviderKey = "deepseek";
 
-    /// <summary>Gets the model used when the caller names none.</summary>
-    public const string DefaultModelId = "deepseek-chat";
+    /// <summary>Gets the model used when the caller names none. <c>deepseek-flash</c>.</summary>
+    /// <remarks>
+    /// The provider's model page lists exactly two models, and this is the cheaper of them. The two
+    /// identifiers this build shipped before the page moved on stay in <see cref="Catalog"/> below,
+    /// because a transcript records the model it ran on and a build that could not name one could not
+    /// resume the session that wrote it.
+    /// </remarks>
+    public const string DefaultModelId = "deepseek-flash";
 
     /// <summary>Gets the chat-completions endpoint.</summary>
     public static Uri ChatEndpoint { get; } = new("https://api.deepseek.com/chat/completions");
@@ -53,19 +59,19 @@ public sealed class DeepSeekChatModel : OpenAiCompatibleModelBase
     /// <see cref="ModelDescriptor.SupportsTools"/> false because the provider rejects tool definitions
     /// on that model; the agent turns that into a clear refusal instead of a bad request.
     /// <para>
-    /// The first two identifiers are the ones this build shipped before the provider's page moved on:
-    /// <c>deepseek-chat</c> is still the default because a transcript records it, and a build that
-    /// could not name it could not resume the sessions it wrote. The two below them are what the
-    /// published model list now contains (1M context, tool calls, thinking by default), added so
-    /// <c>/cost</c> can price a model a developer can actually choose.
+    /// <c>deepseek-flash</c> and <c>deepseek-v4-pro</c> lead because they are what the published model
+    /// list now contains (1M context, tool calls, thinking by default). The two below them are the
+    /// identifiers this build shipped before the page moved on: they stay listed, and stay resolvable,
+    /// because a resumed transcript names one of them and the session file is the authority on which
+    /// model a conversation was using.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
-        new(ProviderKey, "deepseek-chat", "DeepSeek Chat", ContextWindow: 128_000),
-        new(ProviderKey, "deepseek-reasoner", "DeepSeek Reasoner", ContextWindow: 128_000, SupportsTools: false, EmitsThinking: true),
         new(ProviderKey, "deepseek-flash", "DeepSeek Flash", ContextWindow: 1_000_000, EmitsThinking: true),
         new(ProviderKey, "deepseek-v4-pro", "DeepSeek V4 Pro", ContextWindow: 1_000_000, EmitsThinking: true),
+        new(ProviderKey, "deepseek-chat", "DeepSeek Chat", ContextWindow: 128_000),
+        new(ProviderKey, "deepseek-reasoner", "DeepSeek Reasoner", ContextWindow: 128_000, SupportsTools: false, EmitsThinking: true),
     ];
 
     /// <summary>

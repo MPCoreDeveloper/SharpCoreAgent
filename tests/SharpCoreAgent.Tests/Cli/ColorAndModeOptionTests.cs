@@ -56,10 +56,11 @@ public sealed class ColorAndModeOptionTests
     }
 
     [Theory]
-    [InlineData("ds", "deepseek", "deepseek-chat")]
+    [InlineData("ds", "deepseek", "deepseek-flash")]
     [InlineData("r1", "deepseek", "deepseek-reasoner")]
     [InlineData("reasoner", "deepseek", "deepseek-reasoner")]
-    [InlineData("grok", "grok", "grok-4")]
+    [InlineData("grok", "grok", "grok-4.7")]
+    [InlineData("g4", "grok", "grok-4.7")]
     [InlineData("g3", "grok", "grok-3")]
     public void AliasesResolveToAProviderAndModel(string alias, string provider, string modelId)
     {

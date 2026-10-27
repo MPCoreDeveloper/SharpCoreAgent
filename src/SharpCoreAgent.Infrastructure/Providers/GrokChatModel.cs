@@ -34,8 +34,14 @@ public sealed class GrokChatModel : OpenAiCompatibleModelBase
     /// <summary>Gets the provider key. <c>grok</c>.</summary>
     public const string ProviderKey = "grok";
 
-    /// <summary>Gets the model used when the caller names none.</summary>
-    public const string DefaultModelId = "grok-4";
+    /// <summary>Gets the model used when the caller names none. <c>grok-4.7</c>.</summary>
+    /// <remarks>
+    /// The provider's model page lists this as its only text model. The three identifiers this build
+    /// shipped before the page moved on stay in <see cref="Catalog"/> below, because a transcript
+    /// records the model it ran on and a build that could not name one could not resume the session
+    /// that wrote it.
+    /// </remarks>
+    public const string DefaultModelId = "grok-4.7";
 
     /// <summary>Gets the chat-completions endpoint.</summary>
     public static Uri ChatEndpoint { get; } = new("https://api.x.ai/v1/chat/completions");
@@ -51,17 +57,17 @@ public sealed class GrokChatModel : OpenAiCompatibleModelBase
 
     /// <summary>Gets the models this adapter knows, in display order.</summary>
     /// <remarks>
-    /// <c>grok-4</c> stays the default because transcripts and sessions name it; <c>grok-4.7</c> is
-    /// what the provider's model page now lists (500k context, agentic tool calling), added so a
-    /// developer can select and price it. The three older identifiers remain listed because a resumed
-    /// session that used one must still resolve.
+    /// <c>grok-4.7</c> leads because it is what the provider's model page lists (500k context, agentic
+    /// tool calling) and the model a turn runs on when none is named. <c>grok-4</c>, <c>grok-3</c> and
+    /// <c>grok-3-mini</c> remain listed, and remain resolvable, because a resumed session that used one
+    /// must still resolve: the transcript is the authority on which model a conversation was using.
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
+        new(ProviderKey, "grok-4.7", "Grok 4.7", ContextWindow: 500_000),
         new(ProviderKey, "grok-4", "Grok 4", ContextWindow: 256_000),
         new(ProviderKey, "grok-3", "Grok 3", ContextWindow: 131_072),
         new(ProviderKey, "grok-3-mini", "Grok 3 Mini", ContextWindow: 131_072),
-        new(ProviderKey, "grok-4.7", "Grok 4.7", ContextWindow: 500_000),
     ];
 
     /// <summary>
