@@ -135,10 +135,10 @@ public sealed class CodingAgent
                 _options.Temperature,
                 _options.MaxOutputTokensPerTurn);
 
-            var (stream, failure) = await TryStreamAsync(client, request, sink, turnBudget.Token).ConfigureAwait(false);
+            var (stream, failure) = await TryStreamAsync(client, request, sink, state, turnBudget.Token).ConfigureAwait(false);
             if (stream is null)
             {
-                Log.TurnFailed(_logger, model.QualifiedName, state.Iterations, failure ?? "the model call failed", null);
+                Log.TurnFailed(_logger, state.ServingModelId, state.Iterations, failure ?? "the model call failed", null);
                 return await FinishAsync(sink, state.Report(AgentOutcome.Failed, failure)).ConfigureAwait(false);
             }
 
@@ -150,7 +150,10 @@ public sealed class CodingAgent
             var response = stream.Response!;
             session.Add(response.Message);
             state.Usage = state.Usage is null ? response.Usage : state.Usage + response.Usage;
-            session.RecordUsage(model.QualifiedName, response.Usage);
+
+            // Attributed to the model that answered, which is the fallback once a turn has moved there:
+            // `/cost` prices each line from the table by exactly this name.
+            session.RecordUsage(state.ServingModelId, response.Usage);
 
             var ending = await AdvanceAsync(session, response, state, sink, turnBudget.Token).ConfigureAwait(false);
             if (ending is not null)
@@ -166,17 +169,19 @@ public sealed class CodingAgent
     /// <param name="client">The model to stream from.</param>
     /// <param name="request">The request to send.</param>
     /// <param name="sink">Receives progress.</param>
+    /// <param name="state">The turn's running totals, which the fallback notice updates.</param>
     /// <param name="cancellationToken">Cancels the stream.</param>
     /// <returns>The outcome, or the failure message when the provider failed.</returns>
     private static async Task<(StreamOutcome? Stream, string? Failure)> TryStreamAsync(
         IStreamingChatModel client,
         ChatRequest request,
         IAgentObserver sink,
+        TurnState state,
         CancellationToken cancellationToken)
     {
         try
         {
-            return (await StreamOnceAsync(client, request, sink, cancellationToken).ConfigureAwait(false), null);
+            return (await StreamOnceAsync(client, request, sink, state, cancellationToken).ConfigureAwait(false), null);
         }
         catch (ModelException ex)
         {
@@ -285,9 +290,17 @@ public sealed class CodingAgent
     private sealed class TurnState(ModelDescriptor model)
     {
         private readonly List<ToolResult> _results = [];
+        private readonly List<FallbackUsed> _fallbacks = [];
 
         /// <summary>Gets the model the turn runs on.</summary>
         public ModelDescriptor Model { get; } = model;
+
+        /// <summary>Gets or sets the model that served the last attempt.</summary>
+        /// <remarks>
+        /// Equal to <see cref="Model"/> until a fallback notice arrives, and equal to the fallback after
+        /// one, which is what a spend report and the report's <see cref="AgentReport.ModelId"/> both need.
+        /// </remarks>
+        public string ServingModelId { get; set; } = model.QualifiedName;
 
         /// <summary>Gets or sets the tokens the turn has spent so far.</summary>
         public TokenUsage? Usage { get; set; }
@@ -303,6 +316,20 @@ public sealed class CodingAgent
         public void Add(ToolResult result) => _results.Add(result);
 
         /// <summary>
+        /// Records one fallback and the model that now serves the turn.
+        /// </summary>
+        /// <param name="fallback">The notice the stream carried.</param>
+        /// <remarks>
+        /// The turn keeps trying the model the request names on its next iteration — the decorator asks
+        /// the primary again — so this is a record of what happened, not a permanent switch.
+        /// </remarks>
+        public void Record(FallbackUsed fallback)
+        {
+            _fallbacks.Add(fallback);
+            ServingModelId = fallback.FallbackModelId;
+        }
+
+        /// <summary>
         /// Builds the report for an outcome.
         /// </summary>
         /// <param name="outcome">How the turn ended.</param>
@@ -312,11 +339,12 @@ public sealed class CodingAgent
         public AgentReport Report(AgentOutcome outcome, string? detail = null, string? finalText = null) => new()
         {
             Outcome = outcome,
-            ModelId = Model.QualifiedName,
+            ModelId = ServingModelId,
             FinalText = finalText,
             Usage = Usage ?? TokenUsage.Unknown,
             Iterations = Iterations,
             ToolResults = [.. _results],
+            Fallbacks = [.. _fallbacks],
             Detail = detail,
         };
     }
@@ -520,14 +548,29 @@ public sealed class CodingAgent
     /// <summary>
     /// Drains one streamed response, forwarding text increments and collecting the terminal completion.
     /// </summary>
+    /// <param name="client">The model to stream from.</param>
+    /// <param name="request">The request that produced the stream.</param>
+    /// <param name="sink">Receives progress.</param>
+    /// <param name="state">The turn's running totals; a fallback notice is recorded in them.</param>
+    /// <param name="cancellationToken">Cancels the drain.</param>
+    /// <returns>The completion, the text shown and whether the stream was cut short.</returns>
+    /// <remarks>
+    /// A fallback notice is not content: it is recorded, announced to the observer and otherwise
+    /// skipped, so a stream the primary served is indistinguishable from one it never refused.
+    /// </remarks>
     private static async Task<StreamOutcome> StreamOnceAsync(
         IStreamingChatModel client,
         ChatRequest request,
         IAgentObserver sink,
+        TurnState state,
         CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
         ChatResponse? completed = null;
+
+        // Every attempt starts on the model the request names; a notice moves it for the rest of the
+        // stream, and that is the name the response is billed under.
+        state.ServingModelId = request.Model.QualifiedName;
 
         try
         {
@@ -543,6 +586,10 @@ public sealed class CodingAgent
                         break;
                     case ThinkingDelta thinking:
                         await sink.OnEventAsync(new AgentThinkingDelta(thinking.Text), CancellationToken.None).ConfigureAwait(false);
+                        break;
+                    case FallbackUsed fallback:
+                        state.Record(fallback);
+                        await sink.OnEventAsync(new FallbackAttempted(fallback), CancellationToken.None).ConfigureAwait(false);
                         break;
                     case StreamCompleted done:
                         completed = done.Response;

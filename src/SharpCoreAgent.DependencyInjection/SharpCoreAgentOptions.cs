@@ -52,6 +52,18 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the endpoint for the <c>openai-compatible</c> provider, when one is used.</summary>
     public string? BaseUrl { get; init; }
 
+    /// <summary>
+    /// Gets the model a refused request is replayed at, or <see langword="null"/> when a failed turn is
+    /// reported rather than retried elsewhere.
+    /// </summary>
+    /// <remarks>
+    /// The fallback is a descriptor rather than a name so the host decides it once, through the
+    /// catalogue, and the resolver cannot be handed a provider this build does not serve. A fallback
+    /// that names the model already in use is ignored at resolution time: a replay there would repeat
+    /// the request that just failed.
+    /// </remarks>
+    public ModelDescriptor? Fallback { get; init; }
+
     /// <summary>Gets the HTTP timeout for one provider request. Default five minutes.</summary>
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromMinutes(5);
 

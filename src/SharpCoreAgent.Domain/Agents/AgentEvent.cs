@@ -1,3 +1,5 @@
+using SharpCoreAgent.Domain.Model;
+
 namespace SharpCoreAgent.Domain.Agents;
 
 /// <summary>
@@ -14,6 +16,17 @@ public abstract record AgentEvent;
 /// </summary>
 /// <param name="ModelId">The <c>provider:model</c> name.</param>
 public sealed record TurnStarted(string ModelId) : AgentEvent;
+
+/// <summary>
+/// The turn moved to the fallback model because the primary returned 401 or 5xx.
+/// </summary>
+/// <param name="Fallback">Which attempt failed, why, and which model serves the request instead.</param>
+/// <remarks>
+/// Emitted as it happens rather than in the closing summary: the answer the developer is about to
+/// read comes from a different provider than the one the prompt named, and that is worth a line before
+/// the text arrives.
+/// </remarks>
+public sealed record FallbackAttempted(FallbackUsed Fallback) : AgentEvent;
 
 /// <summary>
 /// The model produced reasoning text.

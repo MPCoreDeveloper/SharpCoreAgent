@@ -30,6 +30,7 @@ internal static class HelpText
         Options
           --provider <name>        run, chat   deepseek    deepseek, grok, openai-compatible, demo
           --model <id>             run, chat   provider default
+          --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
           --approval <mode>        run, chat   ask         readonly, ask, allow
           --max-iterations <n>     run, chat   24

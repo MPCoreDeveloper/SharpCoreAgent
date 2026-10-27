@@ -65,12 +65,48 @@ that every priced model is one `ModelCatalog` can name. `CostReportTests` pins t
 three states, including that unknown usage never yields a number and that the total is the sum of the
 priced, measured lines only.
 
-## Phase 2 — fallback (planned, not built)
+## Phase 2 — fallback
 
-`FallbackChatModel` decorates the resolved model and replays the request once at the fallback when the
-primary throws a `SharpCoreAgentException` whose status is 401 or 5xx. The report gains both attempts.
-The retry happens before any delta is surfaced (the rule `RetryingChatModel` already follows), so a
-turn that has started streaming is never silently restarted.
+`--fallback <provider>:<model>` is parsed into a `ModelDescriptor` by `CliOptions`, so an unknown
+provider is a usage error naming the providers this build serves, not a surprise after the first 401.
+The descriptor travels through `SharpCoreAgentOptions.Fallback` to `ChatModelResolver`, which wraps the
+retry-wrapped primary in `FallbackChatModel`:
+
+```
+FallbackChatModel( RetryingChatModel(primary adapter), RetryingChatModel(fallback adapter) )
+```
+
+Outside the retry decorator, because a provider retrying itself is not a fallback and a report must not
+confuse the two. The CLI checks the fallback's credential at startup beside the primary's: a fallback
+whose key is missing cannot cover the failure it exists for.
+
+### What is replayed
+
+Only `ModelRequestException` with status 401 or a 5xx, and only while nothing has been yielded. The
+replay is `request with { Model = fallback.Model }`: the identifier is the one field that has to change,
+because it is what the endpoint is asked to serve. Messages, tools, temperature and the output ceiling
+travel unchanged — a fallback is the same turn on a different provider, not a different turn.
+
+A 400 (or 422, or 429) is surfaced rather than replayed: the first says the request is malformed and the
+second would meet the same answer twice. A dropped connection carries no status and is the retry
+decorator's problem, which gets another go at the same provider before anyone else is asked.
+
+### What the report says
+
+The decorator emits `FallbackUsed(primary, status, reason, fallback)` ahead of the fallback's first
+increment — ahead on purpose, so a fallback that also fails still leaves the first attempt on the
+record. `CodingAgent` turns it into three things:
+
+- a `FallbackAttempted` event, which the console prints when it happens, on stderr, with the provider's
+  own message (already stripped of any credential by the adapter);
+- an entry in `AgentReport.Fallbacks`, and in the report's JSON;
+- the turn's *serving* model, which is what `AgentSession.RecordUsage` is keyed by and what
+  `AgentReport.ModelId` reports. So `/cost` bills the fallback's tokens at the fallback's prices, which
+  is the only attribution that is not a guess.
+
+Without `--fallback` none of this exists: the resolver returns the retry-wrapped primary exactly as
+before, and every report carries an empty `Fallbacks`.
+
 
 ## Phase 3 — catalogue decisions (planned, not built)
 

@@ -91,6 +91,9 @@ dotnet run --project src\SharpCoreAgent.Cli -- run "fix the failing test in src"
 
 $env:XAI_API_KEY = "<your key>"
 dotnet run --project src\SharpCoreAgent.Cli -- chat --provider grok --model grok-4
+
+# DeepSeek now, Grok if DeepSeek returns 401 or 5xx: both keys must be set.
+dotnet run --project src\SharpCoreAgent.Cli -- chat --provider deepseek --fallback grok:grok-4.7
 ```
 
 ## Providers
@@ -119,6 +122,7 @@ sharpcoreagent --help | --version
 |---|---|---|
 | `--provider <name>` | run, chat | `deepseek` |
 | `--model <id>` | run, chat | provider default |
+| `--fallback <provider:model>` | run, chat | none — a 401 or 5xx is replayed once there |
 | `--workspace <path>` | run, chat, index | current directory |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `24` |
@@ -156,6 +160,15 @@ reports `cost unknown`; when no line can be measured at all, the total itself re
 DeepSeek bills an off-peak and a peak tier with peak at exactly double, and a usage report says
 neither which tier ran nor whether the prompt hit the cache, so the table holds the peak cache-miss
 rate: the report is the ceiling of what the turn could have cost.
+
+`--fallback grok:grok-4.7` names the model a turn is replayed at when the primary returns 401 or a 5xx
+(mid-session retirement, an expired key, a provider having a minute). Nothing else moves: a 400 would
+fail the same way twice, a dropped connection is retried in place first, and a turn that has already
+started streaming is never silently restarted. The replay changes one field of the request — the model
+identifier — and the CLI checks both credentials before the first turn, because a fallback whose key is
+missing cannot cover the failure it exists for. When it happens the terminal says so on stderr
+(`fallback: deepseek:deepseek-chat failed with HTTP 401; grok:grok-4.7 answered`), the report carries
+both attempts, and `/cost` bills the tokens to the model that actually answered.
 
 Exit codes: `0` turn completed, `1` turn failed, `2` bad command line, `3` missing credential,
 `4` budget exhausted or interrupted, `5` transcript I/O, `6` the index could not be created, written or
@@ -286,9 +299,10 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 609 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 628 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
-  its dated price table, and the tests that cover them — so the next scan moves both the line count and
+  its dated price table, `--fallback` and the replay that reports both attempts, and the tests that
+  cover them — so the next scan moves both the line count and
   the percentage. **The gate
   passes**, including
   new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
@@ -325,13 +339,15 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 609 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 628 tests, all green, with no compiler
   warnings.
-- `specs/004-spend-and-fallback` — Phase 1 is complete: `/cost` prices the tokens the session reported
-  from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`, and the
-  catalogues gained `deepseek-flash`, `deepseek-v4-pro` and `grok-4.7` so there is something current to
-  price. Checkpoints, `--resume`, provider fallback, the default-model decision and MCP are listed in
-  those specs' `tasks.md` as not started.
+- `specs/004-spend-and-fallback` — Phase 1 and Phase 2 are complete: `/cost` prices the tokens the
+  session reported from a dated table that prints `no price known` (and `total unknown`) rather than
+  `$0.00`, the catalogues gained `deepseek-flash`, `deepseek-v4-pro` and `grok-4.7` so there is
+  something current to price, and `--fallback provider:model` replays a 401 or 5xx turn once at a model
+  the developer named, recording both attempts and billing the answer to the model that gave it.
+  Checkpoints, `--resume`, the default-model decisions and MCP are listed in those specs' `tasks.md` as
+  not started.
 
 ## Spec-driven development
 

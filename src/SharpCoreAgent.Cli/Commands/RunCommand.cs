@@ -33,7 +33,7 @@ internal static class RunCommand
 
         using var provider = CliHost.Build(cli);
         var model = provider.GetRequiredService<ModelDescriptor>();
-        if (!CliHost.TryEnsureCredentials(model, provider.GetRequiredService<ICredentialStore>(), Console.Error))
+        if (!CliHost.TryEnsureCredentials(model, provider.GetRequiredService<ICredentialStore>(), Console.Error, cli.Fallback))
         {
             return ExitCodes.Credentials;
         }

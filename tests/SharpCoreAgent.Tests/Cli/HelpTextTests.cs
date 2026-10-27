@@ -62,6 +62,16 @@ public sealed class HelpTextTests
     }
 
     [Fact]
+    public void TheUsageBlockDocumentsTheFallbackOption()
+    {
+        // The option only earns its keep if a developer can find it before the 401, so the statuses it
+        // covers are part of the row rather than a footnote.
+        Assert.Contains("--fallback", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("401", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("5xx", HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheExitCodeTableDocumentsTheIndexFailure()
     {
         var row = Assert.Single(

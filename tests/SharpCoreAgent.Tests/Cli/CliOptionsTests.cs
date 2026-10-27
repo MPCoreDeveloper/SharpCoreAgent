@@ -258,7 +258,32 @@ public sealed class CliOptionsTests
         Assert.Equal(0.5, configured.Temperature);
     }
 
+    [Fact]
+    public void FallbackParsesAQualifiedModel()
+    {
+        var options = CliOptions.Parse(["chat", "--fallback", "grok:grok-4.7"], NoEnvironment);
+
+        Assert.NotNull(options.Fallback);
+        Assert.Equal("grok:grok-4.7", options.Fallback.QualifiedName);
+        Assert.Equal(options.Fallback, options.ToSharpCoreAgentOptions().Fallback);
+        Assert.Null(CliOptions.Parse(["chat"], NoEnvironment).Fallback);
+    }
+
+    [Fact]
+    public void AnUnknownFallbackIsAUsageError()
+    {
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["chat", "--fallback", "openai:gpt-4o-mini"]));
+
+        Assert.Contains("openai", error.Message, StringComparison.Ordinal);
+        Assert.Contains("deepseek", error.Hint!, StringComparison.Ordinal);
+
+        // No provider, and no value at all, are both mistakes the parser can name before a turn starts.
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["chat", "--fallback", "grok-4.7"]));
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["chat", "--fallback"]));
+    }
+
     private static string? NoEnvironment(string name) => null;
+
 
     private static Func<string, string?> Environment(params (string Name, string Value)[] pairs) =>
         name => pairs.Where(pair => string.Equals(pair.Name, name, StringComparison.Ordinal))

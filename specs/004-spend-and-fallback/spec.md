@@ -1,6 +1,6 @@
 # 004 — Spend and fallback
 
-**Status**: Phase 1 (`/cost`) implemented; Phase 2 (fallback) and Phase 3 (catalogue decisions)
+**Status**: Phase 1 (`/cost`) and Phase 2 (fallback) implemented; the Phase 3 catalogue decisions are
 listed in `tasks.md`
 **Branch**: `feature/sharpcoredb-2-1-2`
 **Depends on**: `001-coding-agent-core`, `003-terminal-console-agent`
@@ -73,8 +73,9 @@ Acceptance:
   point at `/help` rather than repeat the list — one command list, printed in one place.
 - **FR-006a** `README.md` MUST document `/cost`, the as-of date of the table and the peak-rate rule.
 
-- **FR-007** A fallback, when Phase 2 lands, MUST be attempted only for 401 and 5xx, MUST inherit the
-  original request unchanged, and MUST appear in the report.
+- **FR-007** A fallback MUST be attempted only for 401 and 5xx, MUST inherit the original request
+  unchanged, and MUST appear in the report. Its tokens MUST be attributed to the model that answered,
+  so the cost report prices them from the row that actually billed them.
 
 ## Success criteria
 

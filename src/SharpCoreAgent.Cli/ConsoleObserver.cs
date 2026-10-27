@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Model;
 
 namespace SharpCoreAgent.Cli;
 
@@ -85,6 +86,10 @@ internal sealed class ConsoleObserver : IAgentObserver
                 RenderFinished(finished);
                 break;
 
+            case FallbackAttempted fallback:
+                RenderFallback(fallback.Fallback);
+                break;
+
             case TurnFinished done:
                 RenderFinished(done.Report);
                 break;
@@ -93,6 +98,43 @@ internal sealed class ConsoleObserver : IAgentObserver
         _output.Flush();
         _error.Flush();
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Renders the move to the fallback model, before that model's text arrives.
+    /// </summary>
+    /// <param name="fallback">Which attempt failed, why, and which model now serves the turn.</param>
+    /// <remarks>
+    /// The line goes to stderr with the other diagnostics, because an answer that came from a
+    /// different provider than the prompt named is not part of the answer — but it is something the
+    /// developer should read. The reason is the provider's own message, already stripped of any
+    /// credential by the adapter.
+    /// </remarks>
+    private void RenderFallback(FallbackUsed fallback)
+    {
+        CloseThinkingLine();
+        CloseTextLine();
+        CloseToolOutputLine();
+
+        if (_json)
+        {
+            WriteJson(new
+            {
+                type = "fallback",
+                from = fallback.PrimaryModelId,
+                to = fallback.FallbackModelId,
+                status = fallback.StatusCode,
+                reason = fallback.Reason,
+            });
+            return;
+        }
+
+        if (_quiet)
+        {
+            return;
+        }
+
+        _error.WriteLine($"{_theme.Failure("fallback:")} {fallback.ToString()} {_theme.Dim(fallback.Reason)}");
     }
 
     private void RenderThinking(string text)
@@ -290,6 +332,13 @@ internal sealed class ConsoleObserver : IAgentObserver
                 outputTokens = report.Usage.OutputTokens,
                 files = report.FilesTouched,
                 commands = report.CommandsRun,
+                fallbacks = report.Fallbacks.Select(fallback => new
+                {
+                    from = fallback.PrimaryModelId,
+                    to = fallback.FallbackModelId,
+                    status = fallback.StatusCode,
+                    reason = fallback.Reason,
+                }),
                 detail = report.Detail,
             });
             return;

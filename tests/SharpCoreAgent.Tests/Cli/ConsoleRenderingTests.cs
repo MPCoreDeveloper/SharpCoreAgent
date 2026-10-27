@@ -431,6 +431,34 @@ public sealed class ConsoleRenderingTests
     private static ToolApprovalRequest Request() =>
         new("read_file", ToolSafety.ReadOnly, "read a.txt", """{"path":"a.txt"}""");
 
+    /// <summary>
+    /// A fallback is announced when it happens, not in the closing summary: the developer is about to
+    /// read an answer from a provider the prompt did not name.
+    /// </summary>
+    [Fact]
+    public async Task AFallbackIsAnnouncedOnStandardErrorBeforeTheAnswer()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false);
+
+        await observer.OnEventAsync(
+            new FallbackAttempted(new FallbackUsed(
+                "deepseek:deepseek-chat",
+                401,
+                "deepseek:deepseek-chat returned HTTP 401: invalid key",
+                "grok:grok-4.7")),
+            TestContext.Current.CancellationToken);
+        await observer.OnEventAsync(new AgentTextDelta("hello"), TestContext.Current.CancellationToken);
+
+        var text = error.ToString();
+        Assert.Contains("fallback:", text, StringComparison.Ordinal);
+        Assert.Contains("deepseek:deepseek-chat failed with HTTP 401", text, StringComparison.Ordinal);
+        Assert.Contains("grok:grok-4.7 answered", text, StringComparison.Ordinal);
+        Assert.Contains("invalid key", text, StringComparison.Ordinal);
+        Assert.Equal("hello", output.ToString());
+    }
+
     private static AgentReport Report(
         AgentOutcome outcome = AgentOutcome.Completed,
         string? finalText = null,

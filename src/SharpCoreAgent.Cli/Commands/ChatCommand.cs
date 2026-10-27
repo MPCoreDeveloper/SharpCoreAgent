@@ -39,7 +39,7 @@ internal static class ChatCommand
         using var provider = CliHost.Build(cli);
         var model = provider.GetRequiredService<ModelDescriptor>();
         var credentials = provider.GetRequiredService<ICredentialStore>();
-        if (!CliHost.TryEnsureCredentials(model, credentials, Console.Error))
+        if (!CliHost.TryEnsureCredentials(model, credentials, Console.Error, cli.Fallback))
         {
             return ExitCodes.Credentials;
         }
@@ -291,7 +291,7 @@ internal static class ChatCommand
             var session = AgentSession.FromSnapshot(snapshot, resumedWorkspace, resumedModel);
             session.Mode = cli.Mode;
 
-            if (!CliHost.TryEnsureCredentials(resumedModel, credentials, Console.Error))
+            if (!CliHost.TryEnsureCredentials(resumedModel, credentials, Console.Error, cli.Fallback))
             {
                 return (null, ExitCodes.Credentials);
             }

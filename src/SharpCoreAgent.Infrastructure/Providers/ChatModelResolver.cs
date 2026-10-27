@@ -17,7 +17,9 @@ namespace SharpCoreAgent.Infrastructure.Providers;
 /// <para>
 /// Every model it returns is wrapped in <see cref="RetryingChatModel"/>, so a caller cannot
 /// accidentally get an un-retried adapter; the policy, the clock and the retry callback are injected
-/// once, at construction.
+/// once, at construction. When a fallback is configured the result is further wrapped in
+/// <see cref="FallbackChatModel"/> — outside the retry decorator, so a provider retrying itself is
+/// never reported as a fallback.
 /// </para>
 /// </remarks>
 public sealed class ChatModelResolver : IChatModelResolver
@@ -28,6 +30,7 @@ public sealed class ChatModelResolver : IChatModelResolver
     private readonly TimeProvider _time;
     private readonly RetryPolicy _policy;
     private readonly Action<RetryAttempt>? _onRetry;
+    private readonly ModelDescriptor? _fallback;
 
     /// <summary>
     /// Creates a resolver.
@@ -41,13 +44,18 @@ public sealed class ChatModelResolver : IChatModelResolver
     /// <param name="time">The clock the retry delay uses; <see cref="TimeProvider.System"/> when null.</param>
     /// <param name="policy">The retry policy; <see cref="RetryPolicy.Default"/> when null.</param>
     /// <param name="onRetry">Called before each retry so the CLI can say "retrying (2/3)".</param>
+    /// <param name="fallback">
+    /// The model a refused request is replayed at, normally from <c>--fallback</c>; null means a
+    /// failure is reported rather than replayed.
+    /// </param>
     public ChatModelResolver(
         HttpClient http,
         ICredentialStore credentials,
         string? baseUrl = null,
         TimeProvider? time = null,
         RetryPolicy? policy = null,
-        Action<RetryAttempt>? onRetry = null)
+        Action<RetryAttempt>? onRetry = null,
+        ModelDescriptor? fallback = null)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(credentials);
@@ -61,10 +69,14 @@ public sealed class ChatModelResolver : IChatModelResolver
         _time = time ?? TimeProvider.System;
         _policy = (policy ?? RetryPolicy.Default).Validate();
         _onRetry = onRetry;
+        _fallback = fallback;
     }
 
     /// <summary>Gets the retry policy every resolved model is wrapped in.</summary>
     public RetryPolicy Policy => _policy;
+
+    /// <summary>Gets the model a refused request is replayed at, or null when there is none.</summary>
+    public ModelDescriptor? Fallback => _fallback;
 
     /// <inheritdoc />
     /// <exception cref="ModelCredentialException">The provider's credential is not configured.</exception>
@@ -75,9 +87,37 @@ public sealed class ChatModelResolver : IChatModelResolver
     public IStreamingChatModel Resolve(ModelDescriptor model)
     {
         ArgumentNullException.ThrowIfNull(model);
+
+        var primary = new RetryingChatModel(CreateAdapter(model), _policy, _time, _onRetry);
+
+        if (_fallback is null || string.Equals(_fallback.QualifiedName, model.QualifiedName, StringComparison.Ordinal))
+        {
+            // No fallback named, or one that names the model already in use: a replay there would send
+            // the request that just failed a second time.
+            return primary;
+        }
+
+        // Outside the retry decorator on purpose: a retried primary is the same provider having another
+        // go, while a fallback is a different provider, and a report must not confuse the two.
+        return new FallbackChatModel(
+            primary,
+            new RetryingChatModel(CreateAdapter(_fallback), _policy, _time, _onRetry));
+    }
+
+    /// <summary>
+    /// Builds the adapter for one descriptor, refusing a provider whose key is missing.
+    /// </summary>
+    /// <param name="model">The model to speak to.</param>
+    /// <returns>The adapter, before any decorator.</returns>
+    /// <exception cref="ModelCredentialException">None of the provider's keys is set.</exception>
+    /// <exception cref="ArgumentException">
+    /// No adapter serves the provider, or <c>openai-compatible</c> was asked for without a base URL.
+    /// </exception>
+    private IStreamingChatModel CreateAdapter(ModelDescriptor model)
+    {
         EnsureCredential(model.Provider);
 
-        IStreamingChatModel adapter = model.Provider switch
+        return model.Provider switch
         {
             DeepSeekChatModel.ProviderKey => new DeepSeekChatModel(_http, _credentials, model),
             GrokChatModel.ProviderKey => new GrokChatModel(_http, _credentials, model),
@@ -93,8 +133,6 @@ public sealed class ChatModelResolver : IChatModelResolver
                 $"No adapter serves provider '{model.Provider}'. Known providers: {string.Join(", ", ModelCatalog.Providers)}.",
                 nameof(model)),
         };
-
-        return new RetryingChatModel(adapter, _policy, _time, _onRetry);
     }
 
     /// <summary>

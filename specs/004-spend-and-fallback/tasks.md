@@ -17,11 +17,11 @@ next pass has a real list rather than a memory.
 
 ## Phase 2 — fallback
 
-- [ ] T010 Add `--fallback <provider>:<model>` to `CliOptions`, refusing an unknown provider at parse time.
-- [ ] T011 Add `FallbackChatModel` in `Infrastructure.Chat`: replay once at the fallback for 401 and 5xx only, never after a delta has been surfaced, never for 400.
-- [ ] T012 Record both attempts in the report (provider, model, status or message) without echoing a credential.
-- [ ] T013 Wire the decorator in the composition root, outside `RetryingChatModel` so a retried primary is not confused with a fallback.
-- [ ] T014 Tests: 401 falls back once, 5xx falls back once, 400 does not, a delta before the failure does not, and the report names both attempts.
+- [X] T010 Add `--fallback <provider>:<model>` to `CliOptions`, refusing an unknown provider at parse time.
+- [X] T011 Add `FallbackChatModel` in `Infrastructure.Chat`: replay once at the fallback for 401 and 5xx only, never after a delta has been surfaced, never for 400.
+- [X] T012 Record both attempts in the report (provider, model, status or message) without echoing a credential.
+- [X] T013 Wire the decorator in the composition root, outside `RetryingChatModel` so a retried primary is not confused with a fallback.
+- [X] T014 Tests: 401 falls back once, 5xx falls back once, 400 does not, a delta before the failure does not, and the report names both attempts.
 
 ## Phase 3 — catalogue decisions
 

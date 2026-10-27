@@ -2,6 +2,7 @@
 using SharpCoreAgent.DependencyInjection;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Index;
+using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.Cli;
@@ -81,6 +82,16 @@ internal sealed record CliOptions
     /// <summary>Gets the endpoint for the <c>openai-compatible</c> provider.</summary>
     public string? BaseUrl { get; init; }
 
+    /// <summary>
+    /// Gets the model a turn that failed with 401 or 5xx is replayed at, or null for no fallback.
+    /// </summary>
+    /// <remarks>
+    /// Parsed here rather than in the command because an unknown provider is a command-line mistake:
+    /// the developer reads the list of providers this build knows while typing, not three seconds into
+    /// a turn.
+    /// </remarks>
+    public ModelDescriptor? Fallback { get; init; }
+
     /// <summary>Gets the transcript path, or null for the timestamped default.</summary>
     public string? SessionPath { get; init; }
 
@@ -139,6 +150,7 @@ internal sealed record CliOptions
         MaxTotalTokens = MaxTotalTokens,
         Temperature = Temperature,
         BaseUrl = BaseUrl,
+        Fallback = Fallback,
         IndexEnabled = IndexEnabled,
         IndexBudget = TimeSpan.FromMilliseconds(IndexBudgetMs),
     };
@@ -457,6 +469,24 @@ internal sealed record CliOptions
         ? choice
         : throw new CliUsageException($"unknown colour mode '{value}'.", "Use auto, always or never.");
 
+    /// <summary>
+    /// Parses <c>--fallback</c>, which names a model the same way <c>/model</c> does.
+    /// </summary>
+    /// <param name="value">The <c>provider:model</c> text.</param>
+    /// <returns>The descriptor, taken from the catalogue when the identifier is listed.</returns>
+    /// <exception cref="CliUsageException">The text is not a known provider followed by an identifier.</exception>
+    /// <remarks>
+    /// An unknown provider is refused here rather than after the first 401: a fallback that cannot be
+    /// built is worse than no fallback, because the developer has stopped watching for the failure it
+    /// was meant to cover.
+    /// </remarks>
+    private static ModelDescriptor ParseFallback(string value) =>
+        ModelCatalog.TryParseQualified(value, out var descriptor)
+            ? descriptor!
+            : throw new CliUsageException(
+                $"'{value}' is not a fallback this build can use.",
+                $"Name a provider this build knows ({string.Join(", ", ModelCatalog.Providers)}) and a model, for example grok:grok-4.7.");
+
     private static CliOptions ApplyOption(CliOptions options, string[] args, ref int index, string name)
     {
         switch (name)
@@ -496,6 +526,9 @@ internal sealed record CliOptions
 
             case "--base-url":
                 return options with { BaseUrl = TakeValue(args, ref index, name) };
+
+            case "--fallback":
+                return options with { Fallback = ParseFallback(TakeValue(args, ref index, name)) };
 
             case "--session":
                 return options with { SessionPath = TakeValue(args, ref index, name), SaveSession = true };

@@ -94,7 +94,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IChatModelResolver>(provider => new ChatModelResolver(
             provider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName),
             provider.GetRequiredService<ICredentialStore>(),
-            options.BaseUrl));
+            options.BaseUrl,
+            fallback: options.Fallback));
 
         AddTools(services);
 

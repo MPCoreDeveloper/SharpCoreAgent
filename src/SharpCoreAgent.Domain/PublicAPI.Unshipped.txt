@@ -1,4 +1,24 @@
 #nullable enable
+SharpCoreAgent.Domain.Agents.AgentReport.Fallbacks.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Model.FallbackUsed!>!
+SharpCoreAgent.Domain.Agents.AgentReport.Fallbacks.init -> void
+SharpCoreAgent.Domain.Agents.FallbackAttempted
+SharpCoreAgent.Domain.Agents.FallbackAttempted.Deconstruct(out SharpCoreAgent.Domain.Model.FallbackUsed! Fallback) -> void
+SharpCoreAgent.Domain.Agents.FallbackAttempted.Equals(SharpCoreAgent.Domain.Agents.FallbackAttempted? other) -> bool
+SharpCoreAgent.Domain.Agents.FallbackAttempted.Fallback.get -> SharpCoreAgent.Domain.Model.FallbackUsed!
+SharpCoreAgent.Domain.Agents.FallbackAttempted.Fallback.init -> void
+SharpCoreAgent.Domain.Agents.FallbackAttempted.FallbackAttempted(SharpCoreAgent.Domain.Model.FallbackUsed! Fallback) -> void
+SharpCoreAgent.Domain.Model.FallbackUsed
+SharpCoreAgent.Domain.Model.FallbackUsed.Deconstruct(out string! PrimaryModelId, out int StatusCode, out string! Reason, out string! FallbackModelId) -> void
+SharpCoreAgent.Domain.Model.FallbackUsed.Equals(SharpCoreAgent.Domain.Model.FallbackUsed? other) -> bool
+SharpCoreAgent.Domain.Model.FallbackUsed.FallbackModelId.get -> string!
+SharpCoreAgent.Domain.Model.FallbackUsed.FallbackModelId.init -> void
+SharpCoreAgent.Domain.Model.FallbackUsed.FallbackUsed(string! PrimaryModelId, int StatusCode, string! Reason, string! FallbackModelId) -> void
+SharpCoreAgent.Domain.Model.FallbackUsed.PrimaryModelId.get -> string!
+SharpCoreAgent.Domain.Model.FallbackUsed.PrimaryModelId.init -> void
+SharpCoreAgent.Domain.Model.FallbackUsed.Reason.get -> string!
+SharpCoreAgent.Domain.Model.FallbackUsed.Reason.init -> void
+SharpCoreAgent.Domain.Model.FallbackUsed.StatusCode.get -> int
+SharpCoreAgent.Domain.Model.FallbackUsed.StatusCode.init -> void
 abstract SharpCoreAgent.Domain.Agents.AgentEvent.<Clone>$() -> SharpCoreAgent.Domain.Agents.AgentEvent!
 abstract SharpCoreAgent.Domain.Model.ChatStreamEvent.<Clone>$() -> SharpCoreAgent.Domain.Model.ChatStreamEvent!
 const SharpCoreAgent.Domain.Index.CodeQuery.AnyKind = "any" -> string!
@@ -6,12 +26,22 @@ const SharpCoreAgent.Domain.Index.CodeQuery.DefaultHops = 1 -> int
 const SharpCoreAgent.Domain.Index.CodeQuery.DefaultK = 8 -> int
 const SharpCoreAgent.Domain.Index.CodeQuery.MaxHops = 3 -> int
 const SharpCoreAgent.Domain.Index.CodeQuery.MaxK = 12 -> int
+override SharpCoreAgent.Domain.Agents.FallbackAttempted.<Clone>$() -> SharpCoreAgent.Domain.Agents.FallbackAttempted!
+override SharpCoreAgent.Domain.Agents.FallbackAttempted.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.FallbackAttempted.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.FallbackAttempted.ToString() -> string!
+override SharpCoreAgent.Domain.Model.FallbackUsed.<Clone>$() -> SharpCoreAgent.Domain.Model.FallbackUsed!
+override SharpCoreAgent.Domain.Model.FallbackUsed.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Model.FallbackUsed.GetHashCode() -> int
+override SharpCoreAgent.Domain.Model.FallbackUsed.ToString() -> string!
 override sealed SharpCoreAgent.Domain.Agents.AgentTextDelta.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Agents.AgentThinkingDelta.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Agents.FallbackAttempted.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Agents.ToolFinished.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Agents.ToolRequested.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Agents.TurnFinished.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Agents.TurnStarted.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+override sealed SharpCoreAgent.Domain.Model.FallbackUsed.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Model.StreamCompleted.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Model.TextDelta.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
 override sealed SharpCoreAgent.Domain.Model.ThinkingDelta.Equals(SharpCoreAgent.Domain.Model.ChatStreamEvent? other) -> bool
@@ -686,6 +716,8 @@ static SharpCoreAgent.Domain.Agents.AgentTextDelta.operator !=(SharpCoreAgent.Do
 static SharpCoreAgent.Domain.Agents.AgentTextDelta.operator ==(SharpCoreAgent.Domain.Agents.AgentTextDelta? left, SharpCoreAgent.Domain.Agents.AgentTextDelta? right) -> bool
 static SharpCoreAgent.Domain.Agents.AgentThinkingDelta.operator !=(SharpCoreAgent.Domain.Agents.AgentThinkingDelta? left, SharpCoreAgent.Domain.Agents.AgentThinkingDelta? right) -> bool
 static SharpCoreAgent.Domain.Agents.AgentThinkingDelta.operator ==(SharpCoreAgent.Domain.Agents.AgentThinkingDelta? left, SharpCoreAgent.Domain.Agents.AgentThinkingDelta? right) -> bool
+static SharpCoreAgent.Domain.Agents.FallbackAttempted.operator !=(SharpCoreAgent.Domain.Agents.FallbackAttempted? left, SharpCoreAgent.Domain.Agents.FallbackAttempted? right) -> bool
+static SharpCoreAgent.Domain.Agents.FallbackAttempted.operator ==(SharpCoreAgent.Domain.Agents.FallbackAttempted? left, SharpCoreAgent.Domain.Agents.FallbackAttempted? right) -> bool
 static SharpCoreAgent.Domain.Agents.NullAgentObserver.Instance.get -> SharpCoreAgent.Domain.Agents.NullAgentObserver!
 static SharpCoreAgent.Domain.Agents.ToolApprovalRequest.operator !=(SharpCoreAgent.Domain.Agents.ToolApprovalRequest? left, SharpCoreAgent.Domain.Agents.ToolApprovalRequest? right) -> bool
 static SharpCoreAgent.Domain.Agents.ToolApprovalRequest.operator ==(SharpCoreAgent.Domain.Agents.ToolApprovalRequest? left, SharpCoreAgent.Domain.Agents.ToolApprovalRequest? right) -> bool
@@ -730,6 +762,8 @@ static SharpCoreAgent.Domain.Model.ChatResponse.operator !=(SharpCoreAgent.Domai
 static SharpCoreAgent.Domain.Model.ChatResponse.operator ==(SharpCoreAgent.Domain.Model.ChatResponse? left, SharpCoreAgent.Domain.Model.ChatResponse? right) -> bool
 static SharpCoreAgent.Domain.Model.ChatStreamEvent.operator !=(SharpCoreAgent.Domain.Model.ChatStreamEvent? left, SharpCoreAgent.Domain.Model.ChatStreamEvent? right) -> bool
 static SharpCoreAgent.Domain.Model.ChatStreamEvent.operator ==(SharpCoreAgent.Domain.Model.ChatStreamEvent? left, SharpCoreAgent.Domain.Model.ChatStreamEvent? right) -> bool
+static SharpCoreAgent.Domain.Model.FallbackUsed.operator !=(SharpCoreAgent.Domain.Model.FallbackUsed? left, SharpCoreAgent.Domain.Model.FallbackUsed? right) -> bool
+static SharpCoreAgent.Domain.Model.FallbackUsed.operator ==(SharpCoreAgent.Domain.Model.FallbackUsed? left, SharpCoreAgent.Domain.Model.FallbackUsed? right) -> bool
 static SharpCoreAgent.Domain.Model.ModelDescriptor.operator !=(SharpCoreAgent.Domain.Model.ModelDescriptor? left, SharpCoreAgent.Domain.Model.ModelDescriptor? right) -> bool
 static SharpCoreAgent.Domain.Model.ModelDescriptor.operator ==(SharpCoreAgent.Domain.Model.ModelDescriptor? left, SharpCoreAgent.Domain.Model.ModelDescriptor? right) -> bool
 static SharpCoreAgent.Domain.Model.StreamCompleted.operator !=(SharpCoreAgent.Domain.Model.StreamCompleted? left, SharpCoreAgent.Domain.Model.StreamCompleted? right) -> bool

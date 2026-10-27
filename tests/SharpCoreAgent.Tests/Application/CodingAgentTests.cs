@@ -6,6 +6,7 @@ using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Infrastructure.Chat;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Application;
@@ -303,6 +304,57 @@ public sealed class CodingAgentTests
 
         Assert.Equal(AgentOutcome.Completed, report.Outcome);
         Assert.Empty(observer.Events.OfType<ToolOutputDelta>());
+    }
+
+    [Fact]
+    public async Task AFallbackIsRecordedAndTheAnswerIsBilledToTheFallback()
+    {
+        using var directory = TempDirectory.Create();
+        var grok = new ModelDescriptor("grok", "grok-4.7", "Grok");
+        var model = new FallbackChatModel(
+            new FailingModel(Descriptor, new ModelRequestException("demo", "demo-scripted", 401, "invalid key", isTransient: false)),
+            new ScriptedModel(grok, [Completed("from the fallback")]));
+        var observer = new RecordingObserver();
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, []).RunTurnAsync(
+            session, "hi", observer, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Equal("grok:grok-4.7", report.ModelId);
+        Assert.Equal(1, report.Iterations);
+
+        var fallback = Assert.Single(report.Fallbacks);
+        Assert.Equal("demo:demo-scripted", fallback.PrimaryModelId);
+        Assert.Equal(401, fallback.StatusCode);
+        Assert.Equal("grok:grok-4.7", fallback.FallbackModelId);
+        Assert.Contains(observer.Events.OfType<FallbackAttempted>(), attempted => attempted.Fallback == fallback);
+
+        // The tokens belong to the model that produced them: `/cost` prices the session's lines by name.
+        var usage = Assert.Single(session.UsageByModel);
+        Assert.Equal("grok:grok-4.7", usage.ModelId);
+        Assert.Equal(10, usage.InputTokens ?? 0);
+        Assert.Equal(5, usage.OutputTokens ?? 0);
+    }
+
+    [Fact]
+    public async Task ATurnThatFallsBackAndThenFailsNamesBothAttempts()
+    {
+        using var directory = TempDirectory.Create();
+        var grok = new ModelDescriptor("grok", "grok-4.7", "Grok");
+        var model = new FallbackChatModel(
+            new FailingModel(Descriptor, new ModelRequestException("demo", "demo-scripted", 503, "busy", isTransient: true)),
+            new FailingModel(grok, new ModelRequestException("grok", "grok-4.7", 500, "still down", isTransient: true)));
+
+        var report = await Agent(model, []).RunTurnAsync(
+            Session(directory.Path), "hi", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Failed, report.Outcome);
+        Assert.Equal("grok:grok-4.7", report.ModelId);
+        Assert.Contains("still down", report.Detail!, StringComparison.Ordinal);
+        var fallback = Assert.Single(report.Fallbacks);
+        Assert.Equal("demo:demo-scripted", fallback.PrimaryModelId);
+        Assert.Equal(503, fallback.StatusCode);
     }
 
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
