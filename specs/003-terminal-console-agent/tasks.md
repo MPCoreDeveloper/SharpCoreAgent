@@ -61,9 +61,13 @@ pass has a real list rather than a memory.
 
 - [ ] T040 Opt-in MCP client (`--mcp <command>`), tools registered through the same `IToolRegistry`, approval inherited from `ToolSafety`.
 
+## Found in passing
+
+- [X] T045 Fix `AgentSession.RecordUsage`, which seeded a model's first row with the reported tokens and then added them again, so `/usage` reported double the first turn and `/usage` disagreed with its own total. Pinned by `AgentSessionUsageTests`.
+
 ## Verification
 
 - [X] T041 `dotnet build -c Release` clean.
-- [X] T042 `dotnet test -c Release` green: 497 tests, 0 failed.
+- [X] T042 `dotnet test -c Release` green: 500 tests, 0 failed.
 - [X] T043 Redirected smoke test: `models` and `--help` contain no escape byte.
 - [X] T044 `run --provider demo --mode plan` completes without a write.

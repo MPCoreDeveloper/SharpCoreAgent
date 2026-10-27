@@ -99,11 +99,11 @@ public sealed class AgentSession
         // A session that has not heard from a provider yet reports unknown, not a confident zero.
         _totalUsage = _totalUsage is null ? usage : _totalUsage + usage;
 
-        // The first sighting seeds the per-model row with the reported numbers, so the addition below
-        // counts this request exactly once.
+        // The first sighting starts from zero, so the addition below counts this request exactly once.
+        // Seeding with the reported numbers and then adding them again reported double the first turn.
         var previous = _usage.TryGetValue(modelId, out var existing)
             ? existing
-            : new ModelUsage(modelId, usage.InputTokens, usage.OutputTokens, 0);
+            : new ModelUsage(modelId, 0, 0, 0);
 
         _usage[modelId] = new ModelUsage(
             modelId,

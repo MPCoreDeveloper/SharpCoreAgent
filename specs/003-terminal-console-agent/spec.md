@@ -106,13 +106,15 @@ Acceptance:
 
 ## Success criteria
 
-- `dotnet test` is green: 497 tests (460 before this feature, 37 added).
+- `dotnet test` is green: 500 tests (460 before this feature, 40 added).
 - With output redirected, `run`, `chat`, `models` and `--help` contain no `\u001b` byte.
 - An `ask`-mode edit on a real file prints a hunk whose `-` lines match the file before approval.
 - A plan turn on any provider performs no write: the tool list has no destructive entry, and a forced
   call is refused without touching the disk.
 - `/compact` on a 40-message session removes the old turns, keeps the system prompts, and the next
   request is accepted by the same provider.
+- `/usage` reports the same tokens per model and in total for a single turn: the double-count in the
+  first-turn path, found while validating this feature, is fixed and pinned by tests.
 
 ## Out of scope
 

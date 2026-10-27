@@ -71,7 +71,7 @@ says how many messages were dropped, so a later answer that references them is e
 | `src/SharpCoreAgent.Domain/Agents/Approval.cs` | `ToolApprovalRequest.Preview` |
 | `src/SharpCoreAgent.Domain/Tools/IToolPreview.cs` | new: preview contract |
 | `src/SharpCoreAgent.Domain/Text/UnifiedDiff.cs` | new: hunk renderer |
-| `src/SharpCoreAgent.Application/AgentSession.cs` | `Mode`, `Compact(n)` |
+| `src/SharpCoreAgent.Application/AgentSession.cs` | `Mode`, `Compact(n)`, first-turn usage double-count fix |
 | `src/SharpCoreAgent.Application/CodingAgent.cs` | `MessagesFor`, `DefinitionsFor`, plan denial, preview |
 | `src/SharpCoreAgent.Application/PromptLibrary.cs` | `PlanModeInstruction`; `replace_in_file` rule |
 | `src/SharpCoreAgent.Application/ToolRegistry.cs` | `Tools`, so plan mode can filter by safety |
@@ -89,6 +89,9 @@ says how many messages were dropped, so a later answer that references them is e
   text, path escape as a refusal, preview content, preview `null` on a miss.
 - **Session hygiene (5 tests).** Fits, keeps system + window, refuses an orphan tool window, rejects a
   non-positive window, mode default.
+- **Usage accounting (3 tests).** First request counted once, later requests accumulated, per-model rows
+  summing to the total. These pin a defect found while smoke-testing `/usage`: a first turn used to be
+  reported twice in its per-model row.
 - **Command line (6 tests + 5 alias cases).** Defaults, three colour words, plan parsing, two hint
   messages, every alias, unknown alias.
 

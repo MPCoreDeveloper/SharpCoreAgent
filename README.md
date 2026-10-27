@@ -268,7 +268,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 497 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 500 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits and plan mode, with the tests that cover them — so the next scan moves
   both the line count and the percentage. **The gate passes**, including
   new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
@@ -303,7 +303,7 @@ the second duplicates settings that would drift.
   and the agent-facing wiring.
 - `specs/003-terminal-console-agent` — P0–P2 are complete (one ANSI palette with `NO_COLOR` and pipe
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
-  `/compact` and model aliases. The suite is 497 tests, all green, with no compiler warnings. Checkpoints,
+  `/compact` and model aliases. The suite is 500 tests, all green, with no compiler warnings. Checkpoints,
   `--resume`, live-catalogue refresh, `/cost` and MCP are listed in that spec's `tasks.md` as not started.
 
 ## Spec-driven development
