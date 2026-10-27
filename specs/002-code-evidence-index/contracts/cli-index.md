@@ -18,7 +18,7 @@ sharpcoreagent --help | --version
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--status` | the default when no other flag is given | print coverage and freshness; never writes |
+| `--status` | off — a bare `index` builds | print coverage and freshness; never writes |
 | `--rebuild` | off | delete every row and rebuild from scratch |
 | `--verify` | off | compare the index against the workspace and report drift; never writes |
 | `--prune` | off | drop rows for files that no longer exist, and re-index nothing else |
@@ -148,14 +148,30 @@ because scripts branch on it.
 
 ## Parsing rules (asserted by `CliOptionsTests`)
 
-- `index` with no flags ⇒ `Status`.
+- `index` with no flags ⇒ a build, because every other message in the product says ``run `sharpcoreagent index` ``
+  when the index is missing and a command that answered `--status` instead would leave that hint wrong. The build is
+  incremental, so running it twice reports `0 changed`; `--status` is how a developer *looks*.
 - `--status --json` ⇒ `Status` + JSON.
 - `--rebuild --verify` ⇒ `CliUsageException` naming both.
 - `--index-budget -1` ⇒ `CliUsageException`: "option '--index-budget' needs a whole number of
   milliseconds, zero or greater, but got '-1'".
 - `--embedder nope` ⇒ `CliUsageException` listing `hashed-local`, `provider`, `off`.
+- `--embedder provider` and `--embedder off` parse and then refuse with exit 2 (`this build only produces the
+  hashed-local embedder…`); `--tier rich` likewise. They are parsed first so the message can quote what was asked
+  and name what this build makes, instead of silently building something else.
 - `--no-index` on `index` ⇒ `CliUsageException`: "the index command always uses the index."
 - A leading `ariadne` token is dropped before parsing, so `ariadne index` (a shell alias for `sharpcoreagent`)
   behaves exactly like `sharpcoreagent index`; `--version` prints `Ariadne <version> (SharpCoreAgent)`.
 - Parsing never touches the disk: `CliOptions.Parse` returns values, and `IndexCommand` does the I/O.
+
+## Not in this build
+
+`tasks.md` names the task that closes each item, where one exists.
+
+| Promised above | Status | Why |
+|---|---|---|
+| `/index`, `/index rebuild`, `/index verify`, `/index off` | absent | `/index off` would have to revoke an `ICodeIndex` that the five tools already hold; the honest version of that is a restart with `--no-index`, which is what the help text says |
+| `symbols.community`, `symbols.centrality`, the `communities` line | NULL / absent | T013 (Louvain over the built edge set) is not implemented; every consumer already treats a null community as "not known" |
+| `quantization` in `--status` and `--json`, `documents` in the content line | absent | `IndexStatus` carries neither: the lean build always stores `int8`, and a constant field would suggest a choice that does not exist |
+
 

@@ -3,9 +3,11 @@
 **Feature**: `002-code-evidence-index` | **Date**: 2026-10-24
 
 Every decision below was taken against the actual sources: the SharpCoreDB repository at
-`d:\repos\MPCoreDeveloper\SharpCoreDB` (packages `2.1.1`, `net11.0`) and the SharpCoreAgent tree at
+`d:\repos\MPCoreDeveloper\SharpCoreDB` (packages `2.1.2`, `net11.0`) and the SharpCoreAgent tree at
 `d:\repos\MPCoreDeveloper\SharpCoreAgent`. Where a SharpCoreDB behaviour is named, it was read in that
-repository, not inferred.
+repository, not inferred. Version-qualified findings name the release they were measured on, because the
+engine moved three times during this feature (`2.1.0-RC.3` → `2.1.0` → `2.1.1` → `2.1.2`) and a finding
+without its release stops being true without anyone noticing.
 
 ## Verified capabilities this feature builds on
 
@@ -28,17 +30,37 @@ repository, not inferred.
 ## D1 — Depend on SharpCoreDB packages, not on the project tree
 
 **Decision**: reference `SharpCoreDB`, `SharpCoreDB.Search`, `SharpCoreDB.VectorSearch`,
-`SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and `SharpCoreDB.HybridSearch` at `2.1.1` from
+`SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced` and `SharpCoreDB.HybridSearch` at `2.1.2` from
 nuget.org, with one MSBuild switch (`SharpCoreAgentUseLocalSharpCoreDb=true`) that
 swaps in `ProjectReference`s for engine development.
 
-**Why**: the versions are local pre-releases, so `nuget.org` alone cannot satisfy them, and `artifacts`
-is a flat folder of `.nupkg` files — already a valid folder feed. A project-reference-only setup would
-drag SharpCoreDB's own build props, analyzers and dozens of projects into every SharpCoreAgent build.
+**Why**: a project-reference-only setup would drag SharpCoreDB's own build props, analyzers and dozens of
+projects into every SharpCoreAgent build, and the graph + BM25 + vector stack is not something this
+repository should own. The packages are published on nuget.org — one feed, one version — so a clone
+restores them like any other dependency; the RC-era local folder feed was retired when `2.1.0` shipped.
 
-**Cost**: `nuget.config` needs a second `packageSource` plus a `packageSourceMapping` pattern for
-`SharpCoreDB*`; `Directory.Packages.props` needs six `PackageVersion` rows. Both are recorded in
-`plan.md` under Complexity Tracking, because the constitution requires a stated reason per dependency.
+**Cost**: six `PackageVersion` rows in `Directory.Packages.props`, and a version that is a floor rather
+than a preference (next paragraph). Both are recorded in `plan.md` under Complexity Tracking, because the
+constitution requires a stated reason per dependency.
+
+**Measured (2026-10-26): the floor is `2.1.2`, and falling back to `2.1.1` is not free.** `2.1.1` rendered
+a bound value into the statement text and then let a *second*, differently-escaped scanner read it as SQL,
+so a `TEXT` holding an apostrophe, a doubled quote or a backslash shifted a column left or failed the parse
+with *Mismatched parentheses in VALUES clause*. Reproduced on the shipped packages through
+`ProseRoundTripTests`, which holds the shapes SharpCoreDB's own known-issue 7 reproduction names — `it's`
+mid-tuple, a stray backslash-quote, a value ending in a backslash, and the parentheses-and-commas control —
+plus a doubled-quote run (`'quoted', 'doubled''quotes', 1, 2, 3`), a Windows path holding two apostrophes,
+and a workspace path with an apostrophe in it: six of the eight cases fail on `2.1.1` — `it's` came back as
+`its`, `'quoted', 'doubled''quotes', 1, 2, 3` as `quoted`, the stray-quote and trailing-backslash shapes
+threw, and the indented passage lost its surrounding spaces — and all eight pass on `2.1.2`, where every
+literal goes through one `Services/SqlLiteralScanner.cs` (known issue 7). Parentheses and commas alone were
+always safe, which is why the defect could hide: the cases that broke needed a quote or a backslash, and most
+code has neither. The whitespace case is the one that also explains an existing line of ours: `PassageChunker`
+trims a passage at its edges because `2.1.1` stripped that whitespace anyway, and `2.1.2` keeps it, so the
+trim is now the chunker's choice instead of a workaround. The exposure was on the read side and in the
+statements that carry a path or a query string; passages were already written through the table API, which
+never renders a row as text. `Directory.Packages.props` therefore pins `2.1.2` and the test holds those
+shapes, so a fall back fails the suite instead of quietly storing prose minus its apostrophes.
 
 ## D2 — One SharpCoreDB database per workspace, unencrypted by default
 
@@ -283,14 +305,15 @@ agent trust "the first block" as a fact rather than a sample.
 
 ## D15 — Risks
 
-- **Engine defects that postdate the release**: `2.1.1` closes the two that mattered —
-  `32227696` (a bound `float[]` now reaches a `VECTOR(n)` column) and `16cb51d5` (the SQL vector
-  optimizer is wired again). The residual gap is narrower and measured: the planner engages only on a
-  directory-mode database, so this single-file index still ranks in C# (D6). Mitigation for anything the
-  next release breaks is the `SharpCoreAgentUseLocalSharpCoreDb` switch, which builds against a sibling
-  checkout when a newer engine has to be tried before it ships. The version is the released `2.1.1` on
-  nuget.org — the RC-era folder feed this section used to describe is gone, and `nuget.config` names one
-  source.
+- **Engine defects that postdate the release**: `2.1.2` closes the three that mattered — `32227696` (a bound
+  `float[]` now reaches a `VECTOR(n)` column), `16cb51d5` (the SQL vector optimizer is wired again) and
+  known issue 7 (one literal scanner, so a bound `TEXT` holding an apostrophe, a doubled quote or a
+  backslash round-trips instead of shifting a column; `ProseRoundTripTests`, D1). The residual gap is
+  narrower and measured: the planner engages only on a directory-mode database, so this single-file index
+  still ranks in C# (D6). Mitigation for anything the next release breaks is the
+  `SharpCoreAgentUseLocalSharpCoreDb` switch, which builds against a sibling checkout when a newer engine has
+  to be tried before it ships. The version is the released `2.1.2` on nuget.org — the RC-era folder feed this
+  section used to describe is gone, and `nuget.config` names one source.
 - **Memory**: BM25 + adjacency snapshot + vectors are in memory. Mitigation: `MaxChunks` bound, passage
   vectors read per query rather than held, and `index_status` reporting counts so the developer can see
   the size before it hurts.
@@ -299,5 +322,54 @@ agent trust "the first block" as a fact rather than a sample.
 - **Index write on a large first run**: the first `sharpcoreagent run` in a 5 000-file repository has work to
   do. Mitigation: the turn-start budget (FR-021) plus `partial` coverage, and `sharpcoreagent index` for the
   developer who wants it done up front.
+
+## D16 — Measured build cost and index size (2026-10-27), and what SC-002 and SC-006 can claim
+
+**Measured**: the shipped CLI on this repository, .NET 11 Release, one developer machine. Three cold builds
+of nested corpora (each into its own `.sharpcoreagent`), then a no-change rebuild of the whole repository:
+
+| Corpus | Files | Passages | Symbols | Edges | Communities | Cold build | Index |
+|---|---|---|---|---|---|---|---|
+| `src\SharpCoreAgent.Application` | 7 | 84 | 73 | 34 | 10 | 0.7 s | 6.1 MiB |
+| `src\SharpCoreAgent.Infrastructure` | 35 | 476 | 419 | 230 | 54 | 5.9 s | 9.1 MiB |
+| this repository | 459 | 10 314 | 4 571 | 5 284 | 329 | 513.5 s | 69.2 MiB |
+| this repository, second run | 459, 0 changed | — | — | — | — | 4.0 s | — |
+
+**Two success criteria are not met, and the gap is not a rounding error:**
+
+- **SC-002** asks for a cold index of 5 000 files / 50 MB in under 90 s. This repository is a ninth of that
+  corpus — 459 files, 14.28 MiB of source once `bin`, `obj`, `.git`, `.sonarqube` and `.sharpcoreagent` are
+  excluded — and the build takes 513.5 s, 5.7× the entire budget on 9% of the work. The cost per passage
+  *rises* with the size of the database: 8.3 ms, then 12.4 ms, then 49.8 ms across the three rows, a power
+  law with an exponent near 1.4. Extrapolating that to 5 000 files at this passage density (22.5 per file, so
+  roughly 112 000 passages) gives hours, not a minute and a half. The build is therefore not "90 s on a
+  laptop with a slower disk"; it is superlinear in passages and nowhere near the criterion at any size
+  measured.
+- **SC-006** asks for the index directory to stay under 50% of the source tree. It is 4.8× (69.2 MiB against
+  14.28 MiB). A fixed floor is part of that — a 7-file index is already 6.1 MiB, so the file carries
+  megabytes before the first passage — but the floor cannot explain the ratio, because the 35-file corpus is
+  already 9.1 MiB against roughly 1 MiB of source.
+- The incremental half of SC-002 is a near miss rather than a miss: a no-change rebuild is 4.0 s against
+  "under 3 s with one changed file". It is, however, above the 3 s turn budget (FR-021), which is why that
+  budget is a bound that ends in `partial` coverage rather than a promise of freshness.
+- **SC-003** (p95 < 250 ms for `search_code` on a 20 000-passage index) is **not measured**. This index holds
+  10 314 passages, half the size the criterion names, and there is no benchmark harness; the retrieval tests
+  assert ranking, not latency. It is listed as open rather than assumed.
+
+**Decision: the criteria stay as written and the measurement sits next to them.** Rewriting SC-002 to "900 s
+for 5 000 files" would turn a performance defect into a specification, and the four numbers above are exactly
+what the next engine release has to be measured against. `spec.md` therefore carries a measured note on
+SC-002, SC-003 and SC-006 pointing here, and `tasks.md` T034 is the open work. No task in `tasks.md` ever
+claimed otherwise: T022 records the 200-file/25-query quality benchmark as a manual run, and `plan.md` calls
+the 5 000-file performance smoke "not in CI" — the gap was that nobody had run it on a corpus large enough
+for the difference to show, and the quickstart's 100-line example corpus is far too small to reveal it.
+
+**What would move it, in the order worth trying.** All four phases sit inside the timed window — extraction,
+the per-file transaction that writes the rows, the vector encode, and the community assignment over the whole
+graph at build time (D10) — so attribution comes before a fix. The first experiment is batching the writes:
+the rows are written one statement at a time today, and `InsertBatch` is in the engine's surface (see the
+capability table above). The second is moving community assignment out of the per-file path or bounding it.
+An engine-level fix is tried through D1's `SharpCoreAgentUseLocalSharpCoreDb=true` switch against a sibling
+checkout before it ships, which is what that switch exists for.
 
 

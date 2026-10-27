@@ -267,14 +267,19 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
 - **SC-001**: On a fixed 200-file corpus with 25 recorded queries, the expected file appears in the top
   five for at least 22 of 25 queries, and first for at least 18.
 - **SC-002**: A cold index of a 5 000-file, 50 MB source tree completes in under 90 seconds on a laptop;
-  an incremental run with one changed file completes in under 3 seconds.
-- **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95.
+  an incremental run with one changed file completes in under 3 seconds. *(Measured 2026-10-27: not met.
+  This repository — 459 files, 14.28 MiB — is a 513.5 s cold build, and the no-change rebuild is 4.0 s.
+  The criterion stands as the target; `research.md` D16 has the numbers and `tasks.md` T034 is the work.)*
+- **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95. *(Not measured
+  2026-10-27: the index this repository builds holds 10 314 passages, half the size, and no latency harness
+  exists. Open, not assumed; `research.md` D16.)*
 - **SC-004**: On the five recorded benchmark tasks, a turn that uses `search_code` before `read_file`
   consumes at least 30% fewer input tokens than the same turn with the file tools only.
 - **SC-005**: 100% of evidence blocks name a path, a line range and a hash; 0 blocks point outside the
   workspace.
 - **SC-006**: The index directory stays under 50% of the size of the indexed source tree with int8
-  quantisation.
+  quantisation. *(Measured 2026-10-27: not met — 69.2 MiB for 14.28 MiB of source, 4.8× where this asks for
+  0.5×; `research.md` D16.)*
 - **SC-007**: Two runs over an unchanged workspace produce identical query results and index metadata,
   the build timestamp excepted.
 - **SC-008**: With no network available, every requirement above still holds.
@@ -284,7 +289,7 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
 - The workspace is a single directory tree on local disk and `.sharpcoreagent/` is writable; when it is not,
   the feature degrades to "index unavailable" rather than failing the turn.
 - Source files are UTF-8 or single-byte; invalid sequences are replaced, not rejected.
-- The SharpCoreDB `2.1.1` packages (`SharpCoreDB`, `.Graph`, `.Graph.Advanced`, `.Search`,
+- The SharpCoreDB `2.1.2` packages (`SharpCoreDB`, `.Graph`, `.Graph.Advanced`, `.Search`,
   `.VectorSearch`, `.HybridSearch`) are published on nuget.org and target `net11.0` like this
   repository.
 - The local embedder is deliberately lexical-hashed rather than neural: zero download, deterministic,

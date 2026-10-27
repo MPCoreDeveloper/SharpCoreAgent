@@ -16,6 +16,13 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     create the project with `net11.0`, nullable enabled, references to `SharpCoreAgent.Domain` and those
     six packages.
   - Done when: `dotnet restore` resolves all six from nuget.org with no `NU1101`.
+  - Done: all six restore from one feed at one version, and that version has been raised twice since the RC
+    that opened the task — `2.1.1` (2026-10-25) and `2.1.2` (2026-10-26). The second is a floor rather than
+    a preference: through `2.1.1` a bound `TEXT` holding an apostrophe, a doubled quote or a backslash was
+    re-read as SQL by a second scanner, so the value shifted a column left or failed the parse.
+    `ProseRoundTripTests` holds the shapes SharpCoreDB's known-issue 7 reproduction names, plus a
+    doubled-quote run, a Windows path with two apostrophes and an indented passage: six of the eight fail on
+    `2.1.1`, all eight pass on `2.1.2` (`research.md`, D1 and D15).
 
 - [x] **T002** Add the project-reference escape hatch
   - Files: `src/SharpCoreAgent.Indexing/SharpCoreAgent.Indexing.csproj`
@@ -103,12 +110,21 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Test: `IncrementalIndexTests` — add/modify/delete one file in a five-file workspace and assert exact
     counts, `0 changed` on a repeat run, and the previous `build_id` surviving a simulated mid-file failure.
 
-- [ ] **T013** Assign communities
+- [x] **T013** Assign communities
   - Files: `src/SharpCoreAgent.Indexing/Graph/CommunityAssigner.cs`
   - Do: load the build's edges into `Graph.Advanced`, run Louvain once, write `symbols.community` as
     `c<n>` plus degree centrality; deterministic ordering of communities by first member key.
   - Test: `CommunityAssignerTests` — two disjoint clusters get two distinct labels; the same corpus
     produces the same labels twice.
+  - Done: `IndexWriter` calls it once per build (`IndexWriter.cs:134`). The edges are read as an undirected,
+    duplicate-free adjacency list and only the *connected* declarations are handed to
+    `SharpCoreDB.Graph.Advanced` (`LouvainAlgorithm`, `DegreeCentrality`), densely renumbered because Louvain
+    addresses a node by array index. Communities are numbered by their ordinally-first member, not by the
+    algorithm's own id, so the same corpus numbers the same way; the third test pins that degree centrality
+    ranks a called declaration above an uncalled one. A declaration with no neighbour keeps an empty label and
+    is counted in `Isolated` instead of becoming a community of one, a neighbour endpoint the build cannot name
+    is skipped rather than counted, and both columns are written in one batch so an interrupted pass leaves the
+    previous labels rather than half of the new ones.
 
 - [x] **T014** Refresh within a budget
   - Files: `src/SharpCoreAgent.Indexing/SharpCoreDbIndexMaintainer.cs` (`EnsureFreshAsync`, `RebuildAsync`)
@@ -165,7 +181,11 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     Two of those three deviations were retired by the engine bump to `2.1.1` (2026-10-25): the writer binds
     the embedder's `float[]` again instead of encoding it as JSON, and `analyzer_contract` is 3 so the cells
     the old path wrote are re-derived. The C# cosine stays: the repaired planner engages only on a
-    directory-mode database, and this index is one file (`research.md`, D6 re-measurement).
+    directory-mode database, and this index is one file (`research.md`, D6 re-measurement). The third
+    deviation is settled by `2.1.2` too: that release round-trips a bound `TEXT` with its surrounding
+    whitespace, so the trim in `PassageChunker` is now the chunker's own choice — the passage is the
+    declaration, not the indentation in front of it — rather than a workaround, and `ProseRoundTripTests`
+    pins the shape so nothing silently reintroduces the dependency.
 
 - [x] **T019** Fuse and boost
   - Files: `src/SharpCoreAgent.Indexing/Ranking/ReciprocalRankFusion.cs`, `Ranking/EvidenceRanker.cs`
@@ -192,14 +212,17 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     `Trimmed`) and a `Note` the tool renders in its header. The character cap is measured with a per-block
     estimate (`OverheadChars` + heading + excerpt), not by rendering here: formatting belongs to the tool.
 
-- [ ] **T021** Ship `search_code`
+- [x] **T021** Ship `search_code`
   - Files: `src/SharpCoreAgent.Infrastructure/Tools/SearchCodeTool.cs`
   - Do: the exact schema and output from `contracts/retrieval-tools.md`; JSON-string `arguments`;
     `ToolResult.IsError` for an unusable query, `Failure` for a missing index; no exception escapes.
   - Test: `SearchCodeToolTests` — schema snapshot, malicious input, `k` clamped, no-match message, missing
     index message, output format including `sha256:` and `why:`.
+  - Done: the schema is the contract string verbatim; `RetrievalToolTests` pins the format, the clamping, the
+    no-match line, the missing-index failure and the refusal, and `RetrievalToolIndexTests` runs the tool against
+    a real built index. Excerpts are capped at 40 lines and the whole answer at 24 000 characters.
 
-- [ ] **T022** Prove retrieval quality
+- [x] **T022** Prove retrieval quality
   - Files: `tests/SharpCoreAgent.Tests/Indexing/Fixtures/Corpus/*`, `RetrievalQualityTests.cs`
   - Do: a 24-file fixture corpus with 12 seeded questions and a CI-scaled version of SC-001 — top 3 for
     ≥10 of 12, first for ≥8 (a small corpus makes top-five trivially easy, so the test asks for top three);
@@ -209,34 +232,47 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
 
 ## Phase 3 — Symbols, context, lifecycle (M3)
 
-- [ ] **T023** Ship `find_symbol`
+- [x] **T023** Ship `find_symbol`
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/SymbolRetriever.cs`, `src/SharpCoreAgent.Infrastructure/Tools/FindSymbolTool.cs`
   - Do: exact `key`, then `name COLLATE NOCASE`, then infix `LIKE`; `Kind` filter; cap 50; declaration
     line range and signature from `symbols`.
   - Test: `FindSymbolToolTests` — exact beats nocase beats infix; empty name rejected; kind filter
     narrows; no match says so; capped at 50 with a note.
+  - Done: the tier counts (`exact`, `ignore-case`, `partial`) are computed in the tool from the returned rows, so the
+    heading says how the name was interpreted; a member also prints its declaring type. Above the cap the answer
+    ends with `… N more not shown (raise max_results)`.
 
-- [ ] **T024** Ship `find_references`
+- [x] **T024** Ship `find_references`
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/ReferenceRetriever.cs`, `src/SharpCoreAgent.Infrastructure/Tools/FindReferencesTool.cs`
   - Do: outgoing edges and incoming edges read from `edges` (so `called_by` is a reverse read), group by
     `kind` and file, `MaxFiles` cap with a `+N more` note.
   - Test: `FindReferencesToolTests` — a caller appears under `called_by`; the callee does not appear under
     `calls`; unknown symbol says so.
+  - Done: blocks are grouped per file in ordinal path order and line order inside a file, and the tool resolves a
+    short name to its qualified name before the walk, so the heading names the declaration the edges belong to. The
+    result cap is the caller's `max_results`; the index enforces it, so no `+N more` line is needed here.
 
-- [ ] **T025** Ship `code_context`
+- [x] **T025** Ship `code_context`
   - Files: `src/SharpCoreAgent.Indexing/Retrieval/NeighbourhoodRetriever.cs`, `src/SharpCoreAgent.Infrastructure/Tools/CodeContextTool.cs`
   - Do: BFS over `edges` to `Hops`, weighted ordering, `Direction` filter, community peers, declaration
     excerpt for the focus symbol; reuse `EvidenceBudget` rendering.
   - Test: `CodeContextToolTests` — hops=1 vs hops=2 differ; direction filters; `hops` clamped to 0–3;
     relationship labels are the closed set.
+  - Done: the tool accepts 1–3 hops, as the contract's schema says, and the walk stops at 3; `CodeContext` carries
+    `MinWeight` and `Considered`, so the heading prints `8 shown of 26, min weight 0.20` instead of pretending eight
+    is all there is. A path target lists the file's declarations first, then the neighbours of the highest-degree
+    declaration in it.
 
-- [ ] **T026** Ship `index_status`
+- [x] **T026** Ship `index_status`
   - Files: `src/SharpCoreAgent.Infrastructure/Tools/IndexStatusTool.cs`
   - Do: the one-line status from `ICodeIndex.GetStatusAsync`, plus the coverage lines from
     `contracts/retrieval-tools.md`; never builds.
   - Test: `IndexStatusToolTests` — missing index, fresh index, partial index (three fixtures).
+  - Done: a missing index is an answer rather than a failure, because the question is about the index; the corrupt and
+    partial states still print the block so a model can see why an answer is thin. `quantization` is left out: the
+    status does not carry it, and printing a constant would be a guess.
 
-- [ ] **T027** Compose the service collection
+- [x] **T027** Compose the service collection
   - Files: `src/SharpCoreAgent.DependencyInjection/IndexingServiceCollectionExtensions.cs`,
     `src/SharpCoreAgent.DependencyInjection/IndexingOptions.cs`, `ServiceCollectionExtensions.cs`
   - Do: `AddSharpCoreAgentIndex` registers options binding (configuration section `Indexing`), `ICodeIndex`, the
@@ -244,22 +280,36 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     calls it.
   - Test: `IndexingRegistrationTests` — five tools resolve; `Enabled = false` registers nothing and calls
     fall back to "disabled"; options bind from configuration.
+  - Done: `AddSharpCoreAgentIndex(options)` lives in `ServiceCollectionExtensions` and registers one
+    `SharpCoreAgentIndex` behind `ICodeIndex` and `ICodeIndexMaintainer`, so the reader and the writer share one
+    handle and one writer lock. `IndexEnabled = false` registers nothing and the five tools answer with the disabled
+    failure through their optional `ICodeIndex` constructor argument. Configuration binding and a separate
+    `IndexingOptions` are not there yet; the CLI projects its flags onto `SharpCoreAgentOptions` instead.
 
-- [ ] **T028** Parse the new commands
+- [x] **T028** Parse the new commands
   - Files: `src/SharpCoreAgent.Cli/CliOptions.cs`
   - Do: `CliCommand.Index`, `--status`/`--rebuild`/`--verify`/`--prune`, `--embedder`, `--tier`,
     `--no-index`, `--index-budget`; the conflict and range rules from `contracts/cli-index.md`; a leading
     `ariadne` token is accepted and dropped so a shell alias works.
   - Test: `CliOptionsTests` — every parsing rule in that contract, including each error message.
+  - Done: `IndexCommandParsingTests` asserts each rule and each message, plus the leading `ariadne` token.
+    `--embedder provider|off` and `--tier rich` parse into their enums and are then refused by the command, because
+    this build produces neither; that refusal is a usage error rather than a silent downgrade.
 
-- [ ] **T029** Execute `index`
+- [x] **T029** Execute `index`
   - Files: `src/SharpCoreAgent.Cli/Commands/IndexCommand.cs`, `Program.cs`, `HelpText.cs`, `ExitCodes.cs`
   - Do: status/build/rebuild/verify/prune, text and `--json` output from the contract, exit codes 0/1/2/3/
     4/6, and `ExitCodes.IndexUnavailable = 6` next to the existing constants.
   - Test: `IndexCommandTests` — status on missing/fresh/partial, verify drift ⇒ exit 1, unwritable
     `.sharpcoreagent` ⇒ exit 6, `--json` shape snapshot.
+  - Done: status, build (bare `index`), rebuild, verify and prune are implemented, in text and `--json`; exit 6
+    covers IO and permission failures, and a bare `index` builds because that is what the "run `sharpcoreagent
+    index`" hint in every other message promises. `ExecuteAsync` takes the two writers so a test reads exactly what a
+    pipeline would: `IndexCommandTests` covers status on a missing index (and that it writes nothing), the build and
+    status JSON shapes, drift ⇒ exit 1 with `--rebuild` as the repair, prune, and a `.sharpcoreagent` that is a file
+    ⇒ exit 6 with the diagnosis on stderr and nothing on stdout.
 
-- [ ] **T030** Refresh before the turn
+- [x] **T030** Refresh before the turn
   - Files: `src/SharpCoreAgent.Cli/Program.cs`, `src/SharpCoreAgent.Cli/CliHost.cs`,
     `src/SharpCoreAgent.Infrastructure/Tools/WriteFileTool.cs`, `Tools/DeleteFileTool.cs`
   - Do: `EnsureFreshAsync(--index-budget)` before the first model call; mark written/deleted paths dirty;
@@ -267,25 +317,58 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     one line unless `--quiet`.
   - Test: `TurnStartRefreshTests` — a stale file is refreshed before the call; `--no-index` creates
     nothing; a write invalidates its file for the next turn.
+  - Done: `IndexCommand.RefreshAsync` runs before the first model call in `run` and before every turn in `chat`,
+    prints one line only when something changed, and swallows IO failures so only cancellation propagates. No dirty
+    set is kept: the refresh rescans the workspace, so a file written by `write_file` is picked up by the next turn's
+    scan without `WriteFileTool` having to report it.
 
-- [ ] **T031** Tell the model to search first
+- [x] **T031** Tell the model to search first
   - Files: `src/SharpCoreAgent.Application/PromptLibrary.cs`
   - Do: one rule naming the five tools and the "cite `path:start-end`" obligation, emitted only when the
     index is enabled and present.
   - Test: `PromptLibraryTests` — the rule appears with the index, is absent with `--no-index`, and names
     every tool.
+  - Done: `PromptLibrary.IndexRule` names `search_code`, `find_symbol`, `find_references`, `code_context` and
+    `index_status`, gives `src/Geometry/Circle.cs:12-18` as the citation form, and says what to do when the index
+    is missing. `SystemPromptFor(bool)` is the only assembler, and `SharpCoreAgentOptions.ToAgentOptions` calls it
+    with `IndexEnabled`, so `--no-index` drops the rule and the tools together. "Present" means a registered
+    `ICodeIndex`, not an existing file: a first run has no index yet and still needs the instruction.
 
-- [ ] **T032** Name the build
+- [x] **T032** Name the build
   - Files: `src/SharpCoreAgent.Cli/HelpText.cs`
   - Do: `--version` prints `Ariadne <version> (SharpCoreAgent)`; the usage block gains the `index` row and the
     exit-code 6 row.
   - Test: `HelpTextTests` — version format, `index` documented, exit 6 documented.
+  - Done: `HelpText.VersionLine` is the printed line (no SourceLink `+<hash>` suffix) and `Program` prints it;
+    `ProgramTests.VersionPrintsTheProductNameAndNumber` moved to the new shape. The usage block already carried the
+    `index` row and exit 6; the `--workspace` and `--json` rows now say `index` also honours them, which they always
+    did.
 
-- [ ] **T033** End-to-end regression
+- [x] **T033** End-to-end regression
   - Files: `tests/SharpCoreAgent.Tests/Indexing/EndToEndIndexTests.cs`
   - Do: in a temp workspace — build, query all five tools, edit a file, refresh, verify, prune, rebuild —
     then assert counts, citations and exit codes.
   - Test: `EndToEndIndexTests` — the quickstart, scripted.
+  - Done: one test walks build → five tools → edit → refresh → verify → prune → rebuild on a three-file corpus,
+    asserting counts (3 added, 1 changed, 1 removed, 2 after rebuild), a `path:start-end` citation and a hash; a
+    second builds through `IndexCommand` and reads through the tools, so the CLI and the API are shown to share one
+    index. Exit codes live in `IndexCommandTests`, which drives the command with captured writers.
+
+## Phase 4 — Performance (opened 2026-10-27, by measuring instead of assuming)
+
+- [ ] **T034** Bring the cold build inside SC-002 and the index inside SC-006
+  - Files: `src/SharpCoreAgent.Indexing/IndexWriter.cs`, `IndexFileWriter.cs`, `IndexSql.cs`
+  - Do: attribute the 49.8 ms per passage measured on this repository (`research.md` D16) across the four
+    phases inside the window — extraction, the per-file transaction that writes the rows, the vector encode,
+    community assignment — then batch the row writes (`InsertBatch` is in the engine's surface) and re-measure
+    the same three corpora plus the 5 000-file synthetic tree `plan.md` names. Two acceptable outcomes: the
+    numbers land inside the criteria, or each criterion is restated with the measurement attached to it.
+  - Done when: `research.md` D16 carries before/after rows for the same corpora, `spec.md`'s measured notes
+    are either removed (met) or re-stated (missed and accepted), and the quickstart's cost paragraph quotes
+    the new number instead of 513.5 s.
+  - Note: this is the only unchecked task in the feature. Everything behavioural — build, five tools, refresh,
+    verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing is the
+    throughput and size the criteria promise.
 
 ## Traceability — requirement to task
 
@@ -347,6 +430,10 @@ M4 (Roslyn-backed `ISyntaxFactsExtractor`, generics and partial-class accuracy) 
 embeddings, richer quantisation, HNSW tuning at scale) are deliberately excluded: both swap an
 implementation behind an interface that T010/T009 create, so they need no schema change and no new task
 ordering. `plan.md` §Milestones records the same boundary.
+
+The chat slash commands in `contracts/cli-index.md` (`/index`, `/index rebuild`, `/index verify`, `/index off`)
+are excluded too: `/index off` would have to revoke an `ICodeIndex` the five tools already hold, and the honest
+result — a session that cannot read an index it was built with — is what `--no-index` at startup already gives.
 
 
 

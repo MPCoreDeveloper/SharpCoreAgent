@@ -104,6 +104,7 @@ whether each model accepts tool calls.
 sharpcoreagent run "<prompt>" [options]      one turn, then exit
 sharpcoreagent chat [options]                interactive loop
 sharpcoreagent models [--provider <name>]    list the models this build knows
+sharpcoreagent index [options]               build, inspect or repair the code index
 sharpcoreagent --help | --version
 ```
 
@@ -111,7 +112,7 @@ sharpcoreagent --help | --version
 |---|---|---|
 | `--provider <name>` | run, chat | `deepseek` |
 | `--model <id>` | run, chat | provider default |
-| `--workspace <path>` | run, chat | current directory |
+| `--workspace <path>` | run, chat, index | current directory |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `24` |
 | `--max-output-tokens <n>` | run, chat | `8000` |
@@ -120,9 +121,17 @@ sharpcoreagent --help | --version
 | `--base-url <url>` | run, chat | none — required by `openai-compatible` |
 | `--session <path>` | run, chat | `<workspace>/.sharpcoreagent/sessions/<timestamp>.json` |
 | `--no-session` | run, chat | off — write no transcript |
-| `--json` | run | off — one JSON object per event on stdout |
+| `--json` | run, index | off — one JSON object per event, or per index report |
 | `--quiet` / `--verbose` | run, chat | off / off |
 | `--` | run | everything after it is part of the prompt |
+| `--no-index` | run, chat | off — no index read, write or refresh in this process |
+| `--index-budget <ms>` | run, chat | `3000` — the refresh ceiling; `0` keeps reads and stops refreshing |
+| `--status` | index | off — coverage and freshness; never writes |
+| `--rebuild` | index | off — delete every row and build from scratch |
+| `--verify` | index | off — drift against the workspace; never writes, exits `1` on drift |
+| `--prune` | index | off — drop rows for files that no longer exist |
+| `--embedder <mode>` | index | `hashed-local` — the only mode in this build |
+| `--tier <name>` | index | `lean` — the only tier in this build |
 
 Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_WORKSPACE`.
 
@@ -130,7 +139,9 @@ In `chat`, the loop understands `/model grok:grok-4` (switch provider and model 
 conversation), `/approval`, `/usage`, `/files`, `/session`, `/help` and `/exit` (or `/quit`).
 
 Exit codes: `0` turn completed, `1` turn failed, `2` bad command line, `3` missing credential,
-`4` budget exhausted or interrupted, `5` transcript I/O.
+`4` budget exhausted or interrupted, `5` transcript I/O, `6` the index could not be created, written or
+read. `index --verify` exits `1` when it finds drift, because a script that checks an index before a
+build wants that answer in its control flow.
 
 ## Approval modes
 
@@ -144,9 +155,41 @@ Exit codes: `0` turn completed, `1` turn failed, `2` bad command line, `3` missi
 
 `list_directory`, `read_file`, `search_text`, `write_file`, `delete_file`, `run_shell`.
 
+Five more answer questions about the code itself from the index instead of from the filesystem:
+`search_code` (a question, in words), `find_symbol` (a declaration by name), `find_references`
+(callers or callees), `code_context` (a declaration's neighbours) and `index_status` (what the index
+holds, and how fresh it is). All five are read-only, none of them opens a database — the index sits
+behind `ICodeIndex` — and every block they return carries a `path:start-end` citation and the
+`sha256:` of the text it quotes, so an answer can be checked without hunting for it.
+
 Every path is resolved against the workspace root, and anything that escapes it — `..`, an absolute
 path outside, a link pointing out — is refused before the tool runs. Tool output is truncated at a
 fixed budget so one large file cannot consume the context window.
+
+## Code index
+
+`sharpcoreagent index` builds the index the five retrieval tools read:
+
+```powershell
+sharpcoreagent index                  # incremental: only changed files are re-read
+sharpcoreagent index --status         # files, passages, symbols, edges, freshness — never writes
+sharpcoreagent index --verify         # drift against the workspace; exits 1 when it finds any
+sharpcoreagent index --prune          # drop rows for files that no longer exist
+sharpcoreagent index --rebuild        # the repair for a corrupt or newer index
+```
+
+It is one SharpCoreDB file under `.sharpcoreagent/index/` (already gitignored), written by a local,
+deterministic hashed embedder: no network and no credential, so retrieval works with the connection
+unplugged. The first build of this repository costs minutes — 513 s and 69 MiB for 445 files, 10 314
+passages and 5 284 edges, measured on 2026-10-27 — because every file is hashed, chunked and written
+row by row; a build where nothing changed is 4 s. `run` and `chat` bring the index up to date before
+the turn, bounded by `--index-budget`; when that budget runs out the last complete build stays readable
+and the next run continues where it stopped. `--no-index` turns the whole feature off for one process,
+and the six workspace tools still answer.
+
+`specs/002-code-evidence-index/quickstart.md` is the walkthrough, including the ways the index can
+fail: exit code `6` means it could not be created, written or read, and `state corrupt` means
+`--rebuild` is the repair.
 
 ## Architecture
 
@@ -209,8 +252,10 @@ the second duplicates settings that would drift.
   run and shown in the badge above.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
-  (89.8% of lines, 72.6% of branches) across 389 tests. **The gate passes**, including new-code coverage:
-  the tests that lift the baseline ship in the same commit as the code they cover.
+  (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
+  scan; the suite has since grown to 460 tests — the five retrieval tools, the `index` command and their
+  tests — so the next scan moves both the line count and the percentage. **The gate passes**, including
+  new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
   colouring the badge. Setting the repository variable `SONAR_ENFORCE_GATE` to `false` turns that back
   off — which is the switch you want the day a rename lands and new-code arithmetic dips, not a rewrite.
@@ -233,12 +278,13 @@ the second duplicates settings that would drift.
 ## Project status
 
 - `specs/001-coding-agent-core` — the agent loop, providers, tools, sessions and CLI are implemented
-  and covered by the test suite (389 tests, no compiler warnings and no open Sonar findings).
-- `specs/002-code-evidence-index` — the index foundations (schema, file scanner, tokenizer, extractor,
-  embedder, writer lock), the write path (incremental per-file build, budget-bounded refresh, rebuild,
-  verify, prune) and the retrieval pipeline (lexical and vector legs, reciprocal-rank fusion, boosts, graph
-  expansion, selection budget) are in place; the five retrieval tools, the `index` command and the
-  agent-facing wiring are the remaining tasks.
+  and covered by the test suite (no compiler warnings and no open Sonar findings).
+- `specs/002-code-evidence-index` — M0–M3 are complete: the index foundations (schema, file scanner,
+  tokenizer, extractor, embedder, writer lock), the write path (incremental per-file build,
+  budget-bounded refresh, rebuild, verify, prune), the retrieval pipeline (lexical and vector legs,
+  reciprocal-rank fusion, boosts, graph expansion, selection budget), the five retrieval tools
+  (`search_code`, `find_symbol`, `find_references`, `code_context`, `index_status`), the `index` command
+  and the agent-facing wiring. The suite is 460 tests, all green, with no compiler warnings.
 
 ## Spec-driven development
 
