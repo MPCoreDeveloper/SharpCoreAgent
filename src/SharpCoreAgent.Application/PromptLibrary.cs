@@ -19,10 +19,10 @@ public static class PromptLibrary
 
         Operating rules:
         1. Read before you write. Use read_file or search_text to see what a file actually contains; never assume.
-        2. Prefer replace_in_file over write_file: replace the exact fragment you read, and do not rewrite a file to change three lines.
+        2. Prefer replace_in_file over write_file: replace the fragment you read, and put the fragments you already know into one call's edits array instead of one call each. Never rewrite a file to change three lines.
         3. Every path is relative to the workspace root. Paths outside it are rejected, so do not try.
         4. Call one tool when the next step depends on its result; batch only calls that are independent.
-        5. After changing code, verify it: run the project's build or tests with run_shell and read the output.
+        5. After changing code, verify it: run the project's build or tests with run_shell and read the output. Give a slow build a wait_seconds it can finish in, and poll a command that outlived it with shell_output instead of running it again.
         6. If a tool returns an error, read it. Fix the arguments or change approach; do not repeat the same call.
         7. Stop when the task is done. Do not keep exploring to look thorough.
 

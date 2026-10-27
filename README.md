@@ -164,11 +164,20 @@ build wants that answer in its control flow.
 ## Tools
 
 `list_directory`, `read_file`, `search_text`, `write_file`, `replace_in_file`, `delete_file`,
-`run_shell`.
+`run_shell`, `shell_output`, `shell_stop`.
 
-`replace_in_file` is the edit the agent is told to prefer: it replaces an exact fragment and leaves the
-rest of the file byte-identical, refuses an ambiguous match instead of guessing, and offers a unified
-diff to the approval prompt, so `ask` shows the change rather than the arguments.
+`replace_in_file` is the edit the agent is told to prefer: `edits` carries up to twenty fragments that
+are applied in order against each intermediate state, all or nothing, and only the matched text
+changes. A fragment is matched exactly first and only then by line ending, trailing whitespace or
+indentation, so a model that guesses the wrong indentation still lands the change; the preview names the
+rung it used (`# block 2/4 (indentation)`), and a fragment that matches nothing, or matches twice,
+refuses the whole call instead of guessing.
+
+`run_shell` streams while it runs: the command's output appears under a `│` gutter as it arrives, and
+`wait_seconds` decides whether the call blocks for the result or hands back a handle. A command that
+outlives its wait comes back as `sh-1` with the output so far, `shell_output` drains it — waiting if you
+ask — and `shell_stop` kills it with its whole process tree. A background command is capped at an hour,
+so nothing outlives the session by accident.
 
 Five more answer questions about the code itself from the index instead of from the filesystem:
 `search_code` (a question, in words), `find_symbol` (a declaration by name), `find_references`
@@ -268,9 +277,10 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 500 tests — the five retrieval tools, the `index` command, the
-  colour palette, fragment edits and plan mode, with the tests that cover them — so the next scan moves
-  both the line count and the percentage. **The gate passes**, including
+  scan; the suite has since grown to 576 tests — the five retrieval tools, the `index` command, the
+  colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, with the
+  tests that cover them — so the next scan moves both the line count and the percentage. **The gate
+  passes**, including
   new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
   colouring the badge. Setting the repository variable `SONAR_ENFORCE_GATE` to `false` turns that back
@@ -303,8 +313,11 @@ the second duplicates settings that would drift.
   and the agent-facing wiring.
 - `specs/003-terminal-console-agent` — P0–P2 are complete (one ANSI palette with `NO_COLOR` and pipe
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
-  `/compact` and model aliases. The suite is 500 tests, all green, with no compiler warnings. Checkpoints,
-  `--resume`, live-catalogue refresh, `/cost` and MCP are listed in that spec's `tasks.md` as not started.
+  `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
+  `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
+  of fragments matched through a four-rung ladder. The suite is 576 tests, all green, with no compiler
+  warnings. Checkpoints, `--resume`, live-catalogue refresh, `/cost` and MCP are listed in that spec's
+  `tasks.md` as not started.
 
 ## Spec-driven development
 

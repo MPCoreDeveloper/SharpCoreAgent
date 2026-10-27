@@ -61,6 +61,27 @@ pass has a real list rather than a memory.
 
 - [ ] T040 Opt-in MCP client (`--mcp <command>`), tools registered through the same `IToolRegistry`, approval inherited from `ToolSafety`.
 
+## Phase 6 — Cline parity: streaming shell and multi-block edits
+
+The two gaps that made this agent feel worse than Cline in practice: a shell call that blocks the
+whole turn with nothing on screen, and one fragment per edit call. Both are closed here.
+
+- [X] T046 Add `IToolOutputSink` in `Domain.Tools` and an optional `ToolInvocationContext.Output`.
+- [X] T047 Add `ToolOutputDelta` and forward a running tool's writes through `CodingAgent.ObserverOutput`, tagged with the call id; a silent tool emits nothing.
+- [X] T048 Render live output in `ConsoleObserver` behind a `│ ` gutter on stderr, opening the gutter lazily, closing an unfinished line before the tool line, emitting a `tool_output` JSON line under `--json`, and staying silent under `--quiet`.
+- [X] T049 Add `ShellProcess` and `ShellProcessRegistry`: bounded 256 K output buffer, incremental reads, process-tree kill, one-hour ceiling, handles reused as `sh-1`, `sh-2`, pruned and disposed on exit.
+- [X] T050 Add `wait_seconds` to `run_shell`: block up to the cap, then hand back the handle with a `running: sh-N` line instead of killing the command.
+- [X] T051 Stream `run_shell` output to the sink while it runs, keeping the complete text in the result the model reads.
+- [X] T052 Add `shell_output` (drain since the last read, optional wait, status line) and `shell_stop` (tree kill, idempotent once the process has exited).
+- [X] T053 Latch the exit code when the process is observed as exited, so `shell_output` cannot report a finished command with no code.
+- [X] T054 Add `FragmentFinder` in `Domain.Text`: a four-rung ladder (exact, line endings, trailing whitespace, indentation) that returns the first non-overlapping match per block and re-indents and re-terminates the replacement.
+- [X] T055 Rewrite `replace_in_file` around an `edits` array (max 20), applied in order against each intermediate state, all-or-nothing, still one temp-file-plus-move write.
+- [X] T056 Label each preview block (`# block 2/4 (indentation)`) and name the rung a fuzzy match used, so a silent indentation repair is visible before approval.
+- [X] T057 Register `ShellProcessRegistry` and the three shell tools in the composition root; record the new public surface in `PublicAPI.Unshipped.txt`.
+- [X] T058 Tests: `FragmentFinderTests` (14), `RunShellCommandToolTests` (11), `ReplaceInFileToolTests` (15), `ConsoleRenderingTests` (28), `CodingAgentTests` (17), `PromptLibraryTests` (8), which pins the two new operating rules.
+- [X] T059 Tell the model both affordances in `PromptLibrary.SystemPrompt` — batch fragments into one `edits` array, and poll a command that outlived its `wait_seconds` with `shell_output` — and document them in `README.md`.
+- [X] T060 `ToolResultTrimmer` now reserves room for its own marker and count line, so a trimmed result fits the budget it was given — found while sizing the larger shell and edit results. Pinned by `ToolResultTrimmerTests`.
+
 ## Found in passing
 
 - [X] T045 Fix `AgentSession.RecordUsage`, which seeded a model's first row with the reported tokens and then added them again, so `/usage` reported double the first turn and `/usage` disagreed with its own total. Pinned by `AgentSessionUsageTests`.
@@ -68,6 +89,6 @@ pass has a real list rather than a memory.
 ## Verification
 
 - [X] T041 `dotnet build -c Release` clean.
-- [X] T042 `dotnet test -c Release` green: 500 tests, 0 failed.
+- [X] T042 `dotnet test -c Release` green: 576 tests, 0 failed.
 - [X] T043 Redirected smoke test: `models` and `--help` contain no escape byte.
 - [X] T044 `run --provider demo --mode plan` completes without a write.

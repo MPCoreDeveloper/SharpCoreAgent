@@ -112,7 +112,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the twelve workspace tools and the registry that advertises them.
+    /// Registers the fourteen workspace tools and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
@@ -120,16 +120,24 @@ public static class ServiceCollectionExtensions
     /// workspace it is handed, so one instance serves every session in the process. The five index-backed
     /// tools take an optional <c>ICodeIndex</c>, which the built-in container leaves null when the host
     /// registered none — that is how <c>--no-index</c> reaches them without a flag they have to check.
+    /// <para>
+    /// The three shell tools share one <see cref="ShellProcessRegistry"/> on purpose: a handle returned by
+    /// <c>run_shell</c> is meaningless to a <c>shell_output</c> that owns a different registry, and the
+    /// registry is what kills the children when the container is disposed.
+    /// </para>
     /// </remarks>
     private static void AddTools(IServiceCollection services)
     {
+        services.AddSingleton<ShellProcessRegistry>();
         services.AddSingleton<ITool, ListDirectoryTool>();
         services.AddSingleton<ITool, ReadFileTool>();
         services.AddSingleton<ITool, SearchTextTool>();
         services.AddSingleton<ITool, WriteFileTool>();
         services.AddSingleton<ITool, ReplaceInFileTool>();
         services.AddSingleton<ITool, DeleteFileTool>();
-        services.AddSingleton<ITool, RunShellCommandTool>();
+        services.AddSingleton<ITool>(provider => new RunShellCommandTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new ShellOutputTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new ShellStopTool(provider.GetRequiredService<ShellProcessRegistry>()));
         services.AddSingleton<ITool, SearchCodeTool>();
         services.AddSingleton<ITool, FindSymbolTool>();
         services.AddSingleton<ITool, FindReferencesTool>();

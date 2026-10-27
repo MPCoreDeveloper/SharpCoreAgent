@@ -374,7 +374,7 @@ public sealed class CodingAgent
         }
         else
         {
-            result = await ExecuteAsync(tool, call, session, cancellationToken).ConfigureAwait(false);
+            result = await ExecuteAsync(tool, call, session, sink, cancellationToken).ConfigureAwait(false);
         }
 
         result = ToolResultTrimmer.Trim(result, _options.MaxToolResultChars);
@@ -428,13 +428,25 @@ public sealed class CodingAgent
     /// The catch list is deliberately short: cancellation must escape, and an unexpected exception is a
     /// bug that should surface rather than be papered over as a tool error the model will retry forever.
     /// </remarks>
+    /// <param name="tool">The tool to run.</param>
+    /// <param name="call">The model's call.</param>
+    /// <param name="session">The session, for the workspace.</param>
+    /// <param name="sink">Receives the tool's live output while it runs.</param>
+    /// <param name="cancellationToken">Cancels the invocation.</param>
+    /// <returns>The result, with a readable failure instead of an exception where the tool allows one.</returns>
     private static async Task<ToolResult> ExecuteAsync(
         ITool tool,
         ToolCall call,
         AgentSession session,
+        IAgentObserver sink,
         CancellationToken cancellationToken)
     {
-        var context = new ToolInvocationContext(session.Workspace);
+        // Live output is a courtesy, never a precondition: the tool runs identically whether or not the
+        // observer wants the text, and the result it returns is the complete record either way.
+        var context = new ToolInvocationContext(session.Workspace)
+        {
+            Output = new ObserverOutput(sink, call),
+        };
         try
         {
             return await tool.ExecuteAsync(call, context, cancellationToken).ConfigureAwait(false);
@@ -561,6 +573,32 @@ public sealed class CodingAgent
     /// stream was cut short.
     /// </summary>
     private sealed record StreamOutcome(ChatResponse? Response, string Text, bool Interrupted);
+
+    /// <summary>
+    /// Turns a running tool's output into events, tagged with the call that produced them.
+    /// </summary>
+    /// <param name="observer">Where the events go.</param>
+    /// <param name="call">The call being executed.</param>
+    /// <remarks>
+    /// The observer is called with <see cref="CancellationToken.None"/> for the same reason every other
+    /// event is: the token that cancels a turn must not also decide whether a diagnostic already produced
+    /// reaches the developer, and an observer that throws on cancellation would turn a Ctrl+C into a tool
+    /// failure.
+    /// </remarks>
+    private sealed class ObserverOutput(IAgentObserver observer, ToolCall call) : IToolOutputSink
+    {
+        /// <inheritdoc />
+        public ValueTask WriteAsync(string text, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            return observer.OnEventAsync(new ToolOutputDelta(call.Id, call.Name, text), CancellationToken.None);
+        }
+    }
+
 
     /// <summary>
     /// Cached logging delegates.

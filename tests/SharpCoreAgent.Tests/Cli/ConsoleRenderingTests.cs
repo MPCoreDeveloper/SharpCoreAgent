@@ -356,6 +356,78 @@ public sealed class ConsoleRenderingTests
     public void EveryOutcomeMapsToItsDocumentedExitCode(AgentOutcome outcome, int expected) =>
         Assert.Equal(expected, ExitCodes.ForReport(Report(outcome)));
 
+    [Fact]
+    public async Task ToolOutputGoesToStderrBehindAGutter()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false);
+
+        await observer.OnEventAsync(
+            new ToolOutputDelta("call-1", "run_shell", "building\nlinking\n"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(string.Empty, output.ToString());
+        Assert.Contains("│ building", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("│ linking", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUnfinishedToolOutputLineIsClosedBeforeTheToolLine()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false);
+
+        await observer.OnEventAsync(
+            new ToolOutputDelta("call-1", "run_shell", "no newline"),
+            TestContext.Current.CancellationToken);
+        await observer.OnEventAsync(
+            new ToolFinished("call-1", "run_shell", false, "ok"),
+            TestContext.Current.CancellationToken);
+
+        var text = error.ToString();
+        Assert.Contains("│ no newline" + Environment.NewLine, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("← run_shell", text, StringComparison.Ordinal);
+
+        // The tool's own line still goes to stdout, as every tool diagnostic does.
+        Assert.Contains("← run_shell", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task JsonModeEmitsToolOutputAsItsOwnLine()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: true, quiet: false);
+
+        await observer.OnEventAsync(
+            new ToolOutputDelta("call-1", "run_shell", "compiling"),
+            TestContext.Current.CancellationToken);
+
+        using var line = JsonDocument.Parse(output.ToString().Trim());
+        Assert.Equal("tool_output", line.RootElement.GetProperty("type").GetString());
+        Assert.Equal("call-1", line.RootElement.GetProperty("callId").GetString());
+        Assert.Equal("run_shell", line.RootElement.GetProperty("tool").GetString());
+        Assert.Equal("compiling", line.RootElement.GetProperty("text").GetString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task QuietSuppressesToolOutput()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: true);
+
+        await observer.OnEventAsync(
+            new ToolOutputDelta("call-1", "run_shell", "hidden\n"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(string.Empty, output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
     private static ToolApprovalRequest Request() =>
         new("read_file", ToolSafety.ReadOnly, "read a.txt", """{"path":"a.txt"}""");
 

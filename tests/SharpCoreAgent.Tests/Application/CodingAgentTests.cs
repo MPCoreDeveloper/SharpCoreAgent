@@ -273,6 +273,38 @@ public sealed class CodingAgentTests
         Assert.Contains("cancelled", report.Detail!, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AToolsLiveOutputReachesTheObserverWithItsCallId()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("chatty")], [Completed("done")]);
+        var observer = new RecordingObserver();
+
+        var report = await Agent(model, [new ChattyTool()]).RunTurnAsync(
+            Session(directory.Path), "hi", observer, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        var delta = Assert.Single(observer.Events.OfType<ToolOutputDelta>());
+        Assert.Equal("call-1", delta.CallId);
+        Assert.Equal("chatty", delta.ToolName);
+        Assert.Equal("building\n", delta.Text);
+    }
+
+    [Fact]
+    public async Task AToolThatSaysNothingEmitsNoOutputEvent()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("quiet")], [Completed("done")]);
+        var observer = new RecordingObserver();
+        var quiet = new StubTool("quiet", ToolSafety.ReadOnly, call => ToolResult.Success(call.Id, call.Name, "ok"));
+
+        var report = await Agent(model, [quiet]).RunTurnAsync(
+            Session(directory.Path), "hi", observer, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Empty(observer.Events.OfType<ToolOutputDelta>());
+    }
+
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
         AgentWithOptions(new AgentOptions(), model, tools);
 
@@ -383,6 +415,27 @@ public sealed class CodingAgentTests
         public ValueTask<ApprovalOutcome> DecideAsync(
             ToolApprovalRequest request,
             CancellationToken cancellationToken) => ValueTask.FromResult(outcome);
+    }
+
+    /// <summary>A tool that narrates while it works, as a shell command does.</summary>
+    private sealed class ChattyTool : ITool
+    {
+        public ToolDefinition Definition { get; } = new("chatty", "a test tool that talks", """{"type":"object"}""");
+
+        public ToolSafety Safety => ToolSafety.ReadOnly;
+
+        public async ValueTask<ToolResult> ExecuteAsync(
+            ToolCall toolCall,
+            ToolInvocationContext context,
+            CancellationToken cancellationToken)
+        {
+            if (context.Output is { } output)
+            {
+                await output.WriteAsync("building\n", cancellationToken).ConfigureAwait(false);
+            }
+
+            return ToolResult.Success(toolCall.Id, toolCall.Name, "ok");
+        }
     }
 
     private sealed class StubTool(string name, ToolSafety safety, Func<ToolCall, ToolResult> run) : ITool

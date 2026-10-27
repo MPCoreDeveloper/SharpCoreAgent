@@ -25,6 +25,10 @@ internal sealed class ConsoleObserver : IAgentObserver
     private bool _thinkingOpen;
     private bool _textOpen;
     private bool _sawText;
+    private bool _toolOutputOpen;
+
+    /// <summary>The gutter that marks a line as tool output rather than model text.</summary>
+    private const string Gutter = "  │ ";
 
     /// <summary>
     /// Creates an observer.
@@ -71,6 +75,10 @@ internal sealed class ConsoleObserver : IAgentObserver
 
             case ToolRequested requested:
                 RenderRequested(requested);
+                break;
+
+            case ToolOutputDelta output:
+                RenderToolOutput(output);
                 break;
 
             case ToolFinished finished:
@@ -134,6 +142,8 @@ internal sealed class ConsoleObserver : IAgentObserver
         _started[requested.CallId] = Stopwatch.GetTimestamp();
         CloseThinkingLine();
         CloseTextLine();
+        CloseToolOutputLine();
+
 
         if (_json)
         {
@@ -157,8 +167,82 @@ internal sealed class ConsoleObserver : IAgentObserver
             $"{_theme.Accent("→")} {_theme.Strong(requested.ToolName)}({_theme.Dim(Compact(requested.ArgumentsJson))})"));
     }
 
+    /// <summary>
+    /// Renders one increment of a running tool's output, indented under its tool line.
+    /// </summary>
+    /// <param name="output">The increment to show.</param>
+    /// <remarks>
+    /// Tool output goes to stderr for the same reason thinking does: it is a diagnostic about the work, not
+    /// the answer, so redirecting stdout still captures exactly the model's final message. A chunk can end
+    /// mid-line, so the gutter is written lazily and the open line is closed by whichever event ends the
+    /// tool.
+    /// </remarks>
+    private void RenderToolOutput(ToolOutputDelta output)
+    {
+        if (string.IsNullOrEmpty(output.Text))
+        {
+            return;
+        }
+
+        if (_json)
+        {
+            WriteJson(new { type = "tool_output", callId = output.CallId, tool = output.ToolName, text = output.Text });
+            return;
+        }
+
+        if (_quiet)
+        {
+            return;
+        }
+
+        CloseThinkingLine();
+        CloseTextLine();
+
+        var text = output.Text;
+        var index = 0;
+        while (index < text.Length)
+        {
+            var remaining = text.AsSpan(index);
+            var newline = remaining.IndexOf('\n');
+            var segment = newline < 0 ? remaining : remaining[..newline];
+
+            if (!_toolOutputOpen)
+            {
+                _error.Write(_theme.Dim(Gutter));
+                _toolOutputOpen = true;
+            }
+
+            if (segment.Length > 0)
+            {
+                _error.Write(_theme.Dim(segment.TrimEnd('\r').ToString()));
+            }
+
+            if (newline < 0)
+            {
+                break;
+            }
+
+            _error.WriteLine();
+            _toolOutputOpen = false;
+            index += newline + 1;
+        }
+    }
+
+    private void CloseToolOutputLine()
+    {
+        if (!_toolOutputOpen)
+        {
+            return;
+        }
+
+        _error.WriteLine();
+        _toolOutputOpen = false;
+    }
+
     private void RenderFinished(ToolFinished finished)
     {
+        CloseToolOutputLine();
+
         var now = Stopwatch.GetTimestamp();
         var milliseconds = _started.Remove(finished.CallId, out var started)
             ? Stopwatch.GetElapsedTime(started, now).TotalMilliseconds
@@ -192,6 +276,7 @@ internal sealed class ConsoleObserver : IAgentObserver
     {
         CloseThinkingLine();
         CloseTextLine();
+        CloseToolOutputLine();
 
         if (_json)
         {

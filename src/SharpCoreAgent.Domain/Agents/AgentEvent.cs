@@ -36,6 +36,19 @@ public sealed record AgentTextDelta(string Text) : AgentEvent;
 public sealed record ToolRequested(string CallId, string ToolName, string ArgumentsJson) : AgentEvent;
 
 /// <summary>
+/// A running tool produced output, before it has finished.
+/// </summary>
+/// <param name="CallId">The call identifier.</param>
+/// <param name="ToolName">The tool that is speaking.</param>
+/// <param name="Text">The increment; it may end mid-line.</param>
+/// <remarks>
+/// Only tools that can take a long time emit this — a shell command while it runs, so a developer
+/// watches the build instead of waiting for it. The event is additive: a tool's returned text is
+/// complete on its own, and an observer that ignores this event loses nothing but timing.
+/// </remarks>
+public sealed record ToolOutputDelta(string CallId, string ToolName, string Text) : AgentEvent;
+
+/// <summary>
 /// A tool invocation finished, one way or another.
 /// </summary>
 /// <param name="CallId">The call identifier.</param>

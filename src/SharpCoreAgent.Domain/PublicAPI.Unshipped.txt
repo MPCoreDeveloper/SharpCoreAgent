@@ -773,3 +773,37 @@ SharpCoreAgent.Domain.Text.UnifiedDiff
 SharpCoreAgent.Domain.Tools.IToolPreview
 SharpCoreAgent.Domain.Tools.IToolPreview.DescribeChangeAsync(SharpCoreAgent.Domain.Conversation.ToolCall! toolCall, SharpCoreAgent.Domain.Tools.ToolInvocationContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
 static SharpCoreAgent.Domain.Text.UnifiedDiff.Create(string! path, string! oldText, string! newText, int contextLines = 2, int maxLines = 60) -> string!
+SharpCoreAgent.Domain.Agents.ToolOutputDelta
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.CallId.get -> string!
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.CallId.init -> void
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.Deconstruct(out string! CallId, out string! ToolName, out string! Text) -> void
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.Equals(SharpCoreAgent.Domain.Agents.ToolOutputDelta? other) -> bool
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.Text.get -> string!
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.Text.init -> void
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.ToolName.get -> string!
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.ToolName.init -> void
+SharpCoreAgent.Domain.Agents.ToolOutputDelta.ToolOutputDelta(string! CallId, string! ToolName, string! Text) -> void
+override SharpCoreAgent.Domain.Agents.ToolOutputDelta.<Clone>$() -> SharpCoreAgent.Domain.Agents.ToolOutputDelta!
+override SharpCoreAgent.Domain.Agents.ToolOutputDelta.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.ToolOutputDelta.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.ToolOutputDelta.ToString() -> string!
+override sealed SharpCoreAgent.Domain.Agents.ToolOutputDelta.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+static SharpCoreAgent.Domain.Agents.ToolOutputDelta.operator !=(SharpCoreAgent.Domain.Agents.ToolOutputDelta? left, SharpCoreAgent.Domain.Agents.ToolOutputDelta? right) -> bool
+static SharpCoreAgent.Domain.Agents.ToolOutputDelta.operator ==(SharpCoreAgent.Domain.Agents.ToolOutputDelta? left, SharpCoreAgent.Domain.Agents.ToolOutputDelta? right) -> bool
+SharpCoreAgent.Domain.Text.FragmentFinder
+SharpCoreAgent.Domain.Text.FragmentMatch
+SharpCoreAgent.Domain.Text.FragmentMatch.Apply(string! replacement) -> string!
+SharpCoreAgent.Domain.Text.FragmentMatch.Index.get -> int
+SharpCoreAgent.Domain.Text.FragmentMatch.Kind.get -> SharpCoreAgent.Domain.Text.FragmentMatchKind
+SharpCoreAgent.Domain.Text.FragmentMatch.Length.get -> int
+SharpCoreAgent.Domain.Text.FragmentMatchKind
+SharpCoreAgent.Domain.Text.FragmentMatchKind.Exact = 0 -> SharpCoreAgent.Domain.Text.FragmentMatchKind
+SharpCoreAgent.Domain.Text.FragmentMatchKind.Indentation = 3 -> SharpCoreAgent.Domain.Text.FragmentMatchKind
+SharpCoreAgent.Domain.Text.FragmentMatchKind.LineEndings = 1 -> SharpCoreAgent.Domain.Text.FragmentMatchKind
+SharpCoreAgent.Domain.Text.FragmentMatchKind.TrailingWhitespace = 2 -> SharpCoreAgent.Domain.Text.FragmentMatchKind
+SharpCoreAgent.Domain.Tools.IToolOutputSink
+SharpCoreAgent.Domain.Tools.IToolOutputSink.WriteAsync(string! text, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Output.get -> SharpCoreAgent.Domain.Tools.IToolOutputSink?
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Output.init -> void
+static SharpCoreAgent.Domain.Text.FragmentFinder.Find(string! text, string! find) -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Text.FragmentMatch!>!
+

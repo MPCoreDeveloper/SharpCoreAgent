@@ -6,7 +6,15 @@ namespace SharpCoreAgent.Domain.Tools;
 /// What a tool is allowed to know about the turn that invoked it.
 /// </summary>
 /// <param name="Workspace">The validated workspace root; every path argument is resolved through it.</param>
-public sealed record ToolInvocationContext(Workspace Workspace);
+/// <remarks>
+/// <see cref="Output"/> is the only channel a tool may use to say something before it returns. It is
+/// null when nobody is listening, which is the normal case in tests and in <c>--quiet</c> runs.
+/// </remarks>
+public sealed record ToolInvocationContext(Workspace Workspace)
+{
+    /// <summary>Gets the sink that narrates a long-running invocation, when one was attached.</summary>
+    public IToolOutputSink? Output { get; init; }
+}
 
 /// <summary>
 /// A capability the model can invoke: a name, a schema, a safety class and an implementation.

@@ -69,6 +69,16 @@ public sealed class PromptLibraryTests
     }
 
     [Fact]
+    public void TheShippedPromptPointsAtTheBatchAndTheHandle()
+    {
+        // Two rules the model has to know without reading a schema: fragments can be batched, and a
+        // command that outlives its wait is polled rather than re-run.
+        Assert.Contains("edits array", PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("wait_seconds", PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("shell_output", PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnExplicitPromptIsLeftAlone() =>
         Assert.Equal(
             "Answer in one sentence.",
