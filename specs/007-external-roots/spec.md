@@ -1,7 +1,7 @@
 # 007 — Look into another project: read-only attached roots
 
-**Status**: implemented on `feature/007-external-roots` (merge to `main` is the last step of the round)
-**Branch**: `feature/007-external-roots`
+**Status**: implemented (T001–T029; T030–T032 deferred, listed in `tasks.md`)
+**Branch**: `feature/007-external-roots`, merged to `main` as `dbc0701`
 **Depends on**: `001-coding-agent-core` (the tool model and `Workspace`), `003-terminal-console-agent`
 (the console surface this extends), `006-interactive-start-and-config` (the precedence rules this
 deliberately does not join)

@@ -1,6 +1,6 @@
 # Roadmap — the capability rounds
 
-**Status**: round 0 landed (constitution 1.1.0), round 1 implemented on `feature/007-external-roots`, rounds 2–5 planned
+**Status**: round 0 landed (constitution 1.1.0), round 1 landed on `main` (merge `dbc0701`), rounds 2–5 planned
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
 ## Why rounds rather than one specification
@@ -87,7 +87,7 @@ Three constraints materially expanded, one clarified, no principle removed:
 Deliverable: the amended `.specify/memory/constitution.md` with its Sync Impact Report and migration
 note. No code, and every default unchanged.
 
-## Round 1 — `007-external-roots`
+## Round 1 — `007-external-roots` (landed as `dbc0701`)
 
 **Ships**: `--add-root <path>` (repeatable) and `SHARPCOREAGENT_ADD_ROOTS`; a read path through
 `Workspace`/`PathSafety` that accepts an absolute path inside any attached root; `read_file`,
@@ -100,6 +100,13 @@ approval.
 **Evidence**: a turn reads a file in a second project and cannot write it; a link inside an attachment
 that points outside every root is refused; no existing assertion about write confinement is deleted to
 make the round pass.
+
+**As built**: everything above, with four recorded departures from the plan in
+`007-external-roots/plan.md` — `search_text` grew the `path` argument it needed to be aimed at an
+attachment, `owner` is `null` for the primary root, the banner shortens an attachment path to keep the
+count in view, and a resumed `chat` re-applies the current invocation's roots. `tasks.md` keeps T030
+(writable attachment), T031 (indexed attachment) and T032 (persisted roots) open as the record of what
+the round refused.
 
 ## Round 2 — `008-web-fetch`
 
