@@ -426,7 +426,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 878 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 880 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
@@ -469,7 +469,7 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 878 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 880 tests, all green, with no compiler
   warnings.
 - `specs/007-external-roots` — implemented: `Workspace` carries read-only attachments, `read_file`,
   `list_directory` and `search_text` answer from them by absolute path, `list_roots` reports the roots,

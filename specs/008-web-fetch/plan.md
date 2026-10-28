@@ -156,4 +156,4 @@ Landed as specified, with four notes a reader of the plan would otherwise have t
 4. **`Failure` for status ≥ 400 keeps the body.** The stub test pins `404 Not Found` *and* the page text,
    because an error page is often the only place the reason is written.
 
-Suite: 878 tests, 0 warnings, 0 errors on `dotnet build .\SharpCoreAgent.slnx -c Release`.
+Suite: 880 tests, 0 warnings, 0 errors on `dotnet build .\SharpCoreAgent.slnx -c Release`.

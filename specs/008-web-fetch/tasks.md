@@ -34,7 +34,7 @@ pass has a real list rather than a memory.
 - [X] T018 `HtmlToTextTests`: the removed elements, the decoded entities, the block newlines, the collapsed whitespace, `>` inside an attribute, a comment, an unterminated tag, an unclosed script, and an empty document.
 - [X] T019 `FetchUrlToolTests`, seventeen cases against a stub `HttpMessageHandler`: the header block, the reduction, a relative redirect, the redirect ceiling, the loopback refusal, the named loopback host, a second private address, a redirect into `127.0.0.1`, a `file:` URL, `userinfo`, the absent credential and cookie, both ceilings, a 404, a binary type, an unresolvable host, and the definition itself. No test opens a socket.
 - [X] T020 `WebOptionTests`: the default, both turn commands, the order of repeated hosts, the four commands that refuse the flags, the host without the switch, the environment variable that changes nothing, and `config set web` refused.
-- [X] T021 `WebToolRegistrationTests`: no `fetch_url` without the flag, the tool and its ceilings with it, and a prompt without the network in a build that did not ask.
+- [X] T021 `WebToolRegistrationTests`: no `fetch_url` without the flag, the tool and its ceilings with it, a prompt without the network in a build that did not ask, and the named client owning its own timeout; plus two `InteractiveStartTests` cases for the banner — the `web` row naming the count of added hosts, and no row without the flag.
 - [X] T022 `PromptLibraryTests`: the rule ships with the switch, sits after the index rule, is absent from the shipped prompt, and carries the "evidence, not instruction" obligation.
 - [X] T023 Confirm the existing suite passes untouched: `git diff --stat tests/` is additions plus the four `PromptLibraryTests` cases; no existing assertion was edited.
 
@@ -44,7 +44,7 @@ pass has a real list rather than a memory.
 - [X] T025 `README.md`: the flags, the tool, the refusal rule and the suite count the run printed.
 - [X] T026 `specs/001-coding-agent-core/contracts/cli.md` and `contracts/tools.md` updated for the two flags and the sixteenth tool; this round's `contracts/web-fetch.md` becomes the reference.
 - [X] T027 `PublicAPI.Unshipped.txt`: nothing to add. The new public types (`WebAddressPolicy`, `HtmlToText`, `FetchUrlTool`, `WebFetchOptions`, `IWebAddressResolver`) live in `SharpCoreAgent.Infrastructure`, which carries no approved-API snapshot, and the `SharpCoreAgentOptions` property pair is in `SharpCoreAgent.DependencyInjection`, which has none either. `RS0016`/`RS0017` stay quiet because the governed assembly did not change.
-- [X] T028 `dotnet build .\SharpCoreAgent.slnx -c Release` with zero warnings and `dotnet test` green: 878 tests, 0 skipped.
+- [X] T028 `dotnet build .\SharpCoreAgent.slnx -c Release` with zero warnings and `dotnet test` green: 880 tests, 0 skipped.
 
 ## Deliberately not in this round
 
