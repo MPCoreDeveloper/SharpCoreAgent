@@ -10,6 +10,7 @@
     <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
     <ProjectReference Include="..\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
     <ProjectReference Include="..\SharpCoreAgent.Infrastructure\SharpCoreAgent.Infrastructure.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Indexing\SharpCoreAgent.Indexing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

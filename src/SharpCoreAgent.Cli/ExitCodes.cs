@@ -22,7 +22,7 @@ internal static class ExitCodes
     /// <summary>The command line could not be understood.</summary>
     public const int Usage = 2;
 
-    /// <summary>A provider credential is missing.</summary>
+    /// <summary>A provider credential is missing, or its file cannot be read.</summary>
     public const int Credentials = 3;
 
     /// <summary>A budget ran out, or the developer interrupted the turn.</summary>
@@ -30,6 +30,21 @@ internal static class ExitCodes
 
     /// <summary>The transcript could not be read or written.</summary>
     public const int SessionIo = 5;
+
+    /// <summary>The index could not be created, written or read.</summary>
+    /// <remarks>
+    /// The one code this feature adds, and the one a script needs to tell apart from a failed build: retrying a
+    /// permissions problem or a full disk is pointless, while retrying a lock conflict is exactly right.
+    /// </remarks>
+    public const int IndexUnavailable = 6;
+
+    /// <summary>The settings file could not be read, written or understood.</summary>
+    /// <remarks>
+    /// Separate from <see cref="Usage"/> because a script that retried a typo would retry a broken file
+    /// forever, and separate from <see cref="Credentials"/> because the two are fixed by different
+    /// people: one by exporting a key, this one by running <c>config unset</c>.
+    /// </remarks>
+    public const int Configuration = 7;
 
     /// <summary>
     /// Maps a turn's outcome onto its exit code.

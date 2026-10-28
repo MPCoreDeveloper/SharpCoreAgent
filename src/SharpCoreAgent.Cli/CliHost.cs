@@ -41,9 +41,21 @@ internal static class CliHost
         services.AddSingleton<IToolApprover>(new ConsoleApprover(
             Console.In,
             Console.Error,
-            () => !Console.IsInputRedirected));
+            () => !Console.IsInputRedirected,
+            ThemeFor(options)));
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// Builds the palette a command line asked for.
+    /// </summary>
+    /// <param name="options">The parsed command line.</param>
+    /// <returns>The theme every renderer in this process shares.</returns>
+    public static AnsiTheme ThemeFor(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return AnsiTheme.Create(options.Color, Console.IsOutputRedirected);
     }
 
     /// <summary>
@@ -77,21 +89,50 @@ internal static class CliHost
     /// <param name="model">The model the turn will use.</param>
     /// <param name="credentials">The credential source.</param>
     /// <param name="error">Where the missing key's name goes.</param>
+    /// <param name="fallback">
+    /// The model a refused request would be replayed at, when the developer named one. It is checked
+    /// here too: a fallback whose key is missing cannot cover the failure it exists for, and saying so
+    /// before the first turn beats saying it after a 401.
+    /// </param>
     /// <returns><see langword="true"/> when nothing is missing.</returns>
-    public static bool TryEnsureCredentials(ModelDescriptor model, ICredentialStore credentials, TextWriter error)
+    public static bool TryEnsureCredentials(
+        ModelDescriptor model,
+        ICredentialStore credentials,
+        TextWriter error,
+        ModelDescriptor? fallback = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(error);
 
+        return HasCredential(model, credentials, error)
+            && (fallback is null || HasCredential(fallback, credentials, error));
+    }
+
+    /// <summary>
+    /// Checks one model's provider and reports the keys it would read.
+    /// </summary>
+    /// <param name="model">The model to check.</param>
+    /// <param name="credentials">The credential source.</param>
+    /// <param name="error">Where the missing key's name goes.</param>
+    /// <returns><see langword="true"/> when a key is set, or the provider needs none.</returns>
+    /// <remarks>
+    /// A fallback on the same provider as the primary is checked twice; that costs two dictionary
+    /// lookups and keeps the rule readable.
+    /// </remarks>
+    private static bool HasCredential(ModelDescriptor model, ICredentialStore credentials, TextWriter error)
+    {
         var names = ModelCatalog.CredentialNames(model.Provider);
         if (names.Count == 0 || names.Any(name => credentials.Find(name) is not null))
         {
             return true;
         }
 
+        // Three routes, because "set the variable" is the least durable one and a developer who just
+        // watched a session refuse to start deserves to know the one that survives a restart.
         error.WriteLine(
-            $"error: {model.Provider} needs a credential and none is set. Set {string.Join(" or ", names)} and try again.");
+            $"error: {model.Provider} needs a credential and none is set for {model.QualifiedName}.");
+        error.WriteLine($"hint: set {string.Join(" or ", names)}, or write it to a file as {names[0]}=<key> and pass --credential-file <path>, or run 'sharpcoreagent config set credential-file <path>' once.");
         return false;
     }
 

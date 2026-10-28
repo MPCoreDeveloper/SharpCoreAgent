@@ -3,13 +3,13 @@
 **Scope**: the SharpCoreDB database inside `<workspace>/.sharpcoreagent/index/`. Only `SharpCoreAgent.Indexing`
 may name these tables or columns; everything else goes through `ICodeIndex` / `ICodeIndexMaintainer`.
 
-**Engine**: SharpCoreDB `2.1.1`. The SQL used here is the subset verified against the shipped package:
+**Engine**: SharpCoreDB `2.1.2`. The SQL used here is the subset verified against the shipped package:
 `CREATE TABLE IF NOT EXISTS`, `INTEGER PRIMARY KEY AUTO` (monotonic, persisted), `TEXT`, `REAL`,
 `INTEGER`, `VECTOR(n)`, `CHECK (…)`, `COLLATE NOCASE`, `CREATE INDEX … ON t (col)` and parameterised
 `@name` arguments, executed through `IDatabase.ExecuteSQL`, `IDatabase.ExecuteQuery` and
 `IDatabase.ExecuteBatchSQL`.
 
-Four facts about that package the code has to live with, all learned from `IndexSchemaTests`:
+Five facts about that package the code has to live with, all learned from `IndexSchemaTests`:
 
 1. There is no `ExecuteNonQuery` and no `ExecuteScalar`. Statements that return nothing go through
    `ExecuteSQL`, and a value is read with `ExecuteQuery` and a one-row result.
@@ -20,8 +20,6 @@ Four facts about that package the code has to live with, all learned from `Index
 4. `IDatabase` is `IAsyncDisposable` since 2.1.1, so closing the index is `Database.DisposeAsync()`; the
    cast-to-`IDisposable` fallback the 2.1.0 adapter needed is gone.
 5. The factory appends `.scdb` to any path that does not already end with it, and preallocates the file
-   (≈14 MiB for an empty schema), so the index path carries the extension and a fresh workspace reports a
-   size before it holds a single row.
    (≈14 MiB for an empty schema), so the index path carries the extension and a fresh workspace reports a
    size before it holds a single row.
 
@@ -220,12 +218,12 @@ UNION ALL
 SELECT target AS other, rel, weight FROM edges WHERE source = @id;
 ```
 
-**The vector-leg statement is the target shape, not what runs today.** `2.1.1` carries the repaired planner
-(`16cb51d5`), but it engages only on a *directory-mode* database: on this index's single `.scdb` file the
-`ORDER BY vec_distance_cosine(…)` statement still returns the rows in insertion order and projects no
-`distance` column. `VectorRetriever` therefore computes the same cosine in C# over the vectors the snapshot
-loaded; the statement above is what the leg moves to when the planner covers the single-file route, and the
-schema does not change when it does.
+**The vector-leg statement is the target shape, not what runs today.** The pinned `2.1.2` carries the repaired
+planner (`16cb51d5`, first shipped in `2.1.1`), but it engages only on a *directory-mode* database: on this
+index's single `.scdb` file the `ORDER BY vec_distance_cosine(…)` statement still returns the rows in insertion
+order and projects no `distance` column. `VectorRetriever` therefore computes the same cosine in C# over the
+vectors the snapshot loaded; the statement above is what the leg moves to when the planner covers the
+single-file route, and the schema does not change when it does.
 
 Every value above is a bound parameter. No query string is ever built by concatenation — the
 `LIKE` pattern is `"%" + escaped + "%"`, assembled in C# and passed as `@path_prefix`/`@infix`, so the

@@ -170,6 +170,32 @@ public sealed class ToolArgumentReader : IDisposable
     }
 
     /// <summary>
+    /// Reads an optional array.
+    /// </summary>
+    /// <param name="name">The parameter name.</param>
+    /// <returns>The elements in order, or an empty list when the parameter is absent.</returns>
+    /// <remarks>
+    /// The elements are handed back as <see cref="JsonElement"/>, which lives as long as this reader. A
+    /// caller that needs typed fields inside an object element validates them itself, so the message can
+    /// name the position (<c>edits[2].find</c>) the way the model wrote it.
+    /// </remarks>
+    /// <exception cref="ToolArgumentException">The parameter is present and is not an array.</exception>
+    public IReadOnlyList<JsonElement> GetOptionalArray(string name)
+    {
+        if (!TryGetValue(name, out var value))
+        {
+            return [];
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new ToolArgumentException(_toolName, name, $"must be an array, not {Describe(value.ValueKind)}");
+        }
+
+        return [.. value.EnumerateArray()];
+    }
+
+    /// <summary>
     /// Determines whether a parameter was supplied with a non-null value.
     /// </summary>
     /// <param name="name">The parameter name.</param>

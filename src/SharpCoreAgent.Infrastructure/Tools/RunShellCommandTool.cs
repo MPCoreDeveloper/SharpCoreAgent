@@ -12,11 +12,29 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// <remarks>
 /// The command is handed to the shell as a single argument — never spliced into a script file and never
 /// evaluated by the host — so the only interpreter involved is the one the user already trusts
-/// (Principle III). A non-zero exit code is a result, not an exception: a failing build is exactly the
-/// kind of information the model asked for.
+/// (Principle III). A non-zero exit code is a result, not an exception: a failing build is exactly the kind
+/// of information the model asked for.
 /// <para>
-/// Provider credentials are removed from the child environment. The shell exists to run builds and
-/// tests, and an arbitrary command should not be able to read the key that pays for the conversation.
+/// Output is streamed as it arrives while the call is waiting, so a forty-second build is something the
+/// developer watches rather than something that looks like a hang. The same text is still returned to the
+/// model, bounded, so nothing depends on anybody watching.
+/// </para>
+/// <para>
+/// <c>wait_seconds</c> shorter than <c>timeout_seconds</c> turns the call into a start: the command keeps
+/// running past the turn, gets a handle such as <c>sh-1</c>, and is read with <c>shell_output</c> and ended
+/// with <c>shell_stop</c>. That is how a dev server or a watch-mode compiler is used. A command that
+/// outlives <c>timeout_seconds</c> while the call is still waiting is killed, exactly as before.
+/// </para>
+/// <para>
+/// Provider credentials are removed from the child environment. The shell exists to run builds and tests,
+/// and an arbitrary command should not be able to read the key that pays for the conversation.
+/// </para>
+/// <para>
+/// The child gets an empty keyboard. Its standard input is a redirected stream that is closed before the
+/// command runs, so a program that asks a question reads end-of-input — the same thing it would get from
+/// <c>&lt; /dev/null</c> — instead of competing with the developer's own prompt for the next line typed.
+/// Without that, one interactive command started by a turn could swallow the question the developer
+/// typed after it, which looks exactly like a frozen session.
 /// </para>
 /// </remarks>
 public sealed class RunShellCommandTool : ITool
@@ -31,10 +49,14 @@ public sealed class RunShellCommandTool : ITool
     public const int MaxTimeoutSeconds = 600;
 
     private const string Schema =
-        """{"type":"object","properties":{"command":{"type":"string","description":"Command line to execute in the workspace."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600},"working_directory":{"type":"string","description":"Relative to the workspace root. Defaults to the root."}},"required":["command"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"command":{"type":"string","description":"Command line to execute in the workspace."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600},"wait_seconds":{"type":"integer","minimum":0,"maximum":600,"description":"How long to wait before returning. Omit to wait for the command to finish. A value smaller than timeout_seconds leaves the command running and returns a process_id."},"working_directory":{"type":"string","description":"Relative to the workspace root. Defaults to the root."}},"required":["command"],"additionalProperties":false}""";
+
+    /// <summary>Gets how long the call waits for output readers after the process exits.</summary>
+    private static readonly TimeSpan DrainGrace = TimeSpan.FromMilliseconds(250);
 
     private readonly string _shellFileName;
     private readonly string _shellCommandFlag;
+    private readonly ShellProcessRegistry _processes;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RunShellCommandTool"/> class with the platform's shell.
@@ -52,22 +74,53 @@ public sealed class RunShellCommandTool : ITool
     /// <param name="shellFileName">The executable that provides the shell.</param>
     /// <param name="shellCommandFlag">The flag that makes the shell run its next argument as a command.</param>
     /// <remarks>
-    /// The launcher is chosen once, at construction, and never per call: a tool whose interpreter
-    /// depends on its arguments is a tool the model can steer.
+    /// The launcher is chosen once, at construction, and never per call: a tool whose interpreter depends on
+    /// its arguments is a tool the model can steer. A private registry is created, which is what a test with
+    /// one tool wants; the container shares one registry across the tools that talk to each other.
     /// </remarks>
     public RunShellCommandTool(string shellFileName, string shellCommandFlag)
+        : this(shellFileName, shellCommandFlag, new ShellProcessRegistry())
+    {
+    }
+
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RunShellCommandTool"/> class with the platform's shell
+    /// and a shared process registry.
+    /// </summary>
+    /// <param name="processes">The registry that owns the commands this tool starts.</param>
+    public RunShellCommandTool(ShellProcessRegistry processes)
+        : this(
+            OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+            OperatingSystem.IsWindows() ? "/c" : "-c",
+            processes)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RunShellCommandTool"/> class with an explicit shell and
+    /// a shared process registry.
+    /// </summary>
+    /// <param name="shellFileName">The executable that provides the shell.</param>
+    /// <param name="shellCommandFlag">The flag that makes the shell run its next argument as a command.</param>
+    /// <param name="processes">The registry that owns the commands this tool starts.</param>
+    /// <exception cref="ArgumentException">A shell argument is blank.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="processes"/> is null.</exception>
+    public RunShellCommandTool(string shellFileName, string shellCommandFlag, ShellProcessRegistry processes)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(shellFileName);
         ArgumentException.ThrowIfNullOrWhiteSpace(shellCommandFlag);
+        ArgumentNullException.ThrowIfNull(processes);
 
         _shellFileName = shellFileName;
         _shellCommandFlag = shellCommandFlag;
+        _processes = processes;
     }
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Run a shell command in the workspace and return its exit code plus stdout and stderr. Use it for builds, tests and version control. A non-zero exit code is reported, not thrown.",
+        "Run a shell command in the workspace and return its exit code plus stdout and stderr. Use it for builds, tests and version control. A non-zero exit code is reported, not thrown. The command's stdin is empty, so a command that waits for input gets end-of-input instead of hanging. Pass wait_seconds smaller than timeout_seconds to leave a long-running command in the background and get a process_id for shell_output and shell_stop.",
         Schema);
 
     /// <inheritdoc />
@@ -89,6 +142,9 @@ public sealed class RunShellCommandTool : ITool
             DefaultTimeoutSeconds,
             minimum: 1,
             maximum: MaxTimeoutSeconds);
+        var waitSeconds = arguments.Has("wait_seconds")
+            ? arguments.GetOptionalInt("wait_seconds", 0, minimum: 0, maximum: MaxTimeoutSeconds)
+            : timeoutSeconds;
         var workingDirectoryArgument = arguments.GetOptionalString("working_directory");
 
         var workingDirectory = context.Workspace.Root;
@@ -110,65 +166,111 @@ public sealed class RunShellCommandTool : ITool
             workingDirectory = resolved;
         }
 
-        using var process = new Process { StartInfo = CreateStartInfo(workingDirectory, command) };
+        // A call that returns before the command ends is a start, not a timeout: the timeout only means
+        // "kill it" while this call is still the one waiting.
+        var background = waitSeconds < timeoutSeconds;
+        var lifetime = background ? ShellProcessRegistry.MaxBackgroundLifetime : TimeSpan.FromSeconds(timeoutSeconds);
+
+        ShellProcess process;
         try
         {
-            if (!process.Start())
-            {
-                return ToolResult.Failure(toolCall.Id, Name, $"could not start '{_shellFileName}'");
-            }
+            process = _processes.Start(
+                command,
+                CreateStartInfo(workingDirectory, command),
+                context.Output,
+                lifetime);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
             return ToolResult.Failure(toolCall.Id, Name, $"could not start '{_shellFileName}': {ex.Message}");
         }
 
-        // Both streams are drained while the process runs; a command that fills a pipe buffer would
-        // otherwise deadlock waiting for a reader that only starts after exit.
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
-        var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-
-        var timedOut = false;
+        var finished = false;
         try
         {
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            finished = await process
+                .WaitAsync(TimeSpan.FromSeconds(waitSeconds), cancellationToken)
+                .ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Kill(process);
-            cancellationToken.ThrowIfCancellationRequested();
-            timedOut = true;
+            // The turn was cancelled. Kill the tree before letting the cancellation through, or a Ctrl+C
+            // would leave the build running with nobody reading its output.
+            process.TryStop();
+            throw;
         }
 
-        var stdout = await Drain(stdoutTask).ConfigureAwait(false);
-        var stderr = await Drain(stderrTask).ConfigureAwait(false);
-
-        if (timedOut)
+        if (!finished && background)
         {
+            process.StopStreaming();
+            return await BackgroundAsync(toolCall, process, command, waitSeconds).ConfigureAwait(false);
+        }
+
+        if (!finished)
+        {
+            process.TryStop();
+            var (partial, _) = await DrainAsync(process).ConfigureAwait(false);
+            var message = string.Create(
+                CultureInfo.InvariantCulture,
+                $"command timed out after {timeoutSeconds}s and was killed: {command}");
+
             return ToolResult.Failure(
                 toolCall.Id,
                 Name,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"command timed out after {timeoutSeconds}s and was killed: {command}"));
+                partial.Length == 0 ? message : string.Concat(message, "\n", partial));
         }
 
-        var output = Merge(stdout, stderr, out var truncated);
+        var (output, truncated) = await DrainAsync(process).ConfigureAwait(false);
         var header = string.Create(
             CultureInfo.InvariantCulture,
-            $"$ {command}\nexit code: {process.ExitCode}");
+            $"$ {command}\nexit code: {process.ExitCode ?? -1}");
 
         return ToolResult.Success(
             toolCall.Id,
             Name,
-            output.Length == 0
-                ? string.Concat(header, "\n(no output)")
-                : string.Concat(header, "\n", output),
+            output.Length == 0 ? string.Concat(header, "\n(no output)") : string.Concat(header, "\n", output),
             new ToolEffect(ToolEffectKind.CommandRun, command)) with
         { IsTruncated = truncated };
+    }
+
+
+    /// <summary>
+    /// Reports a command that is still running, with the handle that reaches it later.
+    /// </summary>
+    /// <param name="toolCall">The call being answered.</param>
+    /// <param name="process">The tracked process.</param>
+    /// <param name="command">The command line, echoed in the result.</param>
+    /// <param name="waitSeconds">How long the call waited before handing back.</param>
+    /// <returns>A successful result that names the handle.</returns>
+    private static async Task<ToolResult> BackgroundAsync(
+        ToolCall toolCall,
+        ShellProcess process,
+        string command,
+        int waitSeconds)
+    {
+        var (output, truncated) = await DrainAsync(process).ConfigureAwait(false);
+        var header = string.Create(
+            CultureInfo.InvariantCulture,
+            $"$ {command}\nrunning: {process.Id} (still running after {waitSeconds}s; read more with shell_output, stop it with shell_stop)");
+
+        return ToolResult.Success(
+            toolCall.Id,
+            Name,
+            output.Length == 0 ? string.Concat(header, "\n(no output yet)") : string.Concat(header, "\n", output),
+            new ToolEffect(ToolEffectKind.CommandRun, command)) with
+        { IsTruncated = truncated };
+    }
+
+    /// <summary>
+    /// Collects what the process printed, bounded and without its final newline.
+    /// </summary>
+    /// <param name="process">The process to drain.</param>
+    /// <returns>The text, and whether it was shortened to fit the budget.</returns>
+    private static async Task<(string Text, bool Truncated)> DrainAsync(ShellProcess process)
+    {
+        var text = await process.DrainAsync(DrainGrace).ConfigureAwait(false);
+        var bounded = TextLimits.Bound(text.TrimEnd('\n', '\r'), TextLimits.MaxCommandOutputChars, out var truncated);
+        return (bounded, truncated);
     }
 
     private ProcessStartInfo CreateStartInfo(string workingDirectory, string command)
@@ -179,15 +281,19 @@ public sealed class RunShellCommandTool : ITool
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            RedirectStandardInput = false,
+
+            // The developer's keyboard belongs to the CLI, not to the command it asked for: without this,
+            // a child started through the console inherits it and can take the line typed at the next
+            // prompt, which reads as a session that stopped responding.
+            RedirectStandardInput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
             StandardOutputEncoding = TextLimits.Utf8NoBom,
             StandardErrorEncoding = TextLimits.Utf8NoBom,
         };
 
-        // The command travels as one argument to the shell. No quoting, escaping or concatenation
-        // happens here, so there is no string for a caller to break out of.
+        // The command travels as one argument to the shell. No quoting, escaping or concatenation happens
+        // here, so there is no string for a caller to break out of.
         startInfo.ArgumentList.Add(_shellCommandFlag);
         startInfo.ArgumentList.Add(command);
 
@@ -204,45 +310,5 @@ public sealed class RunShellCommandTool : ITool
         name.EndsWith("_TOKEN", StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith("_SECRET", StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith("_PASSWORD", StringComparison.OrdinalIgnoreCase);
-
-    private static void Kill(Process process)
-    {
-        try
-        {
-            process.Kill(entireProcessTree: true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or AggregateException or Win32Exception)
-        {
-            // The process already exited, or a child it spawned cannot be reached; either way the
-            // caller is about to hear about the timeout, which is the fact that matters.
-        }
-    }
-
-    private static async Task<string> Drain(Task<string> reader)
-    {
-        try
-        {
-            return await reader.ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
-        {
-            return string.Empty;
-        }
-    }
-
-    private static string Merge(string stdout, string stderr, out bool truncated)
-    {
-        var text = stdout;
-        if (stderr.Length > 0)
-        {
-            if (text.Length > 0 && !text.EndsWith('\n'))
-            {
-                text = string.Concat(text, "\n");
-            }
-
-            text = string.Concat(text, stderr);
-        }
-
-        return TextLimits.Bound(text.TrimEnd('\n', '\r'), TextLimits.MaxCommandOutputChars, out truncated);
-    }
 }
+

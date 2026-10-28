@@ -20,6 +20,10 @@ public static class ToolResultTrimmer
     /// <param name="result">The result to adjust.</param>
     /// <param name="maxChars">The largest allowed content length; a non-positive value disables trimming.</param>
     /// <returns>The original result, or a copy with shortened content and <see cref="ToolResult.IsTruncated"/> set.</returns>
+    /// <remarks>
+    /// A budget smaller than the marker cannot be honoured: the marker and the count line are longer
+    /// than that, and telling the model the answer is incomplete is worth the extra characters.
+    /// </remarks>
     public static ToolResult Trim(ToolResult result, int maxChars)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -29,12 +33,24 @@ public static class ToolResultTrimmer
             return result;
         }
 
-        // Leave room for the marker so the returned content still fits the budget.
-        var keep = Math.Max(0, maxChars - OmittedMarker.Length);
-        var omitted = result.Content.Length - keep;
-        var content = string.Create(
-            CultureInfo.InvariantCulture,
-            $"{result.Content[..keep]}{OmittedMarker} {omitted} of {result.Content.Length} characters omitted.");
+        // Leave room for the marker and for the count line: both are read by the model, both count
+        // against the budget, and the count line's own length depends on how much is dropped. The cut
+        // is therefore found by shortening until the whole message fits.
+        var keep = maxChars;
+        string content;
+        while (true)
+        {
+            var omitted = result.Content.Length - keep;
+            content = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{result.Content[..keep]}{OmittedMarker} {omitted} of {result.Content.Length} characters omitted.");
+            if (content.Length <= maxChars || keep == 0)
+            {
+                break;
+            }
+
+            keep = Math.Max(0, keep - (content.Length - maxChars));
+        }
 
         return result with { Content = content, IsTruncated = true };
     }

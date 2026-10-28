@@ -27,7 +27,7 @@ internal static class IndexSchema
     /// <summary>The chunking and tokenisation contract stored in <c>meta['analyzer_contract']</c>.</summary>
     /// <remarks>
     /// Raised to 3 when the writer stopped encoding vectors itself: it now binds the embedder's <c>float[]</c>
-    /// and SharpCoreDB 2.1.1 stores it in the engine's own binary vector format. An index written through the
+    /// and SharpCoreDB stores it in the engine's own binary vector format. An index written through the
     /// old path holds the JSON text of the same array in every embedding cell, so reporting it as stale is
     /// what makes the next open rebuild those cells rather than read them through a second decoder.
     /// <para>
@@ -239,13 +239,10 @@ internal static class IndexSchema
                 continue;
             }
 
-            var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
-            {
-                ["@key"] = key,
-                ["@value"] = value,
-            };
-
-            database.ExecuteSQL("INSERT INTO meta (key, value) VALUES (@key, @value)", parameters);
+            // A seeded value can be a workspace path, so it goes in as data rather than as SQL text: the
+            // engine's INSERT splits a value list before it reads string literals, and a path may well hold a
+            // parenthesis or a comma.
+            IndexSql.Insert(database, IndexTable.Meta, IndexSql.Row(("key", key), ("value", value)));
         }
     }
 

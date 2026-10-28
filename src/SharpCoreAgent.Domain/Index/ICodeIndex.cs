@@ -67,6 +67,13 @@ public interface ICodeIndex
     /// <param name="hops">How many graph hops to follow; 1 to 3.</param>
     /// <param name="k">How many neighbours to return; 1 to 12.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    /// <returns>Neighbouring blocks, nearest first; possibly empty.</returns>
-    ValueTask<IReadOnlyList<CodeEvidence>> GetContextAsync(string target, int hops, int k, CancellationToken cancellationToken);
+    /// <returns>
+    /// The centre, its own passage and the neighbouring blocks, nearest first; an empty context when the target
+    /// names nothing the index holds.
+    /// </returns>
+    /// <remarks>
+    /// A context is a record rather than a bare list because the answer's heading names the declaration the
+    /// neighbours belong to, and a list of neighbours alone cannot say which one that was.
+    /// </remarks>
+    ValueTask<CodeContext> GetContextAsync(string target, int hops, int k, CancellationToken cancellationToken);
 }

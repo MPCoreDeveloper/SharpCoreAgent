@@ -1,0 +1,91 @@
+name: publish-manual
+
+# A build someone asked for, on a run they can point at: dispatch it and download the binary.
+#
+# Manual by design. Nothing here pushes a package, publishes a release or touches a feed — the CLI is
+# `IsPackable=false`, there is no packaging story yet, and inventing a release process inside a workflow is
+# how an unreviewed upload happens. The workflow stops at "here is a framework-dependent build for your
+# platform, zipped as an artifact".
+#
+# Framework-dependent (~4 MiB) rather than self-contained (~70 MiB per platform): the .NET 11 runtime is a
+# prerequisite of this product anyway, and a small artifact stays downloadable. Each platform publishes on
+# its own runner rather than cross-publishing, so the apphost an artifact carries was produced by that
+# platform's toolchain.
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Build configuration
+        type: choice
+        options: [Release, Debug]
+        default: Release
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    name: publish ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      # A missing macOS artifact should not stop the Windows one from uploading.
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            exe: sharpcoreagent.exe
+          - rid: linux-x64
+            os: ubuntu-latest
+            exe: sharpcoreagent
+          - rid: osx-arm64
+            os: macOS-latest
+            exe: sharpcoreagent
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # Same pin as ci.yml and sonar.yml: a binary built by a different patch than CI tested is exactly
+          # the difference nobody remembers by the time it matters.
+          dotnet-version: '11.0.100-rc.2.26504.105'
+          dotnet-quality: 'preview'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Publish
+        run: >
+          dotnet publish src/SharpCoreAgent.Cli
+          -c ${{ inputs.configuration }}
+          -r ${{ matrix.rid }}
+          --self-contained false
+          -o out
+
+      - name: Run it
+        shell: bash
+        # The artifact is only worth uploading if it starts: `--version` prints `Ariadne <version>
+        # (SharpCoreAgent)` and exits 0 without a provider, a network or an index.
+        run: ./out/${{ matrix.exe }} --version
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharpcoreagent-${{ matrix.rid }}-${{ inputs.configuration }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 14
+

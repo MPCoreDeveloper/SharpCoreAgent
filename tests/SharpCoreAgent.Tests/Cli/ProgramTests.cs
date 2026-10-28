@@ -1,4 +1,3 @@
-using System.Reflection;
 using SharpCoreAgent.Cli;
 using Xunit;
 
@@ -18,11 +17,91 @@ public sealed class ProgramTests
     [Fact]
     public async Task NoArgumentsPrintsTheUsageBlock()
     {
-        var result = await RunAsync([]);
+        // The probe is stated rather than read from the console: whether this test host owns a terminal
+        // depends on how the suite was launched, and the assertion must not.
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = () => false;
+
+        try
+        {
+            var result = await RunAsync([]);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("Usage", result.Out, StringComparison.Ordinal);
+            Assert.Contains("--approval", result.Out, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
+    [Fact]
+    public async Task ConfigSetThenGetRoundTripsThroughTheProgram()
+    {
+        using var directory = TempDirectory.Create();
+        var settings = Path.Combine(directory.Path, "config.json");
+
+        var set = await RunAsync(["config", "set", "approval", "readonly"], settingsPath: settings);
+        Assert.Equal(0, set.ExitCode);
+        Assert.Contains("set approval", set.Out, StringComparison.Ordinal);
+
+        var get = await RunAsync(["config", "get", "approval"], settingsPath: settings);
+        Assert.Equal(0, get.ExitCode);
+        Assert.Equal("readonly" + Environment.NewLine, get.Out);
+    }
+
+    [Fact]
+    public async Task ConfigShowReportsTheValueAndItsSource()
+    {
+        using var directory = TempDirectory.Create();
+        var settings = Path.Combine(directory.Path, "config.json");
+        await File.WriteAllTextAsync(
+            settings,
+            """{"approval":"readonly"}""",
+            TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(["config"], settingsPath: settings);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Usage", result.Out, StringComparison.Ordinal);
-        Assert.Contains("--approval", result.Out, StringComparison.Ordinal);
+        Assert.Contains("readonly", result.Out, StringComparison.Ordinal);
+        Assert.Contains("file", result.Out, StringComparison.Ordinal);
+        Assert.Contains(settings, result.Out, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABrokenSettingsFileExitsSevenAndNamesTheFile()
+    {
+        using var directory = TempDirectory.Create();
+        var settings = Path.Combine(directory.Path, "config.json");
+        await File.WriteAllTextAsync(settings, "{ not json", TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(["models", "--provider", "demo"], settingsPath: settings);
+
+        Assert.Equal(7, result.ExitCode);
+        Assert.Contains(settings, result.Error, StringComparison.Ordinal);
+        Assert.Contains("hint: ", result.Error, StringComparison.Ordinal);
+
+        // The verb that repairs the file must keep working while it is broken.
+        var path = await RunAsync(["config", "path"], settingsPath: settings);
+        Assert.Equal(0, path.ExitCode);
+        Assert.Equal(settings + Environment.NewLine, path.Out);
+    }
+
+    [Fact]
+    public async Task ASettingsValueTheFlagWouldRejectExitsSevenWithItsKey()
+    {
+        using var directory = TempDirectory.Create();
+        var settings = Path.Combine(directory.Path, "config.json");
+        await File.WriteAllTextAsync(
+            settings,
+            """{"approval":"sometimes"}""",
+            TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(["config", "get", "approval"], settingsPath: settings);
+
+        Assert.Equal(7, result.ExitCode);
+        Assert.Contains("approval", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -31,7 +110,8 @@ public sealed class ProgramTests
         var result = await RunAsync(["--version"]);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.StartsWith("sharpcoreagent ", result.Out, StringComparison.Ordinal);
+        Assert.StartsWith("Ariadne ", result.Out, StringComparison.Ordinal);
+        Assert.Contains("(SharpCoreAgent)", result.Out, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -80,7 +160,7 @@ public sealed class ProgramTests
             ["run", "list the files", "--provider", "demo", "--workspace", directory.Path, "--approval", "allow", "--no-session"]);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("— completed", result.Error, StringComparison.Ordinal);
+        Assert.Contains("✻ completed", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -138,13 +218,60 @@ public sealed class ProgramTests
         Assert.Equal(0, result.ExitCode);
     }
 
-    private static async Task<(int ExitCode, string Out, string Error)> RunAsync(string[] args, string? input = null)
+    [Fact]
+    public async Task AMissingCredentialFileExitsWithTheCredentialCode()
     {
-        using var console = new ConsoleScope(input ?? string.Empty);
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "keys.env");
 
-        var main = typeof(Program).GetMethod("Main", BindingFlags.NonPublic | BindingFlags.Static)
-            ?? throw new InvalidOperationException("Program.Main was not found.");
-        var exitCode = await ((Task<int>)main.Invoke(null, [args])!).ConfigureAwait(false);
+        var result = await RunAsync(["models", "--credential-file", path]);
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains(path, result.Error, StringComparison.Ordinal);
+        Assert.Contains("could not be read", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AMalformedCredentialFileNamesTheLineAndNotItsContent()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "keys.env");
+        await File.WriteAllTextAsync(
+            path,
+            "DEEPSEEK_API_KEY sk-not-a-real-key" + Environment.NewLine,
+            TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(
+            ["run", "hi", "--provider", "deepseek", "--workspace", directory.Path, "--credential-file", path, "--no-session"]);
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains("line 1", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-not-a-real-key", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelsFindsTheKeyInTheFileAndPrintsNoNote()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "keys.env");
+        await File.WriteAllLinesAsync(
+            path,
+            ["# rotated today", "DEEPSEEK_API_KEY=sk-not-a-real-key"],
+            TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(["models", "--provider", "deepseek", "--credential-file", path]);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain("note:", result.Out, StringComparison.Ordinal);
+    }
+
+    private static async Task<(int ExitCode, string Out, string Error)> RunAsync(
+        string[] args,
+        string? input = null,
+        string? settingsPath = null)
+    {
+        using var console = new ConsoleScope(input ?? string.Empty, settingsPath);
+
+        var exitCode = await ProgramEntry.RunAsync(args).ConfigureAwait(false);
 
         return (exitCode, console.Out.ToString(), console.Error.ToString());
     }

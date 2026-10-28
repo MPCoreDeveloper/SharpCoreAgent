@@ -83,6 +83,29 @@ public sealed class RunShellCommandToolTests
     }
 
     [Fact]
+    public async Task ACommandThatAsksForInputGetsEndOfInputInsteadOfHanging()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+
+        // Both commands read one line from standard input. Given a keyboard — or an open empty pipe —
+        // they wait for that line, which is how a tool call ends up swallowing the question typed at the
+        // next prompt. Given a closed stdin they see end-of-input at once and the call returns.
+        var read = OperatingSystem.IsWindows() ? "set /p line=" : "read line";
+
+        var result = await new RunShellCommandTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "run_shell",
+                ToolTestWorkspace.Args(new { command = read, timeout_seconds = 5 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        // A refused end-of-input is still a result: what must not happen is the timeout, which arrives
+        // as a failure naming the seconds the call waited.
+        Assert.False(result.IsError, result.Content);
+        Assert.Contains("exit code:", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DoesNotHandProviderCredentialsToTheCommand()
     {
         using var sandbox = ToolTestWorkspace.Create();
@@ -121,4 +144,169 @@ public sealed class RunShellCommandToolTests
 
         Assert.True(result.IsRefused);
     }
+
+    [Fact]
+    public async Task OutputIsStreamedWhileTheCommandRuns()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var sink = new CollectingSink();
+        var context = sandbox.Context with { Output = sink };
+
+        var result = await new RunShellCommandTool().ExecuteAsync(
+            ToolTestWorkspace.Call("run_shell", """{"command":"echo first && echo second"}"""),
+            context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsError);
+        Assert.Contains("first", sink.Text, StringComparison.Ordinal);
+        Assert.Contains("second", sink.Text, StringComparison.Ordinal);
+
+        // The live view is a courtesy: the result still carries the whole output for the model.
+        Assert.Contains("first", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ALongCommandHandsBackAHandleThatShellOutputAndShellStopUse()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        using var registry = new ShellProcessRegistry();
+        var hang = OperatingSystem.IsWindows() ? "ping -n 30 127.0.0.1" : "sleep 30";
+
+        var started = await new RunShellCommandTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "run_shell",
+                ToolTestWorkspace.Args(new { command = hang, wait_seconds = 1 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(started.IsError);
+        Assert.Contains("running: sh-1", started.Content, StringComparison.Ordinal);
+
+        var read = await new ShellOutputTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(
+                ShellOutputTool.Name,
+                ToolTestWorkspace.Args(new { process_id = "sh-1", wait_seconds = 1 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(read.IsError);
+        Assert.StartsWith("sh-1 (", read.Content, StringComparison.Ordinal);
+
+        var stopped = await new ShellStopTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(ShellStopTool.Name, """{"process_id":"sh-1"}"""),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(stopped.IsError);
+        Assert.Contains("stopped sh-1", stopped.Content, StringComparison.Ordinal);
+        Assert.Empty(registry.Running);
+    }
+
+    [Fact]
+    public async Task AHandleNobodyIssuedIsRejected()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        using var registry = new ShellProcessRegistry();
+
+        var read = await new ShellOutputTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(ShellOutputTool.Name, """{"process_id":"sh-404"}"""),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+        var stop = await new ShellStopTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(ShellStopTool.Name, """{"process_id":"sh-404"}"""),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(read.IsError);
+        Assert.Contains("no process with id 'sh-404'", read.Content, StringComparison.Ordinal);
+        Assert.True(stop.IsError);
+        Assert.Contains("no process with id 'sh-404'", stop.Content, StringComparison.Ordinal);
+    }
+
+
+    [Fact]
+    public async Task AFinishedBackgroundCommandReportsItsExitCodeAndStopIsIdempotent()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        using var registry = new ShellProcessRegistry();
+
+        var started = await new RunShellCommandTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "run_shell",
+                ToolTestWorkspace.Args(new { command = "exit 4", wait_seconds = 0 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(started.IsError);
+        Assert.Contains("running: sh-1", started.Content, StringComparison.Ordinal);
+
+        // Waiting for the exit is what shell_output is for, and it is what makes the code observable.
+        var read = await new ShellOutputTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(
+                ShellOutputTool.Name,
+                ToolTestWorkspace.Args(new { process_id = "sh-1", wait_seconds = 10 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(read.IsError);
+        Assert.Contains("exited 4", read.Content, StringComparison.Ordinal);
+
+        var stopped = await new ShellStopTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(ShellStopTool.Name, """{"process_id":"sh-1"}"""),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(stopped.IsError);
+        Assert.Contains("had already exited with code 4", stopped.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DisposingTheRegistryForgetsEveryHandle()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var registry = new ShellProcessRegistry();
+
+        await new RunShellCommandTool(registry).ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "run_shell",
+                ToolTestWorkspace.Args(new { command = "exit 0", wait_seconds = 0 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(registry.TryGet("sh-1", out var tracked));
+        registry.Dispose();
+
+        Assert.False(registry.TryGet("sh-1", out _));
+        Assert.Empty(registry.Running);
+        Assert.True(tracked.HasExited);
+    }
+
+    /// <summary>Collects the live output a tool forwards, so a test can assert on it.</summary>
+    private sealed class CollectingSink : IToolOutputSink
+    {
+        private readonly System.Text.StringBuilder _text = new();
+        private readonly object _gate = new();
+
+        public string Text
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _text.ToString();
+                }
+            }
+        }
+
+        public ValueTask WriteAsync(string text, CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                _text.Append(text);
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
 }
+

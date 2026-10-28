@@ -24,6 +24,41 @@ public sealed class AgentOptionsTests
     }
 
     [Fact]
+    public void TheDefaultsAreSizedForAWorkingSessionRatherThanADemoOne()
+    {
+        var options = new AgentOptions();
+
+        // A turn that reads, edits, builds and retests is tens of model calls, so the old bound of 24 ended
+        // ordinary work with "the iteration budget ran out".
+        Assert.Equal(400, options.MaxIterations);
+
+        // Millions of tokens is what a session a developer keeps open all afternoon spends: a ceiling real work
+        // reaches in ten minutes does not protect anyone, it just ends the conversation.
+        Assert.Equal(10_000_000, options.MaxTotalTokens);
+
+        // The window bounds one request, not the session: it is high enough that a conversation has to be very
+        // long before the oldest messages have to go.
+        Assert.Equal(120, options.MaxContextMessages);
+    }
+
+    [Fact]
+    public void TheContextWindowMayBeSwitchedOffButNotSetToSomethingUnusable()
+    {
+        // Zero is the documented "the host compacts on its own schedule" switch.
+        var off = new AgentOptions { MaxContextMessages = 0 };
+        Assert.Same(off, off.Validate());
+
+        var smallest = new AgentOptions { MaxContextMessages = 20 };
+        Assert.Same(smallest, smallest.Validate());
+
+        // A window of nineteen would drop the instruction that asked for the work, so it is refused rather than
+        // silently rounding up.
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentOptions { MaxContextMessages = 19 }.Validate());
+        Assert.Equal("MaxContextMessages", exception.ParamName);
+    }
+
+    [Fact]
     public void AcceptsBothEdgesOfTheTurnTimeout()
     {
         var shortest = new AgentOptions { TurnTimeout = TimeSpan.FromSeconds(10) };

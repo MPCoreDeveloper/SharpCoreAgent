@@ -88,9 +88,60 @@ public static class ModelCatalog
     }
 
     /// <summary>
+    /// Resolves the short names a developer types in a terminal into a provider and a model.
+    /// </summary>
+    /// <param name="text">The alias, for example <c>ds</c>, <c>r1</c> or <c>grok</c>.</param>
+    /// <param name="provider">The provider the alias means.</param>
+    /// <param name="modelId">The model the alias means.</param>
+    /// <returns><see langword="true"/> when the text is an alias this build knows.</returns>
+    /// <remarks>
+    /// Aliases exist because the common switch is between "the fast DeepSeek", "the reasoning DeepSeek"
+    /// and "Grok", and typing <c>deepseek:deepseek-reasoner</c> every time is how a developer stops
+    /// switching. They are matched before a bare model identifier so <c>/model r1</c> cannot be sent to
+    /// a provider as a model called <c>r1</c>.
+    /// </remarks>
+    public static bool TryResolveAlias(string? text, out string provider, out string modelId)
+    {
+        provider = DefaultProvider;
+        modelId = DeepSeekChatModel.DefaultModelId;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        switch (text.Trim().ToLowerInvariant())
+        {
+            case "ds":
+                provider = DeepSeekChatModel.ProviderKey;
+                modelId = DeepSeekChatModel.DefaultModelId;
+                return true;
+
+            case "r1":
+            case "reasoner":
+                provider = DeepSeekChatModel.ProviderKey;
+                modelId = "deepseek-reasoner";
+                return true;
+
+            case "grok":
+            case "g4":
+                provider = GrokChatModel.ProviderKey;
+                modelId = GrokChatModel.DefaultModelId;
+                return true;
+
+            case "g3":
+                provider = GrokChatModel.ProviderKey;
+                modelId = "grok-3";
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
     /// Splits a <c>provider:id</c> name, which is how <c>/model</c> takes its argument.
     /// </summary>
-    /// <param name="text">The text to split, for example <c>grok:grok-4</c>.</param>
+    /// <param name="text">The text to split, for example <c>grok:grok-4.7</c>.</param>
     /// <param name="descriptor">The descriptor, when the text names a known provider.</param>
     /// <returns><see langword="true"/> when the text was a <c>provider:id</c> pair.</returns>
     public static bool TryParseQualified(string? text, out ModelDescriptor? descriptor)

@@ -33,15 +33,28 @@ internal static class RunCommand
 
         using var provider = CliHost.Build(cli);
         var model = provider.GetRequiredService<ModelDescriptor>();
-        if (!CliHost.TryEnsureCredentials(model, provider.GetRequiredService<ICredentialStore>(), Console.Error))
+        if (!CliHost.TryEnsureCredentials(model, provider.GetRequiredService<ICredentialStore>(), Console.Error, cli.Fallback))
         {
             return ExitCodes.Credentials;
         }
 
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
-        var session = new AgentSession(workspace!, model, cli.Approval, options.SystemPrompt);
-        var observer = new ConsoleObserver(Console.Out, Console.Error, cli.Json, cli.Quiet || cli.Json);
+
+        // Before the first model call, not after: a model that is handed an empty index has no way to know it should
+        // have waited, and the five retrieval tools answer with "missing" for the whole turn.
+        await IndexCommand.RefreshAsync(provider, cli, cli.Quiet || cli.Json, Console.Out, cancellationToken).ConfigureAwait(false);
+
+        var session = new AgentSession(workspace!, model, cli.Approval, options.SystemPrompt) { Mode = cli.Mode };
+        var observer = new ConsoleObserver(
+            Console.Out,
+            Console.Error,
+            cli.Json,
+            cli.Quiet || cli.Json,
+            CliHost.ThemeFor(cli),
+            verbose: cli.Verbose,
+            budget: () => (session.TokensSpent, session.MaxTotalTokens ?? options.MaxTotalTokens));
+
 
         var report = await agent.RunTurnAsync(session, cli.Prompt, observer, cancellationToken).ConfigureAwait(false);
 
@@ -56,7 +69,7 @@ internal static class RunCommand
 
             if (!cli.Json && !cli.Quiet)
             {
-                await Console.Error.WriteLineAsync($"session: {Path.GetFullPath(path)}".AsMemory(), cancellationToken).ConfigureAwait(false);
+                await Console.Error.WriteLineAsync($"{CliHost.ThemeFor(cli).Dim("session:")} {Path.GetFullPath(path)}".AsMemory(), cancellationToken).ConfigureAwait(false);
             }
         }
 

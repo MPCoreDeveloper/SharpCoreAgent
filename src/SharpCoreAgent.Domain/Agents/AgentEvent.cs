@@ -1,3 +1,5 @@
+using SharpCoreAgent.Domain.Model;
+
 namespace SharpCoreAgent.Domain.Agents;
 
 /// <summary>
@@ -14,6 +16,30 @@ public abstract record AgentEvent;
 /// </summary>
 /// <param name="ModelId">The <c>provider:model</c> name.</param>
 public sealed record TurnStarted(string ModelId) : AgentEvent;
+
+/// <summary>
+/// The turn moved to the fallback model because the primary returned 401 or 5xx.
+/// </summary>
+/// <param name="Fallback">Which attempt failed, why, and which model serves the request instead.</param>
+/// <remarks>
+/// Emitted as it happens rather than in the closing summary: the answer the developer is about to
+/// read comes from a different provider than the one the prompt named, and that is worth a line before
+/// the text arrives.
+/// </remarks>
+public sealed record FallbackAttempted(FallbackUsed Fallback) : AgentEvent;
+
+/// <summary>
+/// The oldest part of the transcript was dropped so the next request stays inside the context window.
+/// </summary>
+/// <param name="Dropped">How many messages were replaced by the elision note.</param>
+/// <param name="Kept">How many of the most recent messages were kept.</param>
+/// <remarks>
+/// Emitted before the request that needed the room, never after: a long session that silently forgets the
+/// beginning of the conversation answers a question about “the file we just edited” with confidence and
+/// no memory, and the developer deserves a line saying why. The elision note the model receives says the
+/// same thing, so asking again is a real remedy.
+/// </remarks>
+public sealed record ContextCompacted(int Dropped, int Kept) : AgentEvent;
 
 /// <summary>
 /// The model produced reasoning text.
@@ -34,6 +60,19 @@ public sealed record AgentTextDelta(string Text) : AgentEvent;
 /// <param name="ToolName">The requested tool.</param>
 /// <param name="ArgumentsJson">The raw arguments, shown to the developer when approval is required.</param>
 public sealed record ToolRequested(string CallId, string ToolName, string ArgumentsJson) : AgentEvent;
+
+/// <summary>
+/// A running tool produced output, before it has finished.
+/// </summary>
+/// <param name="CallId">The call identifier.</param>
+/// <param name="ToolName">The tool that is speaking.</param>
+/// <param name="Text">The increment; it may end mid-line.</param>
+/// <remarks>
+/// Only tools that can take a long time emit this — a shell command while it runs, so a developer
+/// watches the build instead of waiting for it. The event is additive: a tool's returned text is
+/// complete on its own, and an observer that ignores this event loses nothing but timing.
+/// </remarks>
+public sealed record ToolOutputDelta(string CallId, string ToolName, string Text) : AgentEvent;
 
 /// <summary>
 /// A tool invocation finished, one way or another.

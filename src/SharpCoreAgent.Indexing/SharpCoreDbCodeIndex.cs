@@ -27,9 +27,12 @@ namespace SharpCoreAgent.Indexing;
 /// interface in M3 instead of shipping stubs that would silently return nothing. <see cref="Search"/> is the first of
 /// them, composed from the two legs, the ranker and the budget.
 /// </remarks>
-internal sealed class SharpCoreDbCodeIndex : IDisposable
+internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
 {
     private static readonly string[] OrphanedByFileTables = ["chunks", "symbols", "docs"];
+
+    /// <summary>The most declarations one path-targeted context lists.</summary>
+    private const int MaxDeclarations = 50;
 
     private readonly Lock _gate = new();
     private readonly IndexPaths _paths;
@@ -179,6 +182,103 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
     }
 
     /// <inheritdoc />
+    public ValueTask<IReadOnlyList<CodeEvidence>> SearchAsync(CodeQuery query, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Search(query, DateTimeOffset.UtcNow, EvidenceBudget.DefaultMaxChars));
+    }
+
+    /// <inheritdoc />
+    public ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
+        string name,
+        string? kind,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var snapshot = TrySnapshot();
+        return ValueTask.FromResult(snapshot is null
+            ? []
+            : SymbolRetriever.Search(snapshot, name, kind, SymbolRetriever.MaxResults));
+    }
+
+    /// <inheritdoc />
+    public ValueTask<IReadOnlyList<CodeEvidence>> FindReferencesAsync(
+        string symbol,
+        ReferenceDirection direction,
+        int maxResults,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var snapshot = TrySnapshot();
+        return ValueTask.FromResult(snapshot is null
+            ? []
+            : ReferenceRetriever.Find(snapshot, symbol, direction, maxResults));
+    }
+
+    /// <inheritdoc />
+    public ValueTask<CodeContext> GetContextAsync(
+        string target,
+        int hops,
+        int k,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var snapshot = TrySnapshot();
+        return ValueTask.FromResult(snapshot is null
+            ? CodeContext.Empty(target)
+            : Context(snapshot, target, hops, k));
+    }
+
+    /// <summary>
+    /// Builds one neighbourhood answer from a loaded snapshot.
+    /// </summary>
+    /// <param name="snapshot">The build being read.</param>
+    /// <param name="target">A workspace-relative path, or a symbol name.</param>
+    /// <param name="hops">How many edges to follow.</param>
+    /// <param name="k">How many neighbours to return.</param>
+    /// <returns>
+    /// The centre, its own passage and its neighbours; an empty context when the target resolves to nothing.
+    /// </returns>
+    /// <remarks>
+    /// The file is resolved separately from the seed so the answer can tell a path target from a symbol target:
+    /// naming a file asks what the file declares, and that list belongs in front of the neighbourhood rather than
+    /// behind it.
+    /// </remarks>
+    private static CodeContext Context(IndexSnapshot snapshot, string target, int hops, int k)
+    {
+        if (NeighbourhoodRetriever.ResolveSeed(snapshot, target) is not { } seed)
+        {
+            return CodeContext.Empty(target);
+        }
+
+        var file = NeighbourhoodRetriever.ResolveFile(snapshot, target);
+        var neighbourhood = NeighbourhoodRetriever.Expand(snapshot, seed, hops, k);
+        var neighbours = new List<CodeEvidence>(neighbourhood.Nodes.Count);
+
+        foreach (var neighbour in neighbourhood.Nodes)
+        {
+            if (EvidenceBlocks.ForSymbol(snapshot, neighbour.Row, neighbour.Relation, neighbour.Weight) is { } block)
+            {
+                neighbours.Add(block);
+            }
+        }
+
+        return new CodeContext
+        {
+            Target = target.Trim(),
+            Subject = SymbolRetriever.ToRef(snapshot, seed),
+            Declarations = file is null ? [] : SymbolRetriever.InFile(snapshot, file.Id, MaxDeclarations),
+            Focus = EvidenceBlocks.ForSymbol(snapshot, seed, null, seed.Centrality),
+            Neighbours = neighbours,
+            Considered = neighbourhood.Considered,
+            MinWeight = neighbours.Count == 0 ? 0 : NeighbourhoodRetriever.MinWeight,
+        };
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         lock (_gate)
@@ -193,6 +293,21 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
     {
         _lease ??= IndexHandleCache.Acquire(_paths, _encryptionPassword, createIfMissing: false);
         return _lease.Database.Database;
+    }
+
+    /// <summary>
+    /// Loads the snapshot the graph and symbol legs answer from, or reports that there is nothing to read.
+    /// </summary>
+    /// <returns>The snapshot, or <see langword="null"/> when the workspace has no index or an empty one.</returns>
+    private IndexSnapshot? TrySnapshot()
+    {
+        if (!_paths.DatabaseExists)
+        {
+            return null;
+        }
+
+        var snapshot = _reader.Load(OpenDatabase());
+        return snapshot.ChunkCount == 0 ? null : snapshot;
     }
 
     private void CloseHandle()
@@ -336,12 +451,15 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
         var staleFiles = 0;
         var skippedFiles = 0;
         var orphans = 0;
+        var communities = 0;
+        var centers = 0;
 
         if (freshness is IndexFreshness.Fresh or IndexFreshness.Stale)
         {
             try
             {
                 (staleFiles, skippedFiles, orphans) = CountState(OpenDatabase());
+                (communities, centers) = CountGraph(OpenDatabase());
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -372,6 +490,8 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
             Chunks = view.Number("chunk_count") ?? 0,
             Symbols = view.Number("symbol_count") ?? 0,
             Edges = view.Number("edge_count") ?? 0,
+            Communities = communities,
+            Centers = centers,
             StaleFiles = staleFiles,
             SkippedFiles = skippedFiles,
             OrphanRows = orphans,
@@ -434,6 +554,49 @@ internal sealed class SharpCoreDbCodeIndex : IDisposable
 
         return (stale, skipped, orphans);
     }
+
+    /// <summary>
+    /// Counts the communities the last build assigned, and how many of them named a centre.
+    /// </summary>
+    /// <param name="database">The index to read.</param>
+    /// <returns>The number of distinct labels, and of labels whose members carry a degree centrality.</returns>
+    /// <remarks>
+    /// A centre is the highest-degree declaration of its community, so a community that has a relation at all has
+    /// one. Counting the two separately is deliberate: a label written without a centrality is the drift a single
+    /// number would hide, and reading the columns is cheaper than asking Louvain again for an answer the build
+    /// already stored.
+    /// </remarks>
+    private static (int Communities, int Centers) CountGraph(IDatabase database)
+    {
+        var communities = new HashSet<string>(StringComparer.Ordinal);
+        var centers = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var row in database.ExecuteQuery("SELECT community, centrality FROM symbols"))
+        {
+            var community = IndexSql.AsOptionalText(row.GetValueOrDefault("community"));
+            if (string.IsNullOrEmpty(community))
+            {
+                continue;
+            }
+
+            communities.Add(community);
+
+            if (Centrality(row.GetValueOrDefault("centrality")) > 0)
+            {
+                centers.Add(community);
+            }
+        }
+
+        return (communities.Count, centers.Count);
+    }
+
+    /// <summary>
+    /// Reads a stored centrality, which the engine hands back as whatever numeric type it stored.
+    /// </summary>
+    /// <param name="value">The column value.</param>
+    /// <returns>The number, or 0 when there is none.</returns>
+    private static double Centrality(object? value) =>
+        value is null or DBNull ? 0 : Convert.ToDouble(value, CultureInfo.InvariantCulture);
 
     private static DateTimeOffset? ParseUtc(string? text)
     {

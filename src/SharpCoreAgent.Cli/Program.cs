@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using SharpCoreAgent.Domain.Errors;
+using SharpCoreAgent.Infrastructure.Configuration;
 
 namespace SharpCoreAgent.Cli;
 
@@ -19,13 +20,30 @@ internal static class Program
         UseUtf8Output();
 
         CliOptions options;
+        string settingsPath;
         try
         {
-            options = CliOptions.Parse(args);
+            // Resolved once, so `config path`, `config set` and the turn commands are all talking about
+            // the same file. Loading is deferred to the commands that read settings: a file this build
+            // cannot apply must never be the reason its own repair command refuses to run.
+            settingsPath = AgentSettingsFile.PathFromEnvironment();
+            options = CliOptions.Parse(args, loadSettings: () => CliSettings.Load(settingsPath));
         }
         catch (CliUsageException ex)
         {
             await WriteUsageErrorAsync(ex).ConfigureAwait(false);
+            return ExitCodes.Usage;
+        }
+        catch (ConfigurationFileException ex)
+        {
+            await WriteConfigurationErrorAsync(ex).ConfigureAwait(false);
+            return ExitCodes.Configuration;
+        }
+        catch (ArgumentException ex)
+        {
+            // A settings path the platform refuses to turn into a full path, usually a stray character in
+            // SHARPCOREAGENT_CONFIG: the environment is at fault, so this is a usage error.
+            await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
             return ExitCodes.Usage;
         }
 
@@ -36,11 +54,8 @@ internal static class Program
                 return ExitCodes.Success;
 
             case CliCommand.Version:
-                await Console.Out.WriteLineAsync($"sharpcoreagent {HelpText.Version}").ConfigureAwait(false);
+                await Console.Out.WriteLineAsync(HelpText.VersionLine).ConfigureAwait(false);
                 return ExitCodes.Success;
-
-            case CliCommand.Models:
-                return ModelsCommand.Execute(options);
         }
 
         using var scope = new CancellationScope();
@@ -54,9 +69,28 @@ internal static class Program
         Console.CancelKeyPress += handler;
         try
         {
-            return options.Command == CliCommand.Run
-                ? await RunCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false)
-                : await ChatCommand.ExecuteAsync(options, scope).ConfigureAwait(false);
+            return options.Command switch
+            {
+                CliCommand.Run => await RunCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+
+                // `models` reads the same credential store `run` does, so a file it cannot read has to
+                // reach the catch below: it used to be dispatched above, where a bad path crashed the
+                // process instead of exiting 3.
+                CliCommand.Models => ModelsCommand.Execute(options),
+                CliCommand.Index => await IndexCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+                CliCommand.Config => ConfigCommand.Execute(
+                    options,
+                    settingsPath,
+                    Environment.GetEnvironmentVariable,
+                    Console.Out),
+                CliCommand.Setup => SetupCommand.Execute(
+                    options,
+                    settingsPath,
+                    Environment.GetEnvironmentVariable,
+                    Console.Out,
+                    Console.Error),
+                _ => await ChatCommand.ExecuteAsync(options, scope, settingsPath).ConfigureAwait(false),
+            };
         }
         catch (CliUsageException ex)
         {
@@ -67,6 +101,21 @@ internal static class Program
         {
             await Console.Error.WriteLineAsync("cancelled.").ConfigureAwait(false);
             return ExitCodes.Budget;
+        }
+        catch (CredentialFileException ex)
+        {
+            // A named file that cannot be read is a credential problem, not a usage problem: the
+            // command line was understood, the keys just are not there. Exit 3 is what a script that
+            // retries after "log in" already branches on.
+            await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
+            return ExitCodes.Credentials;
+        }
+        catch (ConfigurationFileException ex)
+        {
+            // Reached by the commands that read or write the settings file themselves; parsing already
+            // mapped the same failure to the same code.
+            await WriteConfigurationErrorAsync(ex).ConfigureAwait(false);
+            return ExitCodes.Configuration;
         }
         catch (ModelCredentialException ex)
         {
@@ -96,6 +145,20 @@ internal static class Program
         ArgumentNullException.ThrowIfNull(ex);
         await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
         await Console.Error.WriteLineAsync($"hint: {ex.Hint ?? HelpText.Hint}").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reports a settings file the process cannot use, with the two commands that fix it.
+    /// </summary>
+    /// <param name="ex">The failure, whose message already names the file and the key.</param>
+    /// <returns>The pending writes.</returns>
+    private static async Task WriteConfigurationErrorAsync(ConfigurationFileException ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+        await Console.Error.WriteLineAsync($"error: {ex.Message}").ConfigureAwait(false);
+        await Console.Error.WriteLineAsync(
+            "hint: fix the file by hand, or drop one key with 'sharpcoreagent config unset <name>'; 'sharpcoreagent config path' names it.")
+            .ConfigureAwait(false);
     }
 
     /// <summary>

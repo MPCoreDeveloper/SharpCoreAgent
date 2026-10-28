@@ -16,9 +16,9 @@ namespace SharpCoreAgent.Tests.Cli;
 public sealed class CliOptionsTests
 {
     [Fact]
-    public void NoArgumentsAsksForHelp()
+    public void NoArgumentsWithoutATerminalAsksForHelp()
     {
-        var options = CliOptions.Parse([]);
+        var options = CliOptions.Parse([], NoEnvironment, NotInteractive);
 
         Assert.Equal(CliCommand.Help, options.Command);
         Assert.Equal(string.Empty, options.Prompt);
@@ -27,16 +27,19 @@ public sealed class CliOptionsTests
     [Fact]
     public void DefaultsMatchTheContract()
     {
-        var options = CliOptions.Parse([], NoEnvironment);
+        var options = CliOptions.Parse([], NoEnvironment, NotInteractive);
 
         Assert.Equal(CliCommand.Help, options.Command);
         Assert.Equal(ModelCatalog.DefaultProvider, options.Provider);
         Assert.Null(options.Model);
         Assert.Equal(Directory.GetCurrentDirectory(), options.Workspace);
         Assert.Equal(ApprovalMode.Ask, options.Approval);
-        Assert.Equal(24, options.MaxIterations);
+        Assert.Equal(400, options.MaxIterations);
         Assert.Equal(8_000, options.MaxOutputTokens);
-        Assert.Equal(250_000, options.MaxTotalTokens);
+
+        // A ceiling real work does not reach in the first ten minutes: the CLI offers more room rather than
+        // ending the conversation, so the number only has to stop a runaway spend.
+        Assert.Equal(10_000_000, options.MaxTotalTokens);
         Assert.Equal(0.2, options.Temperature);
         Assert.Null(options.BaseUrl);
         Assert.Null(options.SessionPath);
@@ -193,6 +196,41 @@ public sealed class CliOptionsTests
         Assert.False(CliOptions.TryParseApproval(null, out _));
     }
 
+    [Theory]
+    [InlineData("-y")]
+    [InlineData("--yes")]
+    [InlineData("-Y")]
+    public void YesIsShorthandForAllow(string flag)
+    {
+        // One flag, two spellings, one meaning: a developer reaching for the habit every other CLI
+        // rewards must not be told the option is unknown.
+        Assert.Equal(ApprovalMode.AllowAll, CliOptions.Parse(["run", "hi", flag]).Approval);
+    }
+
+    [Fact]
+    public void ALaterApprovalFlagStillWinsOverYes()
+    {
+        // The last decision on the command line is the one that counts, so -y cannot silently override a
+        // deliberate --approval stated after it.
+        var options = CliOptions.Parse(["run", "hi", "-y", "--approval", "readonly"]);
+
+        Assert.Equal(ApprovalMode.ReadOnly, options.Approval);
+    }
+
+    [Fact]
+    public void YesIsReportedAsACommandLineSetting()
+    {
+        var options = CliOptions.Parse(["chat", "-y"]);
+
+        Assert.Contains("approval", options.CommandLineSettings);
+    }
+
+    [Fact]
+    public void AnUnknownShortOptionIsStillAUsageError()
+    {
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["run", "hi", "-q"]));
+    }
+
     [Fact]
     public void NoSessionDisablesTheTranscript()
     {
@@ -258,7 +296,47 @@ public sealed class CliOptionsTests
         Assert.Equal(0.5, configured.Temperature);
     }
 
+    [Fact]
+    public void FallbackParsesAQualifiedModel()
+    {
+        var options = CliOptions.Parse(["chat", "--fallback", "grok:grok-4.7"], NoEnvironment);
+
+        Assert.NotNull(options.Fallback);
+        Assert.Equal("grok:grok-4.7", options.Fallback.QualifiedName);
+        Assert.Equal(options.Fallback, options.ToSharpCoreAgentOptions().Fallback);
+        Assert.Null(CliOptions.Parse(["chat"], NoEnvironment).Fallback);
+    }
+
+    [Fact]
+    public void AnUnknownFallbackIsAUsageError()
+    {
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["chat", "--fallback", "openai:gpt-4o-mini"]));
+
+        Assert.Contains("openai", error.Message, StringComparison.Ordinal);
+        Assert.Contains("deepseek", error.Hint!, StringComparison.Ordinal);
+
+        // No provider, and no value at all, are both mistakes the parser can name before a turn starts.
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["chat", "--fallback", "grok-4.7"]));
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["chat", "--fallback"]));
+    }
+
+    [Fact]
+    public void SetupIsACommand()
+    {
+        Assert.Equal(CliCommand.Setup, CliOptions.Parse(["setup"], NoEnvironment, NotInteractive).Command);
+    }
+
+    [Fact]
+    public void SetupTakesNoArgumentsAndNoJson()
+    {
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["setup", "extra"]));
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["setup", "--json"]));
+    }
+
     private static string? NoEnvironment(string name) => null;
+
+    private static bool NotInteractive() => false;
+
 
     private static Func<string, string?> Environment(params (string Name, string Value)[] pairs) =>
         name => pairs.Where(pair => string.Equals(pair.Name, name, StringComparison.Ordinal))

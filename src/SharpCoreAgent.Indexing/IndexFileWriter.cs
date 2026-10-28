@@ -142,21 +142,20 @@ internal sealed class IndexFileWriter
                 DeleteRows(previous);
             }
 
-            IndexSql.Execute(
+            IndexSql.Insert(
                 _database,
-                """
-                INSERT INTO files (path, language, size_bytes, mtime_utc, sha256, state, skip_reason, chunk_count, symbol_count, indexed_utc)
-                VALUES (@path, @language, @size, @mtime, @sha, @state, @reason, 0, 0, @indexed)
-                """,
-                IndexSql.Parameters(
-                    (PathParameter, file.Path),
-                    ("@language", file.Language),
-                    ("@size", file.SizeBytes),
-                    ("@mtime", IndexTimestamps.Format(file.ModifiedUtc)),
-                    ("@sha", string.Empty),
-                    ("@state", state),
-                    ("@reason", reason),
-                    ("@indexed", indexedUtc)));
+                IndexTable.Files,
+                IndexSql.Row(
+                    ("path", file.Path),
+                    ("language", file.Language),
+                    ("size_bytes", file.SizeBytes),
+                    ("mtime_utc", IndexTimestamps.Format(file.ModifiedUtc)),
+                    ("sha256", string.Empty),
+                    ("state", state),
+                    ("skip_reason", reason),
+                    ("chunk_count", 0L),
+                    ("symbol_count", 0L),
+                    ("indexed_utc", indexedUtc)));
 
             return true;
         });
@@ -189,15 +188,15 @@ internal sealed class IndexFileWriter
         {
             foreach (var edge in edges)
             {
-                IndexSql.Execute(
+                IndexSql.Insert(
                     _database,
-                    "INSERT INTO edges (source, target, rel, weight, file_id) VALUES (@source, @target, @rel, @weight, @file)",
-                    IndexSql.Parameters(
-                        ("@source", edge.Source),
-                        ("@target", edge.Target),
-                        ("@rel", edge.Relation),
-                        ("@weight", (double)edge.Weight),
-                        (FileParameter, edge.FileId)));
+                    IndexTable.Edges,
+                    IndexSql.Row(
+                        ("source", edge.Source),
+                        ("target", edge.Target),
+                        ("rel", edge.Relation),
+                        ("weight", (double)edge.Weight),
+                        ("file_id", edge.FileId)));
             }
 
             return true;
@@ -221,10 +220,11 @@ internal sealed class IndexFileWriter
         {
             foreach (var (key, value) in values)
             {
-                IndexSql.Execute(
+                IndexSql.Update(
                     _database,
-                    "UPDATE meta SET value = @value WHERE key = @key",
-                    IndexSql.Parameters(("@key", key), ("@value", value)));
+                    IndexTable.Meta,
+                    key,
+                    new Dictionary<string, object>(StringComparer.Ordinal) { ["value"] = value });
             }
 
             return true;
@@ -293,22 +293,19 @@ internal sealed class IndexFileWriter
     /// <returns>The new row id.</returns>
     private long InsertFile(ScannedFile file, IndexFileContent content, int chunks, int symbols, string indexedUtc)
     {
-        IndexSql.Execute(
+        IndexSql.Insert(
             _database,
-            """
-            INSERT INTO files (path, language, size_bytes, mtime_utc, sha256, state, skip_reason, chunk_count, symbol_count, indexed_utc)
-            VALUES (@path, @language, @size, @mtime, @sha, @state, NULL, @chunks, @symbols, @indexed)
-            """,
-            IndexSql.Parameters(
-                (PathParameter, file.Path),
-                ("@language", file.Language),
-                ("@size", file.SizeBytes),
-                ("@mtime", IndexTimestamps.Format(file.ModifiedUtc)),
-                ("@sha", content.Sha256),
-                ("@state", IndexFileStates.Ok),
-                ("@chunks", (long)chunks),
-                ("@symbols", (long)symbols),
-                ("@indexed", indexedUtc)));
+            IndexTable.Files,
+            IndexSql.Row(
+                ("path", file.Path),
+                ("language", file.Language),
+                ("size_bytes", file.SizeBytes),
+                ("mtime_utc", IndexTimestamps.Format(file.ModifiedUtc)),
+                ("sha256", content.Sha256),
+                ("state", IndexFileStates.Ok),
+                ("chunk_count", (long)chunks),
+                ("symbol_count", (long)symbols),
+                ("indexed_utc", indexedUtc)));
 
         return LastInsertedId("SELECT id FROM files WHERE path = @path", IndexSql.Parameters((PathParameter, file.Path)));
     }
@@ -325,24 +322,21 @@ internal sealed class IndexFileWriter
 
         foreach (var symbol in symbols)
         {
-            IndexSql.Execute(
+            IndexSql.Insert(
                 _database,
-                """
-                INSERT INTO symbols (file_id, key, name, qualified_name, kind, namespace, container, start_line, end_line, signature, doc)
-                VALUES (@file, @key, @name, @qualified, @kind, @namespace, @container, @start, @end, @signature, @doc)
-                """,
-                IndexSql.Parameters(
-                    (FileParameter, fileId),
-                    ("@key", symbol.Key),
-                    ("@name", symbol.Name),
-                    ("@qualified", symbol.QualifiedName),
-                    ("@kind", symbol.Kind),
-                    ("@namespace", symbol.Namespace),
-                    ("@container", symbol.Container),
-                    ("@start", (long)symbol.StartLine),
-                    ("@end", (long)symbol.EndLine),
-                    ("@signature", symbol.Signature),
-                    ("@doc", symbol.Doc)));
+                IndexTable.Symbols,
+                IndexSql.Row(
+                    ("file_id", fileId),
+                    ("key", symbol.Key),
+                    ("name", symbol.Name),
+                    ("qualified_name", symbol.QualifiedName),
+                    ("kind", symbol.Kind),
+                    ("namespace", symbol.Namespace),
+                    ("container", symbol.Container),
+                    ("start_line", (long)symbol.StartLine),
+                    ("end_line", (long)symbol.EndLine),
+                    ("signature", symbol.Signature),
+                    ("doc", symbol.Doc)));
 
             ids.Add(LastInsertedId(
                 "SELECT id FROM symbols WHERE file_id = @file AND key = @key",
@@ -369,23 +363,20 @@ internal sealed class IndexFileWriter
             var vector = new float[_embedder.Dimensions];
             _embedder.Embed(passage.Text, vector);
 
-            IndexSql.Execute(
+            IndexSql.Insert(
                 _database,
-                """
-                INSERT INTO chunks (file_id, start_line, end_line, kind, symbol_key, symbol_name, text, tokens, sha256, embedding)
-                VALUES (@file, @start, @end, @kind, @symbolKey, @symbolName, @text, @tokens, @sha, @vector)
-                """,
-                IndexSql.Parameters(
-                    (FileParameter, fileId),
-                    ("@start", (long)passage.StartLine),
-                    ("@end", (long)passage.EndLine),
-                    ("@kind", passage.Kind),
-                    ("@symbolKey", passage.SymbolKey),
-                    ("@symbolName", passage.SymbolName),
-                    ("@text", passage.Text),
-                    ("@tokens", CodeTokenizer.TokenizeForIndex(passage.Text)),
-                    ("@sha", IndexFileContent.HashText(passage.Text)),
-                    ("@vector", vector)));
+                IndexTable.Chunks,
+                IndexSql.Row(
+                    ("file_id", fileId),
+                    ("start_line", (long)passage.StartLine),
+                    ("end_line", (long)passage.EndLine),
+                    ("kind", passage.Kind),
+                    ("symbol_key", passage.SymbolKey),
+                    ("symbol_name", passage.SymbolName),
+                    ("text", passage.Text),
+                    ("tokens", CodeTokenizer.TokenizeForIndex(passage.Text)),
+                    ("sha256", IndexFileContent.HashText(passage.Text)),
+                    ("embedding", vector)));
         }
     }
 
@@ -413,19 +404,16 @@ internal sealed class IndexFileWriter
                 ? key
                 : null;
 
-            IndexSql.Execute(
+            IndexSql.Insert(
                 _database,
-                """
-                INSERT INTO docs (file_id, heading, symbol_key, start_line, end_line, text)
-                VALUES (@file, @heading, @symbolKey, @start, @end, @text)
-                """,
-                IndexSql.Parameters(
-                    (FileParameter, fileId),
-                    ("@heading", doc.Heading),
-                    ("@symbolKey", symbolKey),
-                    ("@start", (long)doc.StartLine),
-                    ("@end", (long)doc.EndLine),
-                    ("@text", doc.Text)));
+                IndexTable.Docs,
+                IndexSql.Row(
+                    ("file_id", fileId),
+                    ("heading", doc.Heading),
+                    ("symbol_key", symbolKey),
+                    ("start_line", (long)doc.StartLine),
+                    ("end_line", (long)doc.EndLine),
+                    ("text", doc.Text)));
         }
     }
 
@@ -442,13 +430,13 @@ internal sealed class IndexFileWriter
             var vector = new float[_embedder.Dimensions];
             _embedder.Embed(SymbolText(symbol), vector);
 
-            IndexSql.Execute(
+            IndexSql.Insert(
                 _database,
-                "INSERT INTO node_embeddings (node_id, label, embedding) VALUES (@node, @label, @vector)",
-                IndexSql.Parameters(
-                    ("@node", symbolIds[index]),
-                    ("@label", symbol.Key),
-                    ("@vector", vector)));
+                IndexTable.NodeEmbeddings,
+                IndexSql.Row(
+                    ("node_id", symbolIds[index]),
+                    ("label", symbol.Key),
+                    ("embedding", vector)));
         }
     }
 

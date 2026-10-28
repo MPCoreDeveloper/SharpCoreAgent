@@ -27,6 +27,19 @@
 
   <ItemGroup>
     <!--
+      The retrieval-quality corpus is data, not code: `RetrievalQualityTests` copies it into a throwaway
+      workspace and indexes it there, so it must travel next to the test assembly instead of compiling into it.
+      `%(RecursiveDir)` keeps the folder shape, which is what the seeded questions expect to see.
+    -->
+    <Compile Remove="Indexing\Fixtures\Corpus\**\*.cs" />
+    <None
+      Include="Indexing\Fixtures\Corpus\**\*.cs"
+      Link="Indexing\Fixtures\Corpus\%(RecursiveDir)%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
       xUnit v3 on Microsoft.Testing.Platform, with MTP's coverage extension, so `dotnet test` can write a
       Cobertura report through a platform switch rather than a VSTest data collector. SonarCloud reads it.
     -->

@@ -39,7 +39,11 @@ public sealed record AgentReport
     /// <summary>Gets how the turn ended.</summary>
     public required AgentOutcome Outcome { get; init; }
 
-    /// <summary>Gets the <c>provider:model</c> that served the turn.</summary>
+    /// <summary>Gets the <c>provider:model</c> that served the turn's last response.</summary>
+    /// <remarks>
+    /// A turn that fell back names the model that answered, not the one it started on: a spend report
+    /// keyed by this value bills the tokens to the provider that produced them.
+    /// </remarks>
     public required string ModelId { get; init; }
 
     /// <summary>Gets the model's final text, when there was one.</summary>
@@ -53,6 +57,17 @@ public sealed record AgentReport
 
     /// <summary>Gets every tool result produced during the turn, in order.</summary>
     public IReadOnlyList<ToolResult> ToolResults { get; init; } = [];
+
+    /// <summary>
+    /// Gets the fallbacks the turn used, in the order they happened, so a failed primary is visible
+    /// beside the model that answered.
+    /// </summary>
+    /// <remarks>
+    /// The list is empty when the configured model served every request, which is the case that
+    /// changes nothing. It is not empty when the fallback itself failed: the developer then reads both
+    /// attempts instead of one stack trace.
+    /// </remarks>
+    public IReadOnlyList<FallbackUsed> Fallbacks { get; init; } = [];
 
     /// <summary>Gets a one-line explanation for a non-completed outcome.</summary>
     public string? Detail { get; init; }

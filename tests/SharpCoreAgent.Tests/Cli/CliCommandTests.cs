@@ -83,7 +83,7 @@ public sealed class CliCommandTests
         var exitCode = await RunCommand.ExecuteAsync(cli, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("— completed", console.Error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("✻ completed", console.Error.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("session:", console.Error.ToString(), StringComparison.Ordinal);
     }
 
@@ -159,7 +159,7 @@ public sealed class CliCommandTests
         Assert.Contains("no turn has run yet", output, StringComparison.Ordinal);
         Assert.Contains("unknown command '/nonsense'", error, StringComparison.Ordinal);
         Assert.Contains("session: ", error, StringComparison.Ordinal);
-        Assert.Contains("— completed", error, StringComparison.Ordinal);
+        Assert.Contains("✻ completed", error, StringComparison.Ordinal);
         Assert.Contains("total  ", output, StringComparison.Ordinal);
         Assert.Contains("the last turn changed no files and ran no commands", output, StringComparison.Ordinal);
         Assert.Contains("workspace: ", error, StringComparison.Ordinal);
@@ -255,9 +255,18 @@ internal sealed class ConsoleScope : IDisposable
     private readonly TextWriter _originalOut = Console.Out;
     private readonly TextWriter _originalError = Console.Error;
     private readonly TextReader _originalIn = Console.In;
+    private readonly string? _originalSettings = Environment.GetEnvironmentVariable("SHARPCOREAGENT_CONFIG");
+    private readonly TempDirectory? _settingsDirectory;
 
-    public ConsoleScope(string input)
+    public ConsoleScope(string input, string? settingsPath = null)
     {
+        // Every command now reads the settings file, so a test that did not pin one would read the
+        // developer's own and pass or fail depending on what it says. A directory per scope keeps the
+        // suite hermetic without asking each test to remember.
+        _settingsDirectory = settingsPath is null ? TempDirectory.Create() : null;
+        SettingsPath = settingsPath ?? System.IO.Path.Combine(_settingsDirectory!.Path, "config.json");
+        Environment.SetEnvironmentVariable("SHARPCOREAGENT_CONFIG", SettingsPath);
+
         Console.SetOut(Out);
         Console.SetError(Error);
         Console.SetIn(new StringReader(input));
@@ -267,10 +276,15 @@ internal sealed class ConsoleScope : IDisposable
 
     public StringWriter Error { get; } = new();
 
+    /// <summary>Gets the settings file this scope pinned, for a test that wants to write one.</summary>
+    public string SettingsPath { get; }
+
     public void Dispose()
     {
         Console.SetOut(_originalOut);
         Console.SetError(_originalError);
         Console.SetIn(_originalIn);
+        Environment.SetEnvironmentVariable("SHARPCOREAGENT_CONFIG", _originalSettings);
+        _settingsDirectory?.Dispose();
     }
 }

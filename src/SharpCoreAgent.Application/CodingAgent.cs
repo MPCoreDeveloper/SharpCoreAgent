@@ -115,6 +115,14 @@ public sealed class CodingAgent
 
         while (true)
         {
+            // Before a request, not after the answer: the next call is what costs money, and a turn that has no
+            // room left would only spend it to learn that. Refusing here is also what makes `/budget` a real
+            // remedy — the transcript keeps its reasoning, and the same request continues once the ceiling rises.
+            if (Spent(session) is { } exhausted)
+            {
+                return await FinishAsync(sink, state.Report(AgentOutcome.BudgetExhausted, exhausted)).ConfigureAwait(false);
+            }
+
             if (state.Iterations >= _options.MaxIterations)
             {
                 Log.IterationBudgetSpent(_logger, model.QualifiedName, _options.MaxIterations, null);
@@ -128,17 +136,21 @@ public sealed class CodingAgent
 
             state.Iterations++;
 
+            // Before the request, because the window is what the request carries. A session left open all afternoon
+            // outgrows any provider's limit, and a rejected request reads to the model as a bug it should retry.
+            await CompactAsync(session, sink, turnBudget.Token).ConfigureAwait(false);
+
             var request = new ChatRequest(
                 model,
-                session.Messages,
-                _tools.Definitions,
+                MessagesFor(session),
+                DefinitionsFor(session),
                 _options.Temperature,
                 _options.MaxOutputTokensPerTurn);
 
-            var (stream, failure) = await TryStreamAsync(client, request, sink, turnBudget.Token).ConfigureAwait(false);
+            var (stream, failure) = await TryStreamAsync(client, request, sink, state, turnBudget.Token).ConfigureAwait(false);
             if (stream is null)
             {
-                Log.TurnFailed(_logger, model.QualifiedName, state.Iterations, failure ?? "the model call failed", null);
+                Log.TurnFailed(_logger, state.ServingModelId, state.Iterations, failure ?? "the model call failed", null);
                 return await FinishAsync(sink, state.Report(AgentOutcome.Failed, failure)).ConfigureAwait(false);
             }
 
@@ -150,7 +162,10 @@ public sealed class CodingAgent
             var response = stream.Response!;
             session.Add(response.Message);
             state.Usage = state.Usage is null ? response.Usage : state.Usage + response.Usage;
-            session.RecordUsage(model.QualifiedName, response.Usage);
+
+            // Attributed to the model that answered, which is the fallback once a turn has moved there:
+            // `/cost` prices each line from the table by exactly this name.
+            session.RecordUsage(state.ServingModelId, response.Usage);
 
             var ending = await AdvanceAsync(session, response, state, sink, turnBudget.Token).ConfigureAwait(false);
             if (ending is not null)
@@ -161,22 +176,56 @@ public sealed class CodingAgent
     }
 
     /// <summary>
+    /// Drops the oldest messages when the transcript has outgrown the configured window.
+    /// </summary>
+    /// <param name="session">The conversation to trim.</param>
+    /// <param name="sink">Receives the notice, so a silent loss of memory becomes a visible one.</param>
+    /// <param name="cancellationToken">Cancels the notice.</param>
+    /// <returns>How many messages were dropped; zero when the transcript already fits.</returns>
+    /// <remarks>
+    /// Half the window is kept rather than all of it: keeping the full window would drop nothing until the
+    /// transcript is twice what the model accepts, and keeping the newest handful would throw away the
+    /// instruction that started the work. <see cref="AgentSession.Compact(int)"/> is what does the trimming, so
+    /// this cannot split a tool round — the two agree by construction, and <c>/compact</c> stays the manual door
+    /// to the same behaviour.
+    /// </remarks>
+    private async Task<int> CompactAsync(AgentSession session, IAgentObserver sink, CancellationToken cancellationToken)
+    {
+        var window = _options.MaxContextMessages;
+        if (window <= 0 || session.Messages.Count <= window)
+        {
+            return 0;
+        }
+
+        var keep = Math.Max(window / 2, 1);
+        var dropped = session.Compact(keep);
+        if (dropped > 0)
+        {
+            await sink.OnEventAsync(new ContextCompacted(dropped, keep), cancellationToken).ConfigureAwait(false);
+        }
+
+        return dropped;
+    }
+
+    /// <summary>
     /// Streams one request, turning a provider failure into the detail a report can carry.
     /// </summary>
     /// <param name="client">The model to stream from.</param>
     /// <param name="request">The request to send.</param>
     /// <param name="sink">Receives progress.</param>
+    /// <param name="state">The turn's running totals, which the fallback notice updates.</param>
     /// <param name="cancellationToken">Cancels the stream.</param>
     /// <returns>The outcome, or the failure message when the provider failed.</returns>
     private static async Task<(StreamOutcome? Stream, string? Failure)> TryStreamAsync(
         IStreamingChatModel client,
         ChatRequest request,
         IAgentObserver sink,
+        TurnState state,
         CancellationToken cancellationToken)
     {
         try
         {
-            return (await StreamOnceAsync(client, request, sink, cancellationToken).ConfigureAwait(false), null);
+            return (await StreamOnceAsync(client, request, sink, state, cancellationToken).ConfigureAwait(false), null);
         }
         catch (ModelException ex)
         {
@@ -221,15 +270,31 @@ public sealed class CodingAgent
             session.Add(ChatMessage.FromToolResult(result));
         }
 
-        // Checked after the tool round because a single round can add several large results.
-        if (session.TotalUsage.Total is { } spent && spent > _options.MaxTotalTokens)
+        // Checked after the tool round too, because one round can add several large results: the loop must not send
+        // them back to a model the session can no longer pay for.
+        if (Spent(session) is { } exhausted)
         {
-            return state.Report(
-                AgentOutcome.BudgetExhausted,
-                $"the session token budget of {_options.MaxTotalTokens} is spent ({spent} used). Start a new session or raise the budget.");
+            return state.Report(AgentOutcome.BudgetExhausted, exhausted);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Answers whether the conversation has spent its token budget, and what to say when it has.
+    /// </summary>
+    /// <param name="session">The conversation, for its spend and ceiling.</param>
+    /// <returns>The detail for a <see cref="AgentOutcome.BudgetExhausted"/> report, or null when there is room.</returns>
+    /// <remarks>
+    /// The ceiling comes from the session when it has one, so a conversation can be given more room without
+    /// rebuilding the agent; <see cref="AgentSession.MaxTotalTokens"/> is the only place that number lives.
+    /// </remarks>
+    private string? Spent(AgentSession session)
+    {
+        var ceiling = session.MaxTotalTokens ?? _options.MaxTotalTokens;
+        return session.TotalUsage.Total is { } spent && spent > ceiling
+            ? $"the session token budget of {ceiling} is spent ({spent} used)."
+            : null;
     }
 
     /// <summary>
@@ -285,9 +350,17 @@ public sealed class CodingAgent
     private sealed class TurnState(ModelDescriptor model)
     {
         private readonly List<ToolResult> _results = [];
+        private readonly List<FallbackUsed> _fallbacks = [];
 
         /// <summary>Gets the model the turn runs on.</summary>
         public ModelDescriptor Model { get; } = model;
+
+        /// <summary>Gets or sets the model that served the last attempt.</summary>
+        /// <remarks>
+        /// Equal to <see cref="Model"/> until a fallback notice arrives, and equal to the fallback after
+        /// one, which is what a spend report and the report's <see cref="AgentReport.ModelId"/> both need.
+        /// </remarks>
+        public string ServingModelId { get; set; } = model.QualifiedName;
 
         /// <summary>Gets or sets the tokens the turn has spent so far.</summary>
         public TokenUsage? Usage { get; set; }
@@ -303,6 +376,20 @@ public sealed class CodingAgent
         public void Add(ToolResult result) => _results.Add(result);
 
         /// <summary>
+        /// Records one fallback and the model that now serves the turn.
+        /// </summary>
+        /// <param name="fallback">The notice the stream carried.</param>
+        /// <remarks>
+        /// The turn keeps trying the model the request names on its next iteration — the decorator asks
+        /// the primary again — so this is a record of what happened, not a permanent switch.
+        /// </remarks>
+        public void Record(FallbackUsed fallback)
+        {
+            _fallbacks.Add(fallback);
+            ServingModelId = fallback.FallbackModelId;
+        }
+
+        /// <summary>
         /// Builds the report for an outcome.
         /// </summary>
         /// <param name="outcome">How the turn ended.</param>
@@ -312,14 +399,38 @@ public sealed class CodingAgent
         public AgentReport Report(AgentOutcome outcome, string? detail = null, string? finalText = null) => new()
         {
             Outcome = outcome,
-            ModelId = Model.QualifiedName,
+            ModelId = ServingModelId,
             FinalText = finalText,
             Usage = Usage ?? TokenUsage.Unknown,
             Iterations = Iterations,
             ToolResults = [.. _results],
+            Fallbacks = [.. _fallbacks],
             Detail = detail,
         };
     }
+
+    /// <summary>
+    /// Builds the messages one request carries, adding the plan rule while plan mode is on.
+    /// </summary>
+    /// <param name="session">The conversation.</param>
+    /// <returns>The transcript, with the plan instruction in front when the session is planning.</returns>
+    private static IReadOnlyList<ChatMessage> MessagesFor(AgentSession session) =>
+        session.Mode == AgentMode.Plan
+            ? [ChatMessage.System(PromptLibrary.PlanModeInstruction), .. session.Messages]
+            : session.Messages;
+
+    /// <summary>
+    /// Builds the tool list one request advertises.
+    /// </summary>
+    /// <param name="session">The conversation.</param>
+    /// <returns>
+    /// Every definition in act mode; only the read-only ones in plan mode, so a model that ignores the
+    /// instruction still cannot name a tool it was never given.
+    /// </returns>
+    private IReadOnlyList<ToolDefinition> DefinitionsFor(AgentSession session) =>
+        session.Mode == AgentMode.Plan
+            ? [.. _tools.Tools.Where(tool => tool.Safety == ToolSafety.ReadOnly).Select(tool => tool.Definition)]
+            : _tools.Definitions;
 
     private async Task<ToolResult> InvokeAsync(
         AgentSession session,
@@ -345,11 +456,13 @@ public sealed class CodingAgent
             result = ToolResult.Refused(
                 call.Id,
                 call.Name,
-                $"the developer refused this call (approval mode: {session.Approval}). Do not repeat it; explain what you need or use a read-only tool.");
+                session.Mode == AgentMode.Plan
+                    ? "plan mode is on, so every destructive tool is refused. Do not repeat this call; describe the change you would make instead."
+                    : $"the developer refused this call (approval mode: {session.Approval}). Do not repeat it; explain what you need or use a read-only tool.");
         }
         else
         {
-            result = await ExecuteAsync(tool, call, session, cancellationToken).ConfigureAwait(false);
+            result = await ExecuteAsync(tool, call, session, sink, cancellationToken).ConfigureAwait(false);
         }
 
         result = ToolResultTrimmer.Trim(result, _options.MaxToolResultChars);
@@ -378,14 +491,46 @@ public sealed class CodingAgent
             return ApprovalOutcome.Approved;
         }
 
-        return session.Approval switch
+        if (session.Mode == AgentMode.Plan)
+        {
+            return ApprovalOutcome.Denied;
+        }
+
+        // A tool the developer allowed earlier in this conversation does not ask again, whatever the mode says: the
+        // answer was about this transcript, and `/approval` can still take the permission away.
+        if (session.IsToolApproved(call.Name))
+        {
+            return ApprovalOutcome.Approved;
+        }
+
+        var outcome = session.Approval switch
         {
             ApprovalMode.AllowAll => ApprovalOutcome.Approved,
             ApprovalMode.ReadOnly => ApprovalOutcome.Denied,
             _ => await _approver.DecideAsync(
-                new ToolApprovalRequest(call.Name, tool.Safety, Describe(tool, call), call.ArgumentsJson),
+                new ToolApprovalRequest(call.Name, tool.Safety, Describe(tool, call), call.ArgumentsJson)
+                {
+                    Preview = await DescribeChangeAsync(tool, call, session, cancellationToken).ConfigureAwait(false),
+                },
                 cancellationToken).ConfigureAwait(false),
         };
+
+        switch (outcome)
+        {
+            case ApprovalOutcome.ApprovedForTool:
+                session.ApproveTool(call.Name);
+                return ApprovalOutcome.Approved;
+
+            case ApprovalOutcome.ApprovedForSession:
+                // "Yes, and don't ask again" is a decision about this conversation, so it is written to the
+                // session the loop already reads and nowhere else: the settings file is a default for future
+                // processes, and a tired click at a prompt must not become one.
+                session.Approval = ApprovalMode.AllowAll;
+                return ApprovalOutcome.Approved;
+
+            default:
+                return outcome;
+        }
     }
 
     /// <summary>
@@ -395,13 +540,29 @@ public sealed class CodingAgent
     /// The catch list is deliberately short: cancellation must escape, and an unexpected exception is a
     /// bug that should surface rather than be papered over as a tool error the model will retry forever.
     /// </remarks>
+    /// <param name="tool">The tool to run.</param>
+    /// <param name="call">The model's call.</param>
+    /// <param name="session">The session, for the workspace.</param>
+    /// <param name="sink">Receives the tool's live output while it runs.</param>
+    /// <param name="cancellationToken">Cancels the invocation.</param>
+    /// <returns>The result, with a readable failure instead of an exception where the tool allows one.</returns>
     private static async Task<ToolResult> ExecuteAsync(
         ITool tool,
         ToolCall call,
         AgentSession session,
+        IAgentObserver sink,
         CancellationToken cancellationToken)
     {
-        var context = new ToolInvocationContext(session.Workspace);
+        // Live output is a courtesy, never a precondition: the tool runs identically whether or not the
+        // observer wants the text, and the result it returns is the complete record either way. The model
+        // and the approval mode travel with the context because a tool that delegates work needs the
+        // conversation's answers, not the host's startup settings.
+        var context = new ToolInvocationContext(session.Workspace)
+        {
+            Output = new ObserverOutput(sink, call),
+            Model = session.ActiveModel,
+            Approval = session.Approval,
+        };
         try
         {
             return await tool.ExecuteAsync(call, context, cancellationToken).ConfigureAwait(false);
@@ -413,6 +574,38 @@ public sealed class CodingAgent
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SharpCoreAgentException)
         {
             return ToolResult.Failure(call.Id, call.Name, $"{call.Name} failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Asks a tool what it would change, never letting a preview failure become an approval failure.
+    /// </summary>
+    /// <param name="tool">The tool about to run.</param>
+    /// <param name="call">The call to preview.</param>
+    /// <param name="session">The session, for the workspace.</param>
+    /// <param name="cancellationToken">Cancels the preview.</param>
+    /// <returns>The preview, or <see langword="null"/> when the tool has none or could not produce it.</returns>
+    private static async ValueTask<string?> DescribeChangeAsync(
+        ITool tool,
+        ToolCall call,
+        AgentSession session,
+        CancellationToken cancellationToken)
+    {
+        if (tool is not IToolPreview preview)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await preview
+                .DescribeChangeAsync(call, new ToolInvocationContext(session.Workspace), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is ToolArgumentException or IOException or UnauthorizedAccessException or SharpCoreAgentException)
+        {
+            // A preview is a courtesy: the call itself will report the same problem with a better message.
+            return null;
         }
     }
 
@@ -443,14 +636,29 @@ public sealed class CodingAgent
     /// <summary>
     /// Drains one streamed response, forwarding text increments and collecting the terminal completion.
     /// </summary>
+    /// <param name="client">The model to stream from.</param>
+    /// <param name="request">The request that produced the stream.</param>
+    /// <param name="sink">Receives progress.</param>
+    /// <param name="state">The turn's running totals; a fallback notice is recorded in them.</param>
+    /// <param name="cancellationToken">Cancels the drain.</param>
+    /// <returns>The completion, the text shown and whether the stream was cut short.</returns>
+    /// <remarks>
+    /// A fallback notice is not content: it is recorded, announced to the observer and otherwise
+    /// skipped, so a stream the primary served is indistinguishable from one it never refused.
+    /// </remarks>
     private static async Task<StreamOutcome> StreamOnceAsync(
         IStreamingChatModel client,
         ChatRequest request,
         IAgentObserver sink,
+        TurnState state,
         CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
         ChatResponse? completed = null;
+
+        // Every attempt starts on the model the request names; a notice moves it for the rest of the
+        // stream, and that is the name the response is billed under.
+        state.ServingModelId = request.Model.QualifiedName;
 
         try
         {
@@ -466,6 +674,10 @@ public sealed class CodingAgent
                         break;
                     case ThinkingDelta thinking:
                         await sink.OnEventAsync(new AgentThinkingDelta(thinking.Text), CancellationToken.None).ConfigureAwait(false);
+                        break;
+                    case FallbackUsed fallback:
+                        state.Record(fallback);
+                        await sink.OnEventAsync(new FallbackAttempted(fallback), CancellationToken.None).ConfigureAwait(false);
                         break;
                     case StreamCompleted done:
                         completed = done.Response;
@@ -496,6 +708,32 @@ public sealed class CodingAgent
     /// stream was cut short.
     /// </summary>
     private sealed record StreamOutcome(ChatResponse? Response, string Text, bool Interrupted);
+
+    /// <summary>
+    /// Turns a running tool's output into events, tagged with the call that produced them.
+    /// </summary>
+    /// <param name="observer">Where the events go.</param>
+    /// <param name="call">The call being executed.</param>
+    /// <remarks>
+    /// The observer is called with <see cref="CancellationToken.None"/> for the same reason every other
+    /// event is: the token that cancels a turn must not also decide whether a diagnostic already produced
+    /// reaches the developer, and an observer that throws on cancellation would turn a Ctrl+C into a tool
+    /// failure.
+    /// </remarks>
+    private sealed class ObserverOutput(IAgentObserver observer, ToolCall call) : IToolOutputSink
+    {
+        /// <inheritdoc />
+        public ValueTask WriteAsync(string text, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            return observer.OnEventAsync(new ToolOutputDelta(call.Id, call.Name, text), CancellationToken.None);
+        }
+    }
+
 
     /// <summary>
     /// Cached logging delegates.

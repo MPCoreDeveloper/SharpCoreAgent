@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Indexing.Extraction;
+using SharpCoreAgent.Indexing.Graph;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreAgent.Indexing;
@@ -125,6 +126,14 @@ internal sealed class IndexWriter
 
         RemoveVanished(scanned, stored);
         WriteEdges();
+
+        // Communities are a property of the whole graph, so they are recomputed exactly when the graph could have
+        // changed: a build that wrote nothing and removed nothing would pay for Louvain to reach the same answer.
+        if (_written.Count > 0 || _removed > 0)
+        {
+            await CommunityAssigner.AssignAsync(_database, cancellationToken).ConfigureAwait(false);
+        }
+
         WriteMeta(buildId, IndexTimestamps.Format(DateTimeOffset.UtcNow));
 
         return new IndexWriteResult
