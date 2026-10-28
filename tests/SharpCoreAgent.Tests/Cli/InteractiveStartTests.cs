@@ -188,6 +188,52 @@ public sealed class InteractiveStartTests
         }
     }
 
+    [Fact]
+    public async Task TheBannerSaysTheNetworkIsOnWhenItIs()
+    {
+        using var directory = TempDirectory.Create();
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = Interactive;
+
+        try
+        {
+            using var console = new ConsoleScope(string.Empty);
+            var exitCode = await ProgramEntry.RunAsync(
+                ["--provider", "demo", "--workspace", directory.Path, "--no-session", "--web", "--web-allow", "localhost"]);
+
+            Assert.Equal(0, exitCode);
+
+            // "on" alone does not answer the follow-up question the row exists for: what may it reach?
+            Assert.Contains("web        on · +1 named host(s)", console.Error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
+    [Fact]
+    public async Task TheBannerHasNoWebRowWithoutTheFlag()
+    {
+        using var directory = TempDirectory.Create();
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = Interactive;
+
+        try
+        {
+            using var console = new ConsoleScope(string.Empty);
+            var exitCode = await ProgramEntry.RunAsync(
+                ["--provider", "demo", "--workspace", directory.Path, "--no-session"]);
+
+            Assert.Equal(0, exitCode);
+            Assert.DoesNotContain("web        ", console.Error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
     private static bool Interactive() => true;
 
     private static bool NotInteractive() => false;
