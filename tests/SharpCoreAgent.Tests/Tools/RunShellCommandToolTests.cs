@@ -83,6 +83,29 @@ public sealed class RunShellCommandToolTests
     }
 
     [Fact]
+    public async Task ACommandThatAsksForInputGetsEndOfInputInsteadOfHanging()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+
+        // Both commands read one line from standard input. Given a keyboard — or an open empty pipe —
+        // they wait for that line, which is how a tool call ends up swallowing the question typed at the
+        // next prompt. Given a closed stdin they see end-of-input at once and the call returns.
+        var read = OperatingSystem.IsWindows() ? "set /p line=" : "read line";
+
+        var result = await new RunShellCommandTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "run_shell",
+                ToolTestWorkspace.Args(new { command = read, timeout_seconds = 5 })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+
+        // A refused end-of-input is still a result: what must not happen is the timeout, which arrives
+        // as a failure naming the seconds the call waited.
+        Assert.False(result.IsError, result.Content);
+        Assert.Contains("exit code:", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DoesNotHandProviderCredentialsToTheCommand()
     {
         using var sandbox = ToolTestWorkspace.Create();

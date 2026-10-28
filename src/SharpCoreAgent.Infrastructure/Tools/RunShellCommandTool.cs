@@ -29,6 +29,13 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// Provider credentials are removed from the child environment. The shell exists to run builds and tests,
 /// and an arbitrary command should not be able to read the key that pays for the conversation.
 /// </para>
+/// <para>
+/// The child gets an empty keyboard. Its standard input is a redirected stream that is closed before the
+/// command runs, so a program that asks a question reads end-of-input — the same thing it would get from
+/// <c>&lt; /dev/null</c> — instead of competing with the developer's own prompt for the next line typed.
+/// Without that, one interactive command started by a turn could swallow the question the developer
+/// typed after it, which looks exactly like a frozen session.
+/// </para>
 /// </remarks>
 public sealed class RunShellCommandTool : ITool
 {
@@ -113,7 +120,7 @@ public sealed class RunShellCommandTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Run a shell command in the workspace and return its exit code plus stdout and stderr. Use it for builds, tests and version control. A non-zero exit code is reported, not thrown. Pass wait_seconds smaller than timeout_seconds to leave a long-running command in the background and get a process_id for shell_output and shell_stop.",
+        "Run a shell command in the workspace and return its exit code plus stdout and stderr. Use it for builds, tests and version control. A non-zero exit code is reported, not thrown. The command's stdin is empty, so a command that waits for input gets end-of-input instead of hanging. Pass wait_seconds smaller than timeout_seconds to leave a long-running command in the background and get a process_id for shell_output and shell_stop.",
         Schema);
 
     /// <inheritdoc />
@@ -274,7 +281,11 @@ public sealed class RunShellCommandTool : ITool
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            RedirectStandardInput = false,
+
+            // The developer's keyboard belongs to the CLI, not to the command it asked for: without this,
+            // a child started through the console inherits it and can take the line typed at the next
+            // prompt, which reads as a session that stopped responding.
+            RedirectStandardInput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
             StandardOutputEncoding = TextLimits.Utf8NoBom,

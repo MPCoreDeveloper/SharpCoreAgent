@@ -51,6 +51,8 @@ public sealed class ShellProcess : IDisposable
         _sink = sink;
         _lifetime = new CancellationTokenSource(lifetime);
 
+        CloseInput(process);
+
         // The ceiling exists so a forgotten server cannot hold a port until the machine reboots. It is a
         // backstop, not the normal way a process ends: shell_stop and registry disposal are.
         _lifetime.Token.Register(Kill);
@@ -192,6 +194,33 @@ public sealed class ShellProcess : IDisposable
 
     /// <inheritdoc />
     public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"{Id}: {Command}");
+
+    /// <summary>
+    /// Hands a new process end-of-input on its standard input.
+    /// </summary>
+    /// <param name="process">The process that was just started.</param>
+    /// <remarks>
+    /// The stream is redirected when it is created and closed here, which is what makes it end-of-input
+    /// rather than an empty pipe a reader would wait on forever. A command typed by a model is not a
+    /// conversation partner: it must never be able to read the line the developer is about to type at the
+    /// CLI's own prompt, and one that asks a question should fail fast instead of holding a turn open.
+    /// </remarks>
+    private static void CloseInput(Process process)
+    {
+        if (!process.StartInfo.RedirectStandardInput)
+        {
+            return;
+        }
+
+        try
+        {
+            process.StandardInput.Close();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or ObjectDisposedException)
+        {
+            // The command exited before the pipe was opened. There is nobody left to ask either way.
+        }
+    }
 
     private async Task PumpAsync(StreamReader reader)
     {
