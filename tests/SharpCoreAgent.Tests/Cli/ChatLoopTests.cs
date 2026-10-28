@@ -135,7 +135,24 @@ public sealed class ChatLoopTests
         var (exitCode, _, diagnostics) = await ConverseAsync("list the files\n/exit\n", budget: 1_000);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("the session budget is spent (1,191 of 1,000 tokens)", diagnostics, StringComparison.Ordinal);
+
+        // The wording is the assertion; the exact figure is not. The demo adapter estimates tokens from the
+        // characters it was handed, and those include the system prompt, so the count moves with the source's line
+        // endings: the same turn reports 1,191 on a CRLF checkout and 1,179 on the LF one this repository's
+        // .gitattributes prescribes. Pinning the number would make the test pass or fail on how a file was saved,
+        // while what the warning has to prove is that an overdrawn budget is reported as spent, with the count over
+        // the ceiling, rather than as a percentage of it.
+        var spent = System.Text.RegularExpressions.Regex.Match(
+            diagnostics,
+            @"the session budget is spent \((?<spent>[\d,]+) of 1,000 tokens\)",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromSeconds(5));
+
+        Assert.True(spent.Success, diagnostics);
+        Assert.True(
+            long.Parse(spent.Groups["spent"].Value, System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture) > 1_000,
+            diagnostics);
+
         Assert.Contains("the next request needs '/budget +1,000'", diagnostics, StringComparison.Ordinal);
         Assert.DoesNotContain("% of the session budget", diagnostics, StringComparison.Ordinal);
     }
