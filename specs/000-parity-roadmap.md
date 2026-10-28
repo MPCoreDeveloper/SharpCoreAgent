@@ -1,6 +1,6 @@
 # Roadmap — the capability rounds
 
-**Status**: round 0 landed (constitution 1.1.0), round 1 landed on `main` (merge `dbc0701`), rounds 2–5 planned
+**Status**: round 0 landed (constitution 1.1.0), round 1 landed on `main` (merge `dbc0701`), round 2 landed on `main` (merge `201a431`), rounds 3–5 planned
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
 ## Why rounds rather than one specification
@@ -30,7 +30,7 @@ The four gaps a newcomer hits, in the order they hit them.
 |---|---|---|---|
 | 0 | `.specify/memory/constitution.md` **1.1.0** | permission for rounds 1–4, and nothing else | — |
 | 1 | [`007-external-roots`](007-external-roots/spec.md) | read another project; never write it | 0 |
-| 2 | `008-web-fetch` | `fetch_url` — a page as bounded, readable text | 0 |
+| 2 | [`008-web-fetch`](008-web-fetch/spec.md) | `fetch_url` — a page as bounded, readable text (landed as `201a431`) | 0 |
 | 3 | `009-mcp-client` | `--mcp <command>` — any stdio MCP server's tools | 0 |
 | 4 | `010-browser` | a browser, through an MCP server | 3 |
 | 5 | `011-subagent-task` | `task` — delegation with an isolated transcript | — |
@@ -108,7 +108,7 @@ count in view, and a resumed `chat` re-applies the current invocation's roots. `
 (writable attachment), T031 (indexed attachment) and T032 (persisted roots) open as the record of what
 the round refused.
 
-## Round 2 — `008-web-fetch`
+## Round 2 — `008-web-fetch` (landed as `201a431`)
 
 **Ships**: one read-only tool, `fetch_url`, behind `--web`. It fetches `http`/`https` only, with a
 timeout, a byte ceiling, a redirect ceiling and a character ceiling; it refuses loopback, link-local,
@@ -121,6 +121,15 @@ the final URL after redirects, the status, the content type, and whether the tex
 
 **Evidence**: a deterministic `HttpMessageHandler` stub replaying recorded responses, in the shape the
 provider adapters are already tested with — no live network in the suite.
+
+**As built**: as above, with three details a reader of the plan would otherwise have to rediscover. The
+redirect ceiling is the tool's own loop rather than the platform's, because automatic redirects would
+skip the address check on every hop after the first — so `AllowAutoRedirect = false` is part of the
+contract, not a preference. `--web-allow <host>` without `--web` is a usage error rather than an
+accepted no-op. And the shipped prompt's path rule was corrected in the same change: it claimed every
+path outside the workspace root is rejected, which round 1 made untrue for an attachment.
+`tasks.md` keeps T029–T033 open as the record of what the round refused — JavaScript and cookies, a
+connect-time address check for the DNS-rebinding gap, page paging, a search tool and `robots.txt`.
 
 ## Round 3 — `009-mcp-client`
 
