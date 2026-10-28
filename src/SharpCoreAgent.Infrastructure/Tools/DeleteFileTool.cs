@@ -22,7 +22,7 @@ public sealed class DeleteFileTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Delete a single file from the workspace. Directories cannot be deleted.",
+        "Delete a single file from the workspace. Directories cannot be deleted, and an attached root is read-only so nothing inside it can be deleted.",
         Schema);
 
     /// <inheritdoc />
@@ -42,7 +42,10 @@ public sealed class DeleteFileTool : ITool
 
         if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
         {
-            return ValueTask.FromResult(ToolResult.Refused(toolCall.Id, Name, error!));
+            return ValueTask.FromResult(ToolResult.Refused(
+                toolCall.Id,
+                Name,
+                PathSafety.ExplainWriteRefusal(context.Workspace, path, error!)));
         }
 
         var relative = context.Workspace.ToRelative(fullPath);

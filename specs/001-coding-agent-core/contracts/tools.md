@@ -37,7 +37,8 @@ Obligations:
 |---|---|---|---|---|
 | `list_directory` | ReadOnly | `Read` | `path?` (default `.`), `recursive?` (default `false`) | One entry per line: `d name/`, `f name` |
 | `read_file` | ReadOnly | `Read` | `path` (required), `start_line?`, `line_count?` (default 2000) | Numbered lines `  12│text` plus a truncation marker |
-| `search_text` | ReadOnly | `Read` | `pattern` (required, regex-free literal), `glob?` (default `*`), `max_matches?` (default 100) | `relative/path:line: text` |
+| `search_text` | ReadOnly | `Read` | `pattern` (required, regex-free literal), `glob?` (default `*`), `path?` (default `.`, a file searches that file), `max_matches?` (default 100) | `relative/path:line: text` |
+| `list_roots` | ReadOnly | `Read` | none | `primary` and `read-only` lines with absolute paths (007) |
 | `write_file` | Destructive | `Created`/`Modified` | `path` (required), `content` (required), `overwrite?` (default `true`) | `wrote N bytes to <path> (<created|overwritten>)` |
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |
 | `run_shell` | Destructive | `CommandRun` | `command` (required), `timeout_seconds?` (default 120, max 600), `working_directory?` | `$ <command>` + exit code + captured output |
@@ -46,7 +47,7 @@ Obligations:
 
 `list_directory`
 ```json
-{"type":"object","properties":{"path":{"type":"string","description":"Directory relative to the workspace root. Defaults to the root."},"recursive":{"type":"boolean","description":"Recurse into subdirectories."}},"required":[],"additionalProperties":false}
+{"type":"object","properties":{"path":{"type":"string","description":"Directory relative to the workspace root, or an absolute path inside an attachment. Defaults to the root."},"recursive":{"type":"boolean","description":"Recurse into subdirectories."}},"required":[],"additionalProperties":false}
 ```
 
 `read_file`
@@ -56,7 +57,12 @@ Obligations:
 
 `search_text`
 ```json
-{"type":"object","properties":{"pattern":{"type":"string","description":"Literal text to find (case-insensitive)."},"glob":{"type":"string","description":"Filename pattern such as *.cs. Defaults to *."},"max_matches":{"type":"integer","minimum":1,"maximum":500}},"required":["pattern"],"additionalProperties":false}
+{"type":"object","properties":{"pattern":{"type":"string","description":"Literal text to find (case-insensitive)."},"glob":{"type":"string","description":"Filename pattern such as *.cs. Defaults to *."},"path":{"type":"string","description":"Directory to search, relative to the workspace root or absolute inside a read-only attachment. Defaults to the workspace root; a file path searches that one file."},"max_matches":{"type":"integer","minimum":1,"maximum":500}},"required":["pattern"],"additionalProperties":false}
+```
+
+`list_roots` (007)
+```json
+{"type":"object","properties":{},"required":[],"additionalProperties":false}
 ```
 
 `write_file`

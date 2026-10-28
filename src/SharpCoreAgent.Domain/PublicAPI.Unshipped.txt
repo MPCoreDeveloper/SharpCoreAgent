@@ -707,10 +707,16 @@ SharpCoreAgent.Domain.Tools.ToolSafety
 SharpCoreAgent.Domain.Tools.ToolSafety.Destructive = 1 -> SharpCoreAgent.Domain.Tools.ToolSafety
 SharpCoreAgent.Domain.Tools.ToolSafety.ReadOnly = 0 -> SharpCoreAgent.Domain.Tools.ToolSafety
 SharpCoreAgent.Domain.Workspace
+SharpCoreAgent.Domain.Workspace.Attachments.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Workspace!>!
+SharpCoreAgent.Domain.Workspace.DescribeOutside(string! path) -> string?
+SharpCoreAgent.Domain.Workspace.HasAttachments.get -> bool
 SharpCoreAgent.Domain.Workspace.IsInside(string! fullPath) -> bool
+SharpCoreAgent.Domain.Workspace.IsInsideAny(string! fullPath) -> bool
 SharpCoreAgent.Domain.Workspace.Root.get -> string!
 SharpCoreAgent.Domain.Workspace.ToRelative(string! fullPath) -> string!
 SharpCoreAgent.Domain.Workspace.TryResolve(string! path, out string! fullPath, out string? error) -> bool
+SharpCoreAgent.Domain.Workspace.TryResolveRead(string! path, out string! fullPath, out SharpCoreAgent.Domain.Workspace? owner, out string? error) -> bool
+SharpCoreAgent.Domain.Workspace.WithAttachments(System.Collections.Generic.IEnumerable<string!>! roots) -> SharpCoreAgent.Domain.Workspace!
 static SharpCoreAgent.Domain.Agents.AgentEvent.operator !=(SharpCoreAgent.Domain.Agents.AgentEvent? left, SharpCoreAgent.Domain.Agents.AgentEvent? right) -> bool
 static SharpCoreAgent.Domain.Agents.AgentEvent.operator ==(SharpCoreAgent.Domain.Agents.AgentEvent? left, SharpCoreAgent.Domain.Agents.AgentEvent? right) -> bool
 static SharpCoreAgent.Domain.Agents.AgentReport.operator !=(SharpCoreAgent.Domain.Agents.AgentReport? left, SharpCoreAgent.Domain.Agents.AgentReport? right) -> bool

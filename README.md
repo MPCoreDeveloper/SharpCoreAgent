@@ -170,6 +170,7 @@ keep working on the file that needs repairing.
 | `--model <id>` | run, chat | provider default |
 | `--fallback <provider:model>` | run, chat | none — a 401 or 5xx is replayed once there |
 | `--workspace <path>` | run, chat, index | current directory |
+| `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
@@ -193,12 +194,14 @@ keep working on the file that needs repairing.
 | `--embedder <mode>` | index | `hashed-local` — the only mode in this build |
 | `--tier <name>` | index | `lean` — the only tier in this build |
 
-Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_WORKSPACE`.
+Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_WORKSPACE`, and
+`SHARPCOREAGENT_ADD_ROOTS` for the read-only roots `run` and `chat` start with, separated by the
+platform's path separator (`;` on Windows, `:` elsewhere). Command-line roots come first.
 
 In `chat`, the loop understands `/model grok:grok-4` (switch provider and model without losing the
 conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/approval`, `/mode plan|act`,
 `/compact [n]`, `/budget [n|+n|unlimited]`, `/continue`, `/usage`, `/cost`, `/files`, `/session`,
-`/help` and `/exit` (or `/quit`).
+`/roots`, `/help` and `/exit` (or `/quit`).
 
 A session says what it is and what it spent. A bare `sharpcoreagent` opens on a box naming the workspace,
 model, approval mode, mode and budget; the prompt reads `<model> · <mode> ❯`; each tool call is one
@@ -261,8 +264,11 @@ session: a standing approval belongs to the conversation that earned it.
 
 ## Tools
 
-`list_directory`, `read_file`, `search_text`, `write_file`, `replace_in_file`, `delete_file`,
-`run_shell`, `shell_output`, `shell_stop`.
+`list_directory`, `read_file`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
+`delete_file`, `run_shell`, `shell_output`, `shell_stop`.
+
+`list_roots` reports the primary root and every read-only attached root, and it is the one tool result
+that prints an absolute path: naming the legal ones is its whole job.
 
 `replace_in_file` is the edit the agent is told to prefer: `edits` carries up to twenty fragments that
 are applied in order against each intermediate state, all or nothing, and only the matched text
@@ -289,6 +295,23 @@ behind `ICodeIndex` — and every block they return carries a `path:start-end` c
 Every path is resolved against the workspace root, and anything that escapes it — `..`, an absolute
 path outside, a link pointing out — is refused before the tool runs. Tool output is truncated at a
 fixed budget so one large file cannot consume the context window.
+
+An attached root (`--add-root`) is the narrower thing: a reading list. `read_file`, `list_directory` and
+`search_text` answer from it when given an absolute path, a symbolic link inside it is judged against
+every attached root (one that lands outside all of them is refused), and every write, delete and shell
+command still resolves against `--workspace` alone. The refusal says `read-only` and names the root, so
+a write into another repository reads as a decision rather than a broken tool:
+
+```text
+refused: path 'D:\repos\Shared.Contracts\src\Order.cs' resolves outside the workspace root 'D:\repos\App'.
+'D:\repos\Shared.Contracts' is a read-only attachment; writes stay in the primary root.
+```
+
+A relative path always means the primary root, even when an attachment holds a file with the same
+relative name, and the five index tools stay primary-only: one index describes one tree, so they answer
+an attachment path with "not indexed" and point at `read_file` and `search_text` instead. Attachments
+are never written to the settings file and never recorded in the transcript — a resumed session starts
+with the roots its new invocation names.
 
 ## Code index
 
@@ -377,7 +400,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 714 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 799 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules and the scripted conversations that prove a session keeps
@@ -419,8 +442,12 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 714 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 799 tests, all green, with no compiler
   warnings.
+- `specs/007-external-roots` — implemented: `Workspace` carries read-only attachments, `read_file`,
+  `list_directory` and `search_text` answer from them by absolute path, `list_roots` reports the roots,
+  `--add-root`/`SHARPCOREAGENT_ADD_ROOTS` name them per invocation, and the write, delete and shell
+  paths did not move.
 - `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
   reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;
   `--fallback provider:model` replays a 401 or 5xx turn once at a model the developer named, recording

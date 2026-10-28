@@ -267,4 +267,97 @@ public sealed class ToolTests
             [".git", "node_modules", "bin", "obj", ".vs", ".sharpcoreagent"],
             IgnoredPaths.DirectoryNames);
     }
+
+    [Fact]
+    public async Task ReadFile_ReadsFromAnAttachmentAndShowsThePathInsideIt()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        var file = ToolTestWorkspace.WriteUnder(attachment, "src/Order.cs", "class Order { }\n// sentinel\n");
+
+        var result = await new ReadFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call("read_file", ToolTestWorkspace.Args(new { path = file })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.False(result.IsRefused);
+        Assert.Contains("// sentinel", result.Content, StringComparison.Ordinal);
+
+        // The path is relative to the tree that answered it, never absolute: list_roots is the one result allowed
+        // to print an absolute path.
+        Assert.Equal(new ToolEffect(ToolEffectKind.Read, "src/Order.cs"), Assert.Single(result.Effects));
+    }
+
+    [Fact]
+    public async Task ListDirectory_ListsAnAttachmentByItsAbsolutePath()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        ToolTestWorkspace.WriteUnder(attachment, "src/Order.cs", "class Order { }");
+
+        var result = await new ListDirectoryTool().ExecuteAsync(
+            ToolTestWorkspace.Call("list_directory", ToolTestWorkspace.Args(new { path = attachment, recursive = true })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains("f src/Order.cs", result.Content, StringComparison.Ordinal);
+        Assert.Contains("d src/", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteFile_RefusesAnAttachmentAndSaysItIsReadOnly()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        var target = Path.Combine(attachment, "src", "Order.cs");
+
+        var result = await new WriteFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call("write_file", ToolTestWorkspace.Args(new { path = target, content = "changed" })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.True(result.IsRefused);
+        Assert.Contains("resolves outside the workspace root", result.Content, StringComparison.Ordinal);
+        Assert.Contains($"'{sandbox.Workspace.Attachments[0].Root}' is a read-only attachment", result.Content, StringComparison.Ordinal);
+        Assert.Contains("writes stay in the primary root", result.Content, StringComparison.Ordinal);
+        Assert.False(File.Exists(target));
+    }
+
+    [Fact]
+    public async Task ReplaceInFile_RefusesAnAttachmentAndWritesNothing()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        var target = ToolTestWorkspace.WriteUnder(attachment, "src/Order.cs", "class Order { }\n");
+
+        var result = await new ReplaceInFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "replace_in_file",
+                ToolTestWorkspace.Args(new { path = target, find = "Order", replace = "Invoice" })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.True(result.IsRefused);
+        Assert.Contains("is a read-only attachment", result.Content, StringComparison.Ordinal);
+        Assert.Equal("class Order { }\n", await File.ReadAllTextAsync(target, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DeleteFile_RefusesAnAttachmentAndLeavesTheFile()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        var target = ToolTestWorkspace.WriteUnder(attachment, "src/Order.cs", "class Order { }");
+
+        var result = await new DeleteFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call("delete_file", ToolTestWorkspace.Args(new { path = target })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.True(result.IsRefused);
+        Assert.Contains("read-only attachment", result.Content, StringComparison.Ordinal);
+        Assert.True(File.Exists(target));
+    }
 }

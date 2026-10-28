@@ -32,23 +32,113 @@ public static class PathSafety
     {
         ArgumentNullException.ThrowIfNull(workspace);
 
-        if (!workspace.TryResolve(path, out fullPath, out error))
+        if (!workspace.TryResolve(path, out var lexical, out error))
         {
+            fullPath = string.Empty;
             return false;
         }
 
+        var judged = JudgePhysical(workspace, path, lexical, allowAttachments: false, out error);
+        fullPath = judged ?? string.Empty;
+        return judged is not null;
+    }
+
+    /// <summary>
+    /// Resolves a path a read tool may use, rejecting one whose physical target escapes every root.
+    /// </summary>
+    /// <param name="workspace">The workspace the invocation may read from.</param>
+    /// <param name="path">The model's path argument.</param>
+    /// <param name="fullPath">The absolute path when the call succeeds.</param>
+    /// <param name="owner">The attachment that answered, or <see langword="null"/> when the primary root did.</param>
+    /// <param name="error">A message naming the escape when the call fails.</param>
+    /// <returns><see langword="true"/> when the path is safe to read.</returns>
+    /// <remarks>
+    /// The only difference from <see cref="TryResolve(Workspace, string, out string, out string?)"/> is which set
+    /// of roots the physical target is compared against, so a link inside an attachment that points into the
+    /// primary root is accepted and one that points anywhere else is refused. Link resolution, the depth cap and
+    /// the "an unreadable link is judged lexically" rule are the same code, which is why a future fix to link
+    /// handling cannot fix one path and miss the other.
+    /// </remarks>
+    public static bool TryResolveRead(
+        Workspace workspace,
+        string path,
+        out string fullPath,
+        out Workspace? owner,
+        out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+
+        if (!workspace.TryResolveRead(path, out var lexical, out owner, out error))
+        {
+            fullPath = string.Empty;
+            return false;
+        }
+
+        var judged = JudgePhysical(workspace, path, lexical, allowAttachments: true, out error);
+        fullPath = judged ?? string.Empty;
+        if (judged is null)
+        {
+            owner = null;
+        }
+
+        return judged is not null;
+    }
+
+    /// <summary>
+    /// Completes a write refusal with the reason, when the path belongs to a read-only attachment.
+    /// </summary>
+    /// <param name="workspace">The workspace the write was resolved through.</param>
+    /// <param name="path">The path argument the tool refused.</param>
+    /// <param name="error">The refusal the resolver already produced.</param>
+    /// <returns>
+    /// <paramref name="error"/> unchanged for an ordinary escape, or that message plus the sentence naming
+    /// the attachment that would have allowed a read.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="workspace"/> or <paramref name="error"/> is null.</exception>
+    /// <remarks>
+    /// One helper for the three write tools, because a refusal that names the reason is the difference between
+    /// "the tool is broken" and "attach it and read it instead" — and three copies of that sentence would
+    /// eventually disagree about its wording.
+    /// </remarks>
+    public static string ExplainWriteRefusal(Workspace workspace, string path, string error)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(error);
+
+        var hint = workspace.DescribeOutside(path);
+        return hint is null
+            ? error
+            : string.Create(CultureInfo.InvariantCulture, $"{error}. {hint}");
+    }
+
+    /// <summary>
+    /// Answers the physical question for a path the workspace already accepted lexically.
+    /// </summary>
+    /// <param name="workspace">The workspace whose containment rules apply.</param>
+    /// <param name="path">The model's path argument, for the message.</param>
+    /// <param name="fullPath">The lexically accepted absolute path.</param>
+    /// <param name="allowAttachments">Whether a link may land in an attachment.</param>
+    /// <param name="error">A message naming the escape when the call fails.</param>
+    /// <returns>The path to hand back when it is safe, or <see langword="null"/> after filling <paramref name="error"/>.</returns>
+    private static string? JudgePhysical(
+        Workspace workspace,
+        string path,
+        string fullPath,
+        bool allowAttachments,
+        out string? error)
+    {
         var physical = ResolvePhysical(fullPath);
-        if (physical is null || workspace.IsInside(physical))
+        if (physical is null ||
+            (allowAttachments ? workspace.IsInsideAny(physical) : workspace.IsInside(physical)))
         {
             error = null;
-            return true;
+            return fullPath;
         }
 
         error = string.Create(
             CultureInfo.InvariantCulture,
             $"path '{path}' resolves through a link to '{physical}', which is outside the workspace root '{workspace.Root}'");
-        fullPath = string.Empty;
-        return false;
+        return null;
     }
 
     /// <summary>

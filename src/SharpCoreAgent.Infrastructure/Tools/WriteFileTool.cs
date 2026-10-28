@@ -23,7 +23,7 @@ public sealed class WriteFileTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Create or replace a file in the workspace. Parent directories are created as needed. Content is written as UTF-8 without a BOM.",
+        "Create or replace a file in the workspace. Writes are confined to the workspace root: an attached root is read-only and refuses every write. Parent directories are created as needed. Content is written as UTF-8 without a BOM.",
         Schema);
 
     /// <inheritdoc />
@@ -45,7 +45,10 @@ public sealed class WriteFileTool : ITool
 
         if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
         {
-            return ToolResult.Refused(toolCall.Id, Name, error!);
+            return ToolResult.Refused(
+                toolCall.Id,
+                Name,
+                PathSafety.ExplainWriteRefusal(context.Workspace, path, error!));
         }
 
         var relative = context.Workspace.ToRelative(fullPath);

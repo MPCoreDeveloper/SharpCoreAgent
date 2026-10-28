@@ -27,6 +27,7 @@ settings file, its precedence and its exit code are in
 | `--provider <name>` | run, chat | `deepseek` | `deepseek`, `grok`, `openai-compatible`, `demo` |
 | `--model <id>` | run, chat | provider default | Model identifier, e.g. `deepseek-chat`, `grok-4` |
 | `--workspace <path>` | run, chat | current directory | Root the tools may touch |
+| `--add-root <path>` | run, chat | — | A read-only root the read tools may also answer from; repeatable, and `SHARPCOREAGENT_ADD_ROOTS` adds more after these (007) |
 | `--approval <mode>` | run, chat | `ask` | `readonly`, `ask`, `allow` |
 | `--max-iterations <n>` | run, chat | `400` | Loop bound: one turn is tens of model calls, not a handful |
 | `--max-output-tokens <n>` | run, chat | `8000` | Per-request output cap |
@@ -63,6 +64,7 @@ the line's content.
 | `/usage` | prints input/output tokens per model for the session, `unknown` where unreported |
 | `/files` | prints the files and commands from the last turn |
 | `/session` | prints the transcript path |
+| `/roots` | prints the primary root and every read-only attachment, with its absolute path (007) |
 | `/help`, `/exit` | usage, quit |
 
 Ctrl+C during a turn cancels the turn and returns to the prompt; a second Ctrl+C at the prompt exits.

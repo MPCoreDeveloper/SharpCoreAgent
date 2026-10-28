@@ -264,6 +264,34 @@ public sealed class ProgramTests
         Assert.DoesNotContain("note:", result.Out, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AMissingAttachmentRootExitsWithTheUsageCodeBeforeAnyRequest()
+    {
+        using var directory = TempDirectory.Create();
+        var missing = Path.Combine(directory.Path, "not-attached");
+
+        var result = await RunAsync(
+            ["run", "hi", "--provider", "demo", "--workspace", directory.Path, "--add-root", missing, "--no-session"]);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("attachment root", result.Error, StringComparison.Ordinal);
+        Assert.Contains(missing, result.Error, StringComparison.Ordinal);
+
+        // Nothing started: the message is the one the workspace refuses with, not a turn that had begun.
+        Assert.DoesNotContain("✻ completed", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AddRootOnACommandWithoutAWorkspaceIsAUsageError()
+    {
+        using var directory = TempDirectory.Create();
+
+        var result = await RunAsync(["models", "--provider", "demo", "--add-root", directory.Path]);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("--add-root applies to run and chat", result.Error, StringComparison.Ordinal);
+    }
+
     private static async Task<(int ExitCode, string Out, string Error)> RunAsync(
         string[] args,
         string? input = null,
