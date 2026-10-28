@@ -160,7 +160,7 @@ public sealed class ProgramTests
             ["run", "list the files", "--provider", "demo", "--workspace", directory.Path, "--approval", "allow", "--no-session"]);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("— completed", result.Error, StringComparison.Ordinal);
+        Assert.Contains("✻ completed", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

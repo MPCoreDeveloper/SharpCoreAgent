@@ -28,7 +28,7 @@ public sealed class ConsoleRenderingTests
         await observer.OnEventAsync(new TurnFinished(Report()), TestContext.Current.CancellationToken);
 
         Assert.Equal("Hello" + Environment.NewLine, output.ToString());
-        Assert.Contains("— completed", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("✻ completed", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -103,9 +103,9 @@ public sealed class ConsoleRenderingTests
             TestContext.Current.CancellationToken);
 
         var text = output.ToString();
-        Assert.Contains("→ read_file(", text, StringComparison.Ordinal);
+        Assert.Contains("⏺ read_file", text, StringComparison.Ordinal);
         Assert.Contains("a.txt", text, StringComparison.Ordinal);
-        Assert.Contains("← read_file: ok (", text, StringComparison.Ordinal);
+        Assert.Contains("⎿ ok", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class ConsoleRenderingTests
 
         await observer.OnEventAsync(new ToolFinished("call-2", "write_file", true, "denied"), TestContext.Current.CancellationToken);
 
-        Assert.Contains("← write_file: error (", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("⎿ error", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -169,8 +169,91 @@ public sealed class ConsoleRenderingTests
             new TurnFinished(Report(AgentOutcome.BudgetExhausted, detail: "the iteration budget ran out")),
             TestContext.Current.CancellationToken);
 
-        Assert.Contains("— budget exhausted", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("✻ budget exhausted", error.ToString(), StringComparison.Ordinal);
         Assert.Contains("the iteration budget ran out", error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The closing line has to carry the spend, because a budget a developer cannot see is the one that surprises
+    /// them — and an unlimited ceiling has to read as a word rather than as nineteen digits.
+    /// </summary>
+    /// <param name="ceiling">The ceiling the observer is told about.</param>
+    /// <param name="expected">The text the summary must contain.</param>
+    /// <returns>The pending event.</returns>
+    [Theory]
+    [InlineData(1_000L, "614/1,000 tokens")]
+    [InlineData(long.MaxValue, "614 tokens (unlimited)")]
+    public async Task TheSummaryShowsWhatTheSessionSpent(long ceiling, string expected)
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(
+            output,
+            error,
+            json: false,
+            quiet: false,
+            budget: () => (614, ceiling));
+
+        await observer.OnEventAsync(new TurnFinished(Report(AgentOutcome.Completed)), TestContext.Current.CancellationToken);
+
+        Assert.Contains(expected, error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUnreportedUsageIsLeftOutOfTheSummary()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false, budget: () => (0, 0));
+
+        await observer.OnEventAsync(
+            new TurnFinished(Report(AgentOutcome.BudgetExhausted, usage: TokenUsage.Unknown)),
+            TestContext.Current.CancellationToken);
+
+        // The session's own spend is still known even when the endpoint stayed silent about the last turn.
+        Assert.Contains("✻ budget exhausted · 1 iteration(s)", error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("unknown", error.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ACompactedTranscriptIsAWarningOnTheDiagnosticsStream()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false);
+
+        await observer.OnEventAsync(new ContextCompacted(12, 20), TestContext.Current.CancellationToken);
+
+        // A long session stops being able to answer questions about its own beginning, so the note is a warning
+        // rather than a dim aside: "as we discussed" now refers to a shorter discussion than it did a minute ago.
+        Assert.Equal(string.Empty, output.ToString());
+        Assert.Contains("! context: dropped 12 old message(s)", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("the last 20", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task QuietSaysNothingAboutCompactionAndJsonEmitsIt()
+    {
+        using var quietError = new StringWriter();
+        using var quietOutput = new StringWriter();
+        var quiet = new ConsoleObserver(quietOutput, quietError, json: false, quiet: true);
+
+        await quiet.OnEventAsync(new ContextCompacted(12, 20), TestContext.Current.CancellationToken);
+
+        Assert.Equal(string.Empty, quietError.ToString());
+        Assert.Equal(string.Empty, quietOutput.ToString());
+
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var json = new ConsoleObserver(output, error, json: true, quiet: false);
+
+        await json.OnEventAsync(new ContextCompacted(12, 20), TestContext.Current.CancellationToken);
+
+        using var line = JsonDocument.Parse(output.ToString().Trim());
+        Assert.Equal("context_compacted", line.RootElement.GetProperty("type").GetString());
+        Assert.Equal(12, line.RootElement.GetProperty("dropped").GetInt32());
+        Assert.Equal(20, line.RootElement.GetProperty("kept").GetInt32());
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     [Fact]
@@ -240,12 +323,72 @@ public sealed class ConsoleRenderingTests
 
         Assert.Equal(ApprovalOutcome.Approved, outcome);
         Assert.Contains("allow read_file?", error.ToString(), StringComparison.Ordinal);
+
+        // All four answers are visible before the cursor, so a developer who is tired of typing does
+        // not have to read the documentation to discover the one that stops the questions.
+        var text = error.ToString();
+        Assert.Contains("[y/t/a/N]", text, StringComparison.Ordinal);
+        Assert.Contains("t = this tool for the session", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAnswerToAllowOneToolIsAToolDecision()
+    {
+        foreach (var answer in new[] { "t\n", "tool\n", "T\n" })
+        {
+            using var error = new StringWriter();
+            var approver = new ConsoleApprover(new StringReader(answer), error, () => true);
+
+            var outcome = await approver.DecideAsync(Request(), TestContext.Current.CancellationToken);
+
+            // Narrower than "every tool": the developer stops being asked about run_shell_command while every
+            // file edit still asks, which is the answer two choices could not express.
+            Assert.Equal(ApprovalOutcome.ApprovedForTool, outcome);
+
+            // The receipt is the only feedback the developer gets -- the next call of this tool prints nothing.
+            Assert.Contains(
+                "read_file runs without asking for the rest of this session",
+                error.ToString(),
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task AnAmbiguousLongerWordIsNotOneOfTheAnswers()
+    {
+        // "allow" is one character away from "all" and means the opposite of "one tool", so it must never be
+        // read as either standing approval: the prompt offers y, t and a, and a word that is not one of them
+        // refuses rather than guessing what the developer meant.
+        foreach (var answer in new[] { "allow\n", "tool all\n", "tt\n" })
+        {
+            using var error = new StringWriter();
+            var approver = new ConsoleApprover(new StringReader(answer), error, () => true);
+
+            Assert.Equal(
+                ApprovalOutcome.Denied,
+                await approver.DecideAsync(Request(), TestContext.Current.CancellationToken));
+        }
+    }
+
+    [Fact]
+    public async Task AnAnswerToAllowEveryToolIsASessionDecision()
+    {
+        foreach (var answer in new[] { "a\n", "all\n", "always\n", "A\n" })
+        {
+            using var error = new StringWriter();
+            var approver = new ConsoleApprover(new StringReader(answer), error, () => true);
+
+            var outcome = await approver.DecideAsync(Request(), TestContext.Current.CancellationToken);
+
+            Assert.Equal(ApprovalOutcome.ApprovedForSession, outcome);
+            Assert.Contains("without asking", error.ToString(), StringComparison.Ordinal);
+        }
     }
 
     [Fact]
     public async Task AnythingOtherThanYesRefuses()
     {
-        foreach (var answer in new[] { "n\n", "\n", "sure\n", "yess\n" })
+        foreach (var answer in new[] { "n\n", "\n", "sure\n", "yess\n", "aye\n", "allow\n" })
         {
             using var error = new StringWriter();
             var approver = new ConsoleApprover(new StringReader(answer), error, () => true);
@@ -388,10 +531,10 @@ public sealed class ConsoleRenderingTests
 
         var text = error.ToString();
         Assert.Contains("│ no newline" + Environment.NewLine, text, StringComparison.Ordinal);
-        Assert.DoesNotContain("← run_shell", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("⎿", text, StringComparison.Ordinal);
 
         // The tool's own line still goes to stdout, as every tool diagnostic does.
-        Assert.Contains("← run_shell", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("⎿ ok", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -462,13 +605,14 @@ public sealed class ConsoleRenderingTests
     private static AgentReport Report(
         AgentOutcome outcome = AgentOutcome.Completed,
         string? finalText = null,
-        string? detail = null) =>
+        string? detail = null,
+        TokenUsage? usage = null) =>
         new()
         {
             Outcome = outcome,
             ModelId = "demo:demo-scripted",
             FinalText = finalText,
-            Usage = new TokenUsage(10, 5),
+            Usage = usage ?? new TokenUsage(10, 5),
             Iterations = 1,
             Detail = detail,
         };

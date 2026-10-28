@@ -115,6 +115,14 @@ public sealed class CodingAgent
 
         while (true)
         {
+            // Before a request, not after the answer: the next call is what costs money, and a turn that has no
+            // room left would only spend it to learn that. Refusing here is also what makes `/budget` a real
+            // remedy — the transcript keeps its reasoning, and the same request continues once the ceiling rises.
+            if (Spent(session) is { } exhausted)
+            {
+                return await FinishAsync(sink, state.Report(AgentOutcome.BudgetExhausted, exhausted)).ConfigureAwait(false);
+            }
+
             if (state.Iterations >= _options.MaxIterations)
             {
                 Log.IterationBudgetSpent(_logger, model.QualifiedName, _options.MaxIterations, null);
@@ -127,6 +135,10 @@ public sealed class CodingAgent
             }
 
             state.Iterations++;
+
+            // Before the request, because the window is what the request carries. A session left open all afternoon
+            // outgrows any provider's limit, and a rejected request reads to the model as a bug it should retry.
+            await CompactAsync(session, sink, turnBudget.Token).ConfigureAwait(false);
 
             var request = new ChatRequest(
                 model,
@@ -161,6 +173,38 @@ public sealed class CodingAgent
                 return await FinishAsync(sink, ending).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    /// Drops the oldest messages when the transcript has outgrown the configured window.
+    /// </summary>
+    /// <param name="session">The conversation to trim.</param>
+    /// <param name="sink">Receives the notice, so a silent loss of memory becomes a visible one.</param>
+    /// <param name="cancellationToken">Cancels the notice.</param>
+    /// <returns>How many messages were dropped; zero when the transcript already fits.</returns>
+    /// <remarks>
+    /// Half the window is kept rather than all of it: keeping the full window would drop nothing until the
+    /// transcript is twice what the model accepts, and keeping the newest handful would throw away the
+    /// instruction that started the work. <see cref="AgentSession.Compact(int)"/> is what does the trimming, so
+    /// this cannot split a tool round — the two agree by construction, and <c>/compact</c> stays the manual door
+    /// to the same behaviour.
+    /// </remarks>
+    private async Task<int> CompactAsync(AgentSession session, IAgentObserver sink, CancellationToken cancellationToken)
+    {
+        var window = _options.MaxContextMessages;
+        if (window <= 0 || session.Messages.Count <= window)
+        {
+            return 0;
+        }
+
+        var keep = Math.Max(window / 2, 1);
+        var dropped = session.Compact(keep);
+        if (dropped > 0)
+        {
+            await sink.OnEventAsync(new ContextCompacted(dropped, keep), cancellationToken).ConfigureAwait(false);
+        }
+
+        return dropped;
     }
 
     /// <summary>
@@ -226,15 +270,31 @@ public sealed class CodingAgent
             session.Add(ChatMessage.FromToolResult(result));
         }
 
-        // Checked after the tool round because a single round can add several large results.
-        if (session.TotalUsage.Total is { } spent && spent > _options.MaxTotalTokens)
+        // Checked after the tool round too, because one round can add several large results: the loop must not send
+        // them back to a model the session can no longer pay for.
+        if (Spent(session) is { } exhausted)
         {
-            return state.Report(
-                AgentOutcome.BudgetExhausted,
-                $"the session token budget of {_options.MaxTotalTokens} is spent ({spent} used). Start a new session or raise the budget.");
+            return state.Report(AgentOutcome.BudgetExhausted, exhausted);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Answers whether the conversation has spent its token budget, and what to say when it has.
+    /// </summary>
+    /// <param name="session">The conversation, for its spend and ceiling.</param>
+    /// <returns>The detail for a <see cref="AgentOutcome.BudgetExhausted"/> report, or null when there is room.</returns>
+    /// <remarks>
+    /// The ceiling comes from the session when it has one, so a conversation can be given more room without
+    /// rebuilding the agent; <see cref="AgentSession.MaxTotalTokens"/> is the only place that number lives.
+    /// </remarks>
+    private string? Spent(AgentSession session)
+    {
+        var ceiling = session.MaxTotalTokens ?? _options.MaxTotalTokens;
+        return session.TotalUsage.Total is { } spent && spent > ceiling
+            ? $"the session token budget of {ceiling} is spent ({spent} used)."
+            : null;
     }
 
     /// <summary>
@@ -436,7 +496,14 @@ public sealed class CodingAgent
             return ApprovalOutcome.Denied;
         }
 
-        return session.Approval switch
+        // A tool the developer allowed earlier in this conversation does not ask again, whatever the mode says: the
+        // answer was about this transcript, and `/approval` can still take the permission away.
+        if (session.IsToolApproved(call.Name))
+        {
+            return ApprovalOutcome.Approved;
+        }
+
+        var outcome = session.Approval switch
         {
             ApprovalMode.AllowAll => ApprovalOutcome.Approved,
             ApprovalMode.ReadOnly => ApprovalOutcome.Denied,
@@ -447,6 +514,23 @@ public sealed class CodingAgent
                 },
                 cancellationToken).ConfigureAwait(false),
         };
+
+        switch (outcome)
+        {
+            case ApprovalOutcome.ApprovedForTool:
+                session.ApproveTool(call.Name);
+                return ApprovalOutcome.Approved;
+
+            case ApprovalOutcome.ApprovedForSession:
+                // "Yes, and don't ask again" is a decision about this conversation, so it is written to the
+                // session the loop already reads and nowhere else: the settings file is a default for future
+                // processes, and a tired click at a prompt must not become one.
+                session.Approval = ApprovalMode.AllowAll;
+                return ApprovalOutcome.Approved;
+
+            default:
+                return outcome;
+        }
     }
 
     /// <summary>
@@ -470,10 +554,14 @@ public sealed class CodingAgent
         CancellationToken cancellationToken)
     {
         // Live output is a courtesy, never a precondition: the tool runs identically whether or not the
-        // observer wants the text, and the result it returns is the complete record either way.
+        // observer wants the text, and the result it returns is the complete record either way. The model
+        // and the approval mode travel with the context because a tool that delegates work needs the
+        // conversation's answers, not the host's startup settings.
         var context = new ToolInvocationContext(session.Workspace)
         {
             Output = new ObserverOutput(sink, call),
+            Model = session.ActiveModel,
+            Approval = session.Approval,
         };
         try
         {

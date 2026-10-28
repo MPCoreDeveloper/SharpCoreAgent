@@ -83,7 +83,7 @@ public sealed class CliCommandTests
         var exitCode = await RunCommand.ExecuteAsync(cli, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("— completed", console.Error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("✻ completed", console.Error.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("session:", console.Error.ToString(), StringComparison.Ordinal);
     }
 
@@ -159,7 +159,7 @@ public sealed class CliCommandTests
         Assert.Contains("no turn has run yet", output, StringComparison.Ordinal);
         Assert.Contains("unknown command '/nonsense'", error, StringComparison.Ordinal);
         Assert.Contains("session: ", error, StringComparison.Ordinal);
-        Assert.Contains("— completed", error, StringComparison.Ordinal);
+        Assert.Contains("✻ completed", error, StringComparison.Ordinal);
         Assert.Contains("total  ", output, StringComparison.Ordinal);
         Assert.Contains("the last turn changed no files and ran no commands", output, StringComparison.Ordinal);
         Assert.Contains("workspace: ", error, StringComparison.Ordinal);

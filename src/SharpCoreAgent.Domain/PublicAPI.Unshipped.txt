@@ -198,6 +198,7 @@ SharpCoreAgent.Domain.Agents.ApprovalMode.Ask = 1 -> SharpCoreAgent.Domain.Agent
 SharpCoreAgent.Domain.Agents.ApprovalMode.ReadOnly = 0 -> SharpCoreAgent.Domain.Agents.ApprovalMode
 SharpCoreAgent.Domain.Agents.ApprovalOutcome
 SharpCoreAgent.Domain.Agents.ApprovalOutcome.Approved = 0 -> SharpCoreAgent.Domain.Agents.ApprovalOutcome
+SharpCoreAgent.Domain.Agents.ApprovalOutcome.ApprovedForSession = 2 -> SharpCoreAgent.Domain.Agents.ApprovalOutcome
 SharpCoreAgent.Domain.Agents.ApprovalOutcome.Denied = 1 -> SharpCoreAgent.Domain.Agents.ApprovalOutcome
 SharpCoreAgent.Domain.Agents.IAgentObserver
 SharpCoreAgent.Domain.Agents.IAgentObserver.OnEventAsync(SharpCoreAgent.Domain.Agents.AgentEvent! agentEvent, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
@@ -841,6 +842,26 @@ SharpCoreAgent.Domain.Tools.IToolOutputSink
 SharpCoreAgent.Domain.Tools.IToolOutputSink.WriteAsync(string! text, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Output.get -> SharpCoreAgent.Domain.Tools.IToolOutputSink?
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Output.init -> void
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Approval.get -> SharpCoreAgent.Domain.Agents.ApprovalMode
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Approval.init -> void
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Model.get -> SharpCoreAgent.Domain.Model.ModelDescriptor?
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Model.init -> void
 static SharpCoreAgent.Domain.Text.FragmentFinder.Find(string! text, string! find) -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Text.FragmentMatch!>!
 SharpCoreAgent.Domain.Errors.ConfigurationFileException
 SharpCoreAgent.Domain.Errors.ConfigurationFileException.ConfigurationFileException(string! message, System.Exception? innerException = null) -> void
+SharpCoreAgent.Domain.Agents.ApprovalOutcome.ApprovedForTool = 3 -> SharpCoreAgent.Domain.Agents.ApprovalOutcome
+SharpCoreAgent.Domain.Agents.ContextCompacted
+SharpCoreAgent.Domain.Agents.ContextCompacted.ContextCompacted(int Dropped, int Kept) -> void
+SharpCoreAgent.Domain.Agents.ContextCompacted.Deconstruct(out int Dropped, out int Kept) -> void
+SharpCoreAgent.Domain.Agents.ContextCompacted.Dropped.get -> int
+SharpCoreAgent.Domain.Agents.ContextCompacted.Dropped.init -> void
+SharpCoreAgent.Domain.Agents.ContextCompacted.Equals(SharpCoreAgent.Domain.Agents.ContextCompacted? other) -> bool
+SharpCoreAgent.Domain.Agents.ContextCompacted.Kept.get -> int
+SharpCoreAgent.Domain.Agents.ContextCompacted.Kept.init -> void
+override SharpCoreAgent.Domain.Agents.ContextCompacted.<Clone>$() -> SharpCoreAgent.Domain.Agents.ContextCompacted!
+override SharpCoreAgent.Domain.Agents.ContextCompacted.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Agents.ContextCompacted.GetHashCode() -> int
+override SharpCoreAgent.Domain.Agents.ContextCompacted.ToString() -> string!
+override sealed SharpCoreAgent.Domain.Agents.ContextCompacted.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
+static SharpCoreAgent.Domain.Agents.ContextCompacted.operator !=(SharpCoreAgent.Domain.Agents.ContextCompacted? left, SharpCoreAgent.Domain.Agents.ContextCompacted? right) -> bool
+static SharpCoreAgent.Domain.Agents.ContextCompacted.operator ==(SharpCoreAgent.Domain.Agents.ContextCompacted? left, SharpCoreAgent.Domain.Agents.ContextCompacted? right) -> bool

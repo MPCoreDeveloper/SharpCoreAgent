@@ -75,11 +75,15 @@ public sealed class InteractiveStartTests
             var exitCode = await ProgramEntry.RunAsync(
                 ["--provider", "demo", "--workspace", directory.Path, "--no-session"]);
 
+            var banner = console.Error.ToString();
             Assert.Equal(0, exitCode);
-            Assert.Contains(HelpText.VersionLine, console.Error.ToString(), StringComparison.Ordinal);
-            Assert.Contains("model: demo:demo-scripted", console.Error.ToString(), StringComparison.Ordinal);
-            Assert.Contains("workspace: ", console.Error.ToString(), StringComparison.Ordinal);
-            Assert.Contains("/help", console.Error.ToString(), StringComparison.Ordinal);
+            Assert.Contains("╭", banner, StringComparison.Ordinal);
+            Assert.Contains("╰", banner, StringComparison.Ordinal);
+            Assert.Contains(HelpText.VersionLine, banner, StringComparison.Ordinal);
+            Assert.Contains("model      demo:demo-scripted", banner, StringComparison.Ordinal);
+            Assert.Contains("workspace  ", banner, StringComparison.Ordinal);
+            Assert.Contains("budget 10,000,000 tokens", banner, StringComparison.Ordinal);
+            Assert.Contains("/help", banner, StringComparison.Ordinal);
         }
         finally
         {

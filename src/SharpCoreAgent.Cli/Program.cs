@@ -83,7 +83,13 @@ internal static class Program
                     settingsPath,
                     Environment.GetEnvironmentVariable,
                     Console.Out),
-                _ => await ChatCommand.ExecuteAsync(options, scope).ConfigureAwait(false),
+                CliCommand.Setup => SetupCommand.Execute(
+                    options,
+                    settingsPath,
+                    Environment.GetEnvironmentVariable,
+                    Console.Out,
+                    Console.Error),
+                _ => await ChatCommand.ExecuteAsync(options, scope, settingsPath).ConfigureAwait(false),
             };
         }
         catch (CliUsageException ex)

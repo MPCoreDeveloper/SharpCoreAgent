@@ -236,8 +236,14 @@ RunTurnAsync(session, prompt, observer, ct):
         result = Truncate(result, MaxToolResultChars)
         session.Add(ChatMessage.ToolResult(call, result))
         emit ToolFinished(call.Id, name, result.IsError, summary)
-     if session.TotalTokens > MaxTotalTokens -> BudgetExhausted("tokens")
+     ceiling = session.MaxTotalTokens ?? MaxTotalTokens          // a session can be raised without a rebuild
+     if session.TokensSpent > ceiling -> BudgetExhausted("session token budget of …")
 ```
+
+The token check sits at the top of the loop as well as after the tool round, so a turn is refused
+*before* it pays for a request it cannot afford, and an answer that already arrived is never
+discarded. The ceiling is the session's, which is what lets `/budget` hand a running conversation
+more room.
 
 `gate` rules: `AllowAll` approves everything; `ReadOnly` approves `ToolSafety.ReadOnly` and refuses
 `Destructive`; `Ask` auto-approves read-only and asks the `IToolApprover` for destructive calls.

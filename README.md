@@ -171,9 +171,9 @@ keep working on the file that needs repairing.
 | `--fallback <provider:model>` | run, chat | none — a 401 or 5xx is replayed once there |
 | `--workspace <path>` | run, chat, index | current directory |
 | `--approval <mode>` | run, chat | `ask` |
-| `--max-iterations <n>` | run, chat | `24` |
+| `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
-| `--max-total-tokens <n>` | run, chat | `250000` |
+| `--max-total-tokens <n>` | run, chat | `10000000` — the ceiling a session starts with; `/budget` raises it |
 | `--temperature <x>` | run, chat | `0.2` |
 | `--base-url <url>` | run, chat | none — required by `openai-compatible` |
 | `--credential-file <path>` | all | none — `NAME=value` keys read first; they win over the environment |
@@ -182,7 +182,7 @@ keep working on the file that needs repairing.
 | `--json` | run, index | off — one JSON object per event, or per index report |
 | `--color <mode>` | run, chat, models | `auto` — `auto`, `always`, `never`; `auto` honours `NO_COLOR`, `TERM=dumb` and redirection |
 | `--mode <mode>` | run, chat | `act` — `plan` advertises and allows only read-only tools |
-| `--quiet` / `--verbose` | run, chat | off / off |
+| `--quiet` / `--verbose` | run, chat | off / off — `--verbose` also names each turn as it starts |
 | `--` | run | everything after it is part of the prompt |
 | `--no-index` | run, chat | off — no index read, write or refresh in this process |
 | `--index-budget <ms>` | run, chat | `3000` — the refresh ceiling; `0` keeps reads and stops refreshing |
@@ -197,7 +197,28 @@ Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_
 
 In `chat`, the loop understands `/model grok:grok-4` (switch provider and model without losing the
 conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/approval`, `/mode plan|act`,
-`/compact [n]`, `/usage`, `/cost`, `/files`, `/session`, `/help` and `/exit` (or `/quit`).
+`/compact [n]`, `/budget [n|+n|unlimited]`, `/continue`, `/usage`, `/cost`, `/files`, `/session`,
+`/help` and `/exit` (or `/quit`).
+
+A session says what it is and what it spent. A bare `sharpcoreagent` opens on a box naming the workspace,
+model, approval mode, mode and budget; the prompt reads `<model> · <mode> ❯`; each tool call is one
+`⏺ name {args}` line with a `  ⎿ ok · 12 ms` result (or `⎿ error`) under it; and every turn closes with
+`✻ completed · n iteration(s) · … in / … out · … tokens`, so the budget is a number on screen instead of a
+surprise. `--max-total-tokens` is the ceiling a session *starts* with, a resumed transcript starts with the
+tokens it already recorded as headroom, and `/budget` is how a running conversation gets more room:
+`/budget` reports, `/budget +50000` adds, `/budget 400000` sets and `/budget unlimited` removes it for this
+session — never written to settings, because a raised budget is a decision about one conversation. When the
+ceiling is reached mid-work the loop offers to continue with more and replays the same request instead of
+ending the session, and at four fifths of the way it says so once, with the command that raises it; a turn that
+finishes *past* the ceiling says instead that the next request will be refused. Answering `n` to that offer
+leaves the request *paused* rather than ending the conversation: the prompt reads
+`<model> · <mode> · paused ❯`, and `/continue` — or a bare Enter — carries on with the request that is still
+the last message in the transcript, so nothing has to be retyped. Leaving while paused exits `4`, because the
+transcript holds unfinished work. The
+check sits before each request rather than after each answer, so the answer you already have is never
+discarded for being one token over: a `run` that finishes over its ceiling still prints the answer and
+`614/1,000 tokens` in its last line. Below 1 000 tokens neither `--max-total-tokens` nor `/budget`
+accepts a ceiling, because one request costs more than that.
 
 `/usage` counts tokens; `/cost` prices them. The price table is one file with one date, printed with
 every report, and each entry names the page it was read from — as of 2026-10-27 that prices
@@ -230,6 +251,14 @@ build wants that answer in its control flow.
 | `ask` (default) | read-only tools run; destructive tools prompt for a decision |
 | `allow` | everything runs unattended — for trusted workspaces and CI only |
 
+In `ask` the question is `allow run_shell_command? <summary> [y/t/a/N]`, with the keys spelled out on the line
+above it. `y` runs this call once, `t` runs every later call of the same tool for the rest of the session, `a`
+(`all`, `always`) runs every destructive tool, and anything else — an empty line, end of input, a word nobody
+meant — refuses, which is what keeps `sharpcoreagent run "…" < /dev/null` safe. `t` is the answer that stops
+the questions without also waving through every file write; `/approval` reports what a session has stopped
+asking about and `/approval forget` revokes it. Neither yes is written to settings nor carried into the next
+session: a standing approval belongs to the conversation that earned it.
+
 ## Tools
 
 `list_directory`, `read_file`, `search_text`, `write_file`, `replace_in_file`, `delete_file`,
@@ -246,7 +275,9 @@ refuses the whole call instead of guessing.
 `wait_seconds` decides whether the call blocks for the result or hands back a handle. A command that
 outlives its wait comes back as `sh-1` with the output so far, `shell_output` drains it — waiting if you
 ask — and `shell_stop` kills it with its whole process tree. A background command is capped at an hour,
-so nothing outlives the session by accident.
+so nothing outlives the session by accident. Every command runs with an empty, already-closed stdin —
+the `< /dev/null` a build expects — so nothing a turn starts can take the line you type at the next
+prompt, and a command that asks a question gets end-of-input instead of a turn that never returns.
 
 Five more answer questions about the code itself from the index instead of from the filesystem:
 `search_code` (a question, in words), `find_symbol` (a declaration by name), `find_references`
@@ -346,10 +377,11 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 708 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 714 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
-  the settings file and the bare-start rules — and the tests that cover them — so the next scan moves
+  the settings file, the bare-start rules and the scripted conversations that prove a session keeps
+  reading — and the tests that cover them — so the next scan moves
   both the line count and
   the percentage. **The gate
   passes**, including
@@ -387,7 +419,7 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 708 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 714 tests, all green, with no compiler
   warnings.
 - `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
   reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;

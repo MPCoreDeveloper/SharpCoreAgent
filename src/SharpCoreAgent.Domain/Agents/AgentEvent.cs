@@ -29,6 +29,19 @@ public sealed record TurnStarted(string ModelId) : AgentEvent;
 public sealed record FallbackAttempted(FallbackUsed Fallback) : AgentEvent;
 
 /// <summary>
+/// The oldest part of the transcript was dropped so the next request stays inside the context window.
+/// </summary>
+/// <param name="Dropped">How many messages were replaced by the elision note.</param>
+/// <param name="Kept">How many of the most recent messages were kept.</param>
+/// <remarks>
+/// Emitted before the request that needed the room, never after: a long session that silently forgets the
+/// beginning of the conversation answers a question about “the file we just edited” with confidence and
+/// no memory, and the developer deserves a line saying why. The elision note the model receives says the
+/// same thing, so asking again is a real remedy.
+/// </remarks>
+public sealed record ContextCompacted(int Dropped, int Kept) : AgentEvent;
+
+/// <summary>
 /// The model produced reasoning text.
 /// </summary>
 /// <param name="Text">The increment.</param>

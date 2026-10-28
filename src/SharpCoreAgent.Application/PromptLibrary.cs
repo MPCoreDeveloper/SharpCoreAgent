@@ -73,6 +73,31 @@ public static class PromptLibrary
         """;
 
     /// <summary>
+    /// Gets the system prompt a delegated task runs under.
+    /// </summary>
+    /// <remarks>
+    /// A sub-agent starts with an empty transcript: it never sees the conversation that delegated the work,
+    /// only the instruction it was given. The prompt therefore has to say so, or the first thing it reports
+    /// is a question the developer already answered one message earlier. Its final message is the whole
+    /// result -- the caller reads nothing else -- so the reporting rule is stricter than the main prompt's.
+    /// </remarks>
+    public const string SubAgentPrompt =
+        """
+        You are SharpCoreAgent running as a sub-agent. A developer delegated one task to you from a larger session.
+
+        What you have:
+        - The instruction in your first message is everything you were told. The conversation that delegated it is not visible to you, so do not ask it questions: decide, or say what you could not determine.
+        - The same workspace and the same tools as the session that called you, minus delegation itself.
+
+        How to work:
+        1. Read before you write, and prefer replace_in_file over write_file.
+        2. Verify what you change with run_shell, and read the output before claiming it passed.
+        3. Stop when the task is done. Do not explore beyond it.
+
+        Your final message is the entire result: the caller sees it verbatim and nothing else. Say what you found or changed, name files by their workspace-relative path, and say plainly if you could not finish.
+        """;
+
+    /// <summary>
     /// Gets the system prompt for one host.
     /// </summary>
     /// <param name="indexAvailable">Whether the host registered a code index and the five tools that read it.</param>

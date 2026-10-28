@@ -31,6 +31,9 @@ internal enum CliCommand
 
     /// <summary>Read or write the settings file.</summary>
     Config,
+
+    /// <summary>Ask for the preferences one question at a time and write them down.</summary>
+    Setup,
 }
 
 /// <summary>What <c>config</c> was asked to do.</summary>
@@ -115,17 +118,34 @@ internal sealed record CliOptions
     /// <summary>Gets the workspace root the tools are confined to.</summary>
     public string Workspace { get; init; } = Directory.GetCurrentDirectory();
 
-    /// <summary>Gets the approval mode.</summary>
+    /// <summary>
+    /// Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>-y</c> and <c>--yes</c> are this property spelled the short way: they set
+    /// <see cref="ApprovalMode.AllowAll"/> in the position they appear, so a later <c>--approval readonly</c>
+    /// still wins.
+    /// </remarks>
     public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;
 
-    /// <summary>Gets the iteration ceiling.</summary>
-    public int MaxIterations { get; init; } = 24;
+    /// <summary>Gets the iteration ceiling. Default 400.</summary>
+    /// <remarks>
+    /// One iteration is one model call, so a turn that reads, edits, builds and retests spends tens of them. The
+    /// former default of 24 ended ordinary work with "the iteration budget of 24 model calls ran out"; the ceiling
+    /// is still there to stop a model that loops forever.
+    /// </remarks>
+    public int MaxIterations { get; init; } = 400;
 
     /// <summary>Gets the per-request output ceiling.</summary>
     public int MaxOutputTokens { get; init; } = 8_000;
 
-    /// <summary>Gets the session token budget.</summary>
-    public long MaxTotalTokens { get; init; } = 250_000;
+    /// <summary>Gets the session token budget. Default 10 000 000.</summary>
+    /// <remarks>
+    /// A session, not a turn: the ceiling a long conversation reaches at all. It is set high because a session
+    /// that stops mid-task for a budget the developer never chose reads as a crash, and because the CLI offers
+    /// more room rather than ending the conversation when one is reached (<c>/continue</c>, <c>/budget</c>).
+    /// </remarks>
+    public long MaxTotalTokens { get; init; } = 10_000_000;
 
     /// <summary>Gets the sampling temperature.</summary>
     public double Temperature { get; init; } = 0.2;
@@ -445,6 +465,15 @@ internal sealed record CliOptions
                 return (options with { Command = flag }, flag, positionals);
             }
 
+            if (!optionsEnded && (Is(argument, "-y") || Is(argument, "--yes")))
+            {
+                // The one-letter answer to every approval question. It is a shorthand rather than a
+                // separate concept: `-y` and `--approval allow` produce the same options, so the settings
+                // file, `config show` and the transcript cannot disagree about what was requested.
+                options = options with { Approval = ApprovalMode.AllowAll };
+                continue;
+            }
+
             if (!optionsEnded && string.Equals(argument, "--", StringComparison.Ordinal))
             {
                 optionsEnded = true;
@@ -566,6 +595,24 @@ internal sealed record CliOptions
                 }
 
                 return FinishConfig(options, positionals);
+
+            case CliCommand.Setup:
+                RejectIndexFlags(options);
+                if (options.Json)
+                {
+                    throw new CliUsageException(
+                        "--json is only valid with run and index.",
+                        "Use 'sharpcoreagent config get <name>' for one value a script can read.");
+                }
+
+                if (positionals.Count > 0)
+                {
+                    throw new CliUsageException(
+                        $"setup does not take '{positionals[0]}'.",
+                        "Run 'sharpcoreagent setup' and answer the questions.");
+                }
+
+                return options with { Command = CliCommand.Setup };
 
             default:
                 RejectIndexFlags(options);
@@ -809,6 +856,10 @@ internal sealed record CliOptions
         "--model" => "model",
         "--base-url" => "base-url",
         "--approval" => "approval",
+
+        // The shorthand names the same setting, so `config show` says "command line" for approval when
+        // the developer typed -y instead of leaving the row looking like a default.
+        "-y" or "--yes" => "approval",
         "--mode" => "mode",
         "--temperature" => "temperature",
         "--max-iterations" => "max-iterations",
@@ -1160,6 +1211,11 @@ internal sealed record CliOptions
             return CliCommand.Config;
         }
 
+        if (Is(argument, "setup"))
+        {
+            return CliCommand.Setup;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -1172,7 +1228,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models, index and config.");
+            "Commands are run, chat, models, index, setup and config.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)

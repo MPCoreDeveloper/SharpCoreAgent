@@ -21,14 +21,24 @@ developer cannot type into it or read it, so `sharpcoreagent` in a script cannot
 cannot interleave a prompt with piped output.
 
 The banner an implicit session prints goes to standard error, before the first prompt, and is
-suppressed by `--quiet`:
+suppressed by `--quiet`. It is a box naming what decides a turn — the workspace, the model, the
+approval mode, the agent mode and the token ceiling — over one dim line with the ways out:
 
 ```text
-Ariadne 0.1.0 (SharpCoreAgent)
-model: deepseek:deepseek-flash  approval: ask  mode: act
-workspace: /home/me/project  session: /home/me/project/.sharpcoreagent/sessions/20261027T101500Z.json
-Type a request, or /help for the commands; /exit leaves. Ctrl+C cancels a turn.
+╭────────────────────────────────────────────────────────────────────╮
+│ Ariadne 0.1.0 (SharpCoreAgent)                                     │
+│ workspace  /home/me/project                                        │
+│ model      deepseek:deepseek-flash                                 │
+│ approval   ask · mode act · budget 250,000 tokens                  │
+╰────────────────────────────────────────────────────────────────────╯
+/help commands · /budget raise the session budget · Ctrl+C cancels a turn · /exit leaves
 ```
+
+A `session` row follows the approval line when the transcript is being written.
+
+The box is at most 74 columns wide and a value that does not fit loses its head, never its label.
+The ceiling is the session's, so a resumed transcript shows what it starts with, and `/budget`
+changes the number this line would show next.
 
 ## `config`
 

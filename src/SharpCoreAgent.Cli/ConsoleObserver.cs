@@ -21,8 +21,11 @@ internal sealed class ConsoleObserver : IAgentObserver
     private readonly TextWriter _error;
     private readonly bool _json;
     private readonly bool _quiet;
+    private readonly bool _verbose;
     private readonly AnsiTheme _theme;
     private readonly Dictionary<string, long> _started = new(StringComparer.Ordinal);
+    private readonly Func<(long Spent, long Ceiling)>? _budget;
+    private long? _turnStarted;
     private bool _thinkingOpen;
     private bool _textOpen;
     private bool _sawText;
@@ -39,7 +42,19 @@ internal sealed class ConsoleObserver : IAgentObserver
     /// <param name="json">Whether to emit JSON lines instead of prose.</param>
     /// <param name="quiet">Whether to suppress thinking deltas, tool lines and the summary.</param>
     /// <param name="theme">The palette for glyphs and names; null renders plain text. Ignored when <paramref name="json"/> is set.</param>
-    public ConsoleObserver(TextWriter output, TextWriter error, bool json, bool quiet, AnsiTheme? theme = null)
+    /// <param name="verbose">Whether to name each turn as it starts, so a wait before the first token is not silence.</param>
+    /// <param name="budget">
+    /// Reports the session's spend and ceiling when the closing summary is written, so a developer sees how much of
+    /// the budget a turn consumed instead of discovering it when the budget runs out.
+    /// </param>
+    public ConsoleObserver(
+        TextWriter output,
+        TextWriter error,
+        bool json,
+        bool quiet,
+        AnsiTheme? theme = null,
+        bool verbose = false,
+        Func<(long Spent, long Ceiling)>? budget = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
@@ -48,7 +63,9 @@ internal sealed class ConsoleObserver : IAgentObserver
         _error = error;
         _json = json;
         _quiet = quiet;
+        _verbose = verbose;
         _theme = json ? AnsiTheme.Plain : theme ?? AnsiTheme.Plain;
+        _budget = budget;
     }
 
     /// <inheritdoc />
@@ -59,9 +76,18 @@ internal sealed class ConsoleObserver : IAgentObserver
         switch (agentEvent)
         {
             case TurnStarted started:
+                _turnStarted = Stopwatch.GetTimestamp();
                 if (_json)
                 {
                     WriteJson(new { type = "turn_started", model = started.ModelId });
+                }
+                else if (_verbose && !_quiet)
+                {
+                    // A turn can spend a while before its first token — a cold index, a slow provider, a
+                    // retry — and without this the console says nothing at all. One dim line is the
+                    // difference between a session that is working and one that looks frozen.
+                    _error.WriteLine(_theme.Dim(
+                        string.Create(CultureInfo.InvariantCulture, $"· {started.ModelId} · turn started")));
                 }
 
                 break;
@@ -76,6 +102,10 @@ internal sealed class ConsoleObserver : IAgentObserver
 
             case ToolRequested requested:
                 RenderRequested(requested);
+                break;
+
+            case ContextCompacted compacted:
+                RenderCompacted(compacted);
                 break;
 
             case ToolOutputDelta output:
@@ -98,6 +128,37 @@ internal sealed class ConsoleObserver : IAgentObserver
         _output.Flush();
         _error.Flush();
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Says that the beginning of the conversation was dropped so the next request fits.
+    /// </summary>
+    /// <param name="compacted">How many messages went, and how many were kept.</param>
+    /// <remarks>
+    /// A warning rather than a dim note, because this is the moment a long session stops being able to
+    /// answer questions about its own beginning: the developer needs to know that "as we discussed" now
+    /// refers to a shorter discussion than it did a minute ago.
+    /// </remarks>
+    private void RenderCompacted(ContextCompacted compacted)
+    {
+        CloseThinkingLine();
+        CloseTextLine();
+        CloseToolOutputLine();
+
+        if (_json)
+        {
+            WriteJson(new { type = "context_compacted", dropped = compacted.Dropped, kept = compacted.Kept });
+            return;
+        }
+
+        if (_quiet)
+        {
+            return;
+        }
+
+        _error.WriteLine(_theme.Warning(string.Create(
+            CultureInfo.InvariantCulture,
+            $"! context: dropped {compacted.Dropped} old message(s), kept the system prompts and the last {compacted.Kept}")));
     }
 
     /// <summary>
@@ -186,7 +247,6 @@ internal sealed class ConsoleObserver : IAgentObserver
         CloseTextLine();
         CloseToolOutputLine();
 
-
         if (_json)
         {
             WriteJson(new
@@ -204,9 +264,10 @@ internal sealed class ConsoleObserver : IAgentObserver
             return;
         }
 
-        _output.WriteLine(string.Create(
-            CultureInfo.InvariantCulture,
-            $"{_theme.Accent("→")} {_theme.Strong(requested.ToolName)}({_theme.Dim(Compact(requested.ArgumentsJson))})"));
+        _output.WriteLine(string.Concat(
+            _theme.Accent("⏺ "),
+            _theme.Strong(requested.ToolName),
+            _theme.Dim(" " + Compact(requested.ArgumentsJson))));
     }
 
     /// <summary>
@@ -309,9 +370,17 @@ internal sealed class ConsoleObserver : IAgentObserver
             return;
         }
 
-        _output.WriteLine(string.Create(
-            CultureInfo.InvariantCulture,
-            $"{_theme.Success("←")} {_theme.Strong(finished.ToolName)}: {(finished.IsError ? _theme.Failure("error") : _theme.Success("ok"))} ({_theme.Dim(string.Create(CultureInfo.InvariantCulture, $"{milliseconds:0} ms"))})"));
+        // An error is the one summary worth repeating: the model reads the tool's text, but the developer watching
+        // the console needs the reason on the line that says something went wrong, not three lines above it.
+        var reason = finished.IsError && !string.IsNullOrWhiteSpace(finished.Summary)
+            ? _theme.Dim(" · " + Compact(finished.Summary))
+            : string.Empty;
+
+        _output.WriteLine(string.Concat(
+            _theme.Dim("  ⎿ "),
+            finished.IsError ? _theme.Failure("error") : _theme.Success("ok"),
+            _theme.Dim(string.Create(CultureInfo.InvariantCulture, $" · {Duration(milliseconds)}")),
+            reason));
     }
 
     private void RenderFinished(AgentReport report)
@@ -354,15 +423,64 @@ internal sealed class ConsoleObserver : IAgentObserver
             return;
         }
 
-        _error.WriteLine(_theme.Dim(string.Create(
-            CultureInfo.InvariantCulture,
-            $"— {Word(report.Outcome)} · {report.Iterations} iteration(s) · {report.Usage}")));
+        var spend = string.Empty;
+        if (_budget?.Invoke() is { Ceiling: > 0 } budget)
+        {
+            spend = Spend(budget.Spent, budget.Ceiling);
+        }
+
+        // An endpoint that reported no usage leaves nothing to add: "unknown in / unknown out" beside a real spend
+        // reads as a broken number rather than a missing one.
+        var usage = report.Usage.IsUnknown
+            ? string.Empty
+            : string.Create(CultureInfo.InvariantCulture, $" · {report.Usage}");
+
+        // A turn that took a minute and a turn that took a second look identical without this, and the developer
+        // deciding whether to send the same request again is exactly the person who needs to know which it was.
+        var elapsed = _turnStarted is { } started
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $" · {Duration(Stopwatch.GetElapsedTime(started).TotalMilliseconds)}")
+            : string.Empty;
+        _turnStarted = null;
+
+        _error.WriteLine(string.Concat(
+            _theme.Accent("✻ "),
+            Word(report.Outcome),
+            _theme.Dim(string.Create(
+                CultureInfo.InvariantCulture,
+                $" · {report.Iterations} iteration(s){elapsed}{usage}{spend}"))));
 
         if (!string.IsNullOrWhiteSpace(report.Detail))
         {
             _error.WriteLine($"  {report.Detail}");
         }
     }
+
+    /// <summary>
+    /// Renders what a turn cost against its ceiling, for the closing summary.
+    /// </summary>
+    /// <param name="spent">The session's tokens so far.</param>
+    /// <param name="ceiling">The session's ceiling; <see cref="long.MaxValue"/> means unlimited.</param>
+    /// <returns>The suffix the summary line appends, such as <c> · 614/1,000 tokens</c>.</returns>
+    /// <remarks>
+    /// The unlimited sentinel is a number rather than infinity, so printing it raw would bury the spend under
+    /// nineteen digits; it is named instead, the same word <c>/budget</c> uses.
+    /// </remarks>
+    private static string Spend(long spent, long ceiling) =>
+        ceiling == long.MaxValue
+            ? string.Create(CultureInfo.InvariantCulture, $" · {spent:n0} tokens (unlimited)")
+            : string.Create(CultureInfo.InvariantCulture, $" · {spent:n0}/{ceiling:n0} tokens");
+
+    /// <summary>
+    /// Formats a duration the way a person reads one: milliseconds under a second, seconds beyond it.
+    /// </summary>
+    /// <param name="milliseconds">The measured duration.</param>
+    /// <returns>Text such as <c>12 ms</c> or <c>1.4 s</c>.</returns>
+    private static string Duration(double milliseconds) =>
+        milliseconds < 1_000
+            ? string.Create(CultureInfo.InvariantCulture, $"{milliseconds:0} ms")
+            : string.Create(CultureInfo.InvariantCulture, $"{milliseconds / 1_000:0.0} s");
 
     private void CloseThinkingLine()
     {

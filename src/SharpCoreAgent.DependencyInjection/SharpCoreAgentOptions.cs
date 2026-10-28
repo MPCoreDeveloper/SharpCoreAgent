@@ -34,14 +34,14 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.</summary>
     public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;
 
-    /// <summary>Gets the per-turn model round-trip ceiling. Default 24.</summary>
-    public int MaxIterations { get; init; } = 24;
+    /// <summary>Gets the per-turn model round-trip ceiling. Default 400.</summary>
+    public int MaxIterations { get; init; } = 400;
 
     /// <summary>Gets the per-request output token ceiling. Default 8 000.</summary>
     public int MaxOutputTokensPerTurn { get; init; } = 8_000;
 
-    /// <summary>Gets the session-wide token budget. Default 250 000.</summary>
-    public long MaxTotalTokens { get; init; } = 250_000;
+    /// <summary>Gets the session-wide token budget. Default 10 000 000.</summary>
+    public long MaxTotalTokens { get; init; } = 10_000_000;
 
     /// <summary>Gets the largest tool result the model is handed. Default 24 000 characters.</summary>
     public int MaxToolResultChars { get; init; } = 24_000;

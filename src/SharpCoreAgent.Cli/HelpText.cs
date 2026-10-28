@@ -28,6 +28,7 @@ internal static class HelpText
           sharpcoreagent index [options]               build, inspect or repair the code index
           sharpcoreagent config [show|get|set|unset|path]
                                                        settings, and where each value comes from
+          sharpcoreagent setup                         the preferences, asked for one at a time
           sharpcoreagent --help | --version
 
           With no command and a terminal on both ends, a session starts. When either stream is
@@ -38,10 +39,10 @@ internal static class HelpText
           --model <id>             run, chat   provider default (deepseek-flash, grok-4.7)
           --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
-          --approval <mode>        run, chat   ask         readonly, ask, allow
-          --max-iterations <n>     run, chat   24
+          --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow
+          --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
-          --max-total-tokens <n>   run, chat   250000
+          --max-total-tokens <n>   run, chat   10000000    the ceiling a session starts with; /budget raises it
           --temperature <x>        run, chat   0.2
           --base-url <url>         run, chat   none        required by openai-compatible
           --credential-file <path> all         none        NAME=value keys, read first; they win over the environment
@@ -51,7 +52,7 @@ internal static class HelpText
           --color <mode>           all         auto        auto, always, never; auto honours NO_COLOR and pipes
           --mode <mode>            run, chat   act         plan reads only and answers with a plan
           --quiet                  run, chat   off         no thinking, tool lines or summary
-          --verbose                run, chat   off         stack traces for unexpected failures
+          --verbose                run, chat   off         stack traces, and a line as each turn starts
           --                       run         —           everything after it is part of the prompt
 
         Config
@@ -60,6 +61,7 @@ internal static class HelpText
           sharpcoreagent config set <name> <value>  write it to the settings file
           sharpcoreagent config unset <name>        remove it; the default applies again
           sharpcoreagent config path                the settings file in use
+          sharpcoreagent setup                      the same file, written by answering five questions
 
           Settings are provider, model, base-url, approval, mode, temperature, max-iterations,
           max-output-tokens, max-total-tokens and credential-file; each accepts what its flag
@@ -122,13 +124,17 @@ internal static class HelpText
           /model                   show the active model
           /model <id>              switch model, keeping the provider
           /model <provider>:<id>   switch provider and model
-          /approval <mode>         readonly, ask or allow; applies to the next tool call
+          /approval [mode]         readonly, ask or allow; bare reports the mode and what it stops asking about,
+                                   allow lasts until exit; /approval forget revokes the yeses given to single tools
           /mode <mode>             plan or act; plan refuses every write and answers with a plan
           /compact [n]             drop old messages, keeping the system prompts and the last n (default 8)
+          /budget [n|+n|unlimited] the session token budget; bare reports what is spent
+          /continue                carry on from the last request; an empty line does the same after a pause
           /usage                   tokens reported per model, and the total
           /cost                    what the reported tokens cost, from a dated table (peak rate where tiered)
           /files                   files and commands from the last turn
           /session                 where the transcript is being written
+          /config [verb]           show, path, set <name> <value>, or ask the questions and save
           /help                    this list
           /exit, /quit             leave; the transcript is saved first
         """;

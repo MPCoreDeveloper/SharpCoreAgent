@@ -19,6 +19,7 @@ public sealed class AgentSession
 {
     private readonly List<ChatMessage> _messages;
     private readonly Dictionary<string, ModelUsage> _usage;
+    private readonly HashSet<string> _approvedTools = new(StringComparer.OrdinalIgnoreCase);
     private readonly DateTimeOffset _createdAtUtc;
     private TokenUsage? _totalUsage;
 
@@ -63,11 +64,87 @@ public sealed class AgentSession
     /// </remarks>
     public AgentMode Mode { get; set; } = AgentMode.Act;
 
+    /// <summary>Gets the tools the developer allowed for the rest of this conversation.</summary>
+    /// <remarks>
+    /// Empty for a resumed transcript on purpose: an approval is a decision about a conversation in
+    /// progress, so reusing a session file must not re-arm the commands a developer once said yes to.
+    /// This is the narrow answer to "stop asking" <c>/approval allow</c> cannot give — approving
+    /// <c>run_shell_command</c> here leaves every file edit still asking.
+    /// </remarks>
+    public IReadOnlyCollection<string> ApprovedTools => _approvedTools;
+
+    /// <summary>Answers whether every later call of one tool may run without asking.</summary>
+    /// <param name="toolName">The tool's name, matched case-insensitively as the registry resolves it.</param>
+    /// <returns><see langword="true"/> when the loop may skip the approval prompt for that tool.</returns>
+    public bool IsToolApproved(string toolName) =>
+        !string.IsNullOrWhiteSpace(toolName) && _approvedTools.Contains(toolName);
+
+    /// <summary>
+    /// Allows every later call of one tool in this conversation.
+    /// </summary>
+    /// <param name="toolName">The tool's name.</param>
+    /// <exception cref="ArgumentException"><paramref name="toolName"/> is null, empty or whitespace.</exception>
+    public void ApproveTool(string toolName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
+        _approvedTools.Add(toolName);
+    }
+
+    /// <summary>
+    /// Forgets every tool approval, so the next destructive call asks again.
+    /// </summary>
+    /// <returns>How many tools were allowed; zero when there was nothing to forget.</returns>
+    /// <remarks>
+    /// The escape hatch for the one mistake a standing approval makes possible: a developer who allowed
+    /// <c>run_shell_command</c> an hour ago and has since opened a workspace they do not trust.
+    /// </remarks>
+    public int ForgetApprovedTools()
+    {
+        var count = _approvedTools.Count;
+        _approvedTools.Clear();
+        return count;
+    }
+
     /// <summary>Gets the transcript so far, in order.</summary>
     public IReadOnlyList<ChatMessage> Messages => _messages;
 
     /// <summary>Gets the token usage accumulated across every turn, or unknown when nothing has been reported.</summary>
     public TokenUsage TotalUsage => _totalUsage ?? TokenUsage.Unknown;
+
+    /// <summary>
+    /// Gets or sets the ceiling on <see cref="TokensSpent"/> for this conversation, or null to use the loop's default.
+    /// </summary>
+    /// <remarks>
+    /// The budget belongs to the conversation rather than to the process. A resumed transcript has already paid for
+    /// the tokens recorded in it, so a resumed session starts with that spend as headroom instead of being killed by
+    /// history it did not create; and a developer who decides to spend more raises the number here instead of
+    /// restarting and losing the reasoning the transcript holds. <see cref="CodingAgent"/> reads this before it falls
+    /// back to <see cref="AgentOptions.MaxTotalTokens"/>; the CLI writes it with <c>/budget</c>.
+    /// </remarks>
+    public long? MaxTotalTokens { get; set; }
+
+    /// <summary>Gets the tokens reported so far, which is what the budget is measured against.</summary>
+    public long TokensSpent => TotalUsage.Total ?? 0;
+
+    /// <summary>
+    /// Raises the budget, so a conversation that ran out continues without losing its transcript.
+    /// </summary>
+    /// <param name="additional">How many tokens to add.</param>
+    /// <param name="fallback">The ceiling to start from when the session has not set one yet.</param>
+    /// <returns>The new ceiling.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="additional"/> is not positive.</exception>
+    /// <remarks>
+    /// Adding to an unlimited ceiling stays unlimited instead of wrapping negative, which would read as a budget
+    /// that is already spent.
+    /// </remarks>
+    public long RaiseBudget(long additional, long fallback)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(additional);
+
+        var current = MaxTotalTokens ?? fallback;
+        MaxTotalTokens = current > long.MaxValue - additional ? long.MaxValue : current + additional;
+        return MaxTotalTokens.Value;
+    }
 
     /// <summary>Gets the usage attributed to each model that served the session, ordered by model name.</summary>
     public IReadOnlyList<ModelUsage> UsageByModel =>

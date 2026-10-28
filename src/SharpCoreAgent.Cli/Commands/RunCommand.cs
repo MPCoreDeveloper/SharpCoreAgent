@@ -46,7 +46,15 @@ internal static class RunCommand
         await IndexCommand.RefreshAsync(provider, cli, cli.Quiet || cli.Json, Console.Out, cancellationToken).ConfigureAwait(false);
 
         var session = new AgentSession(workspace!, model, cli.Approval, options.SystemPrompt) { Mode = cli.Mode };
-        var observer = new ConsoleObserver(Console.Out, Console.Error, cli.Json, cli.Quiet || cli.Json, CliHost.ThemeFor(cli));
+        var observer = new ConsoleObserver(
+            Console.Out,
+            Console.Error,
+            cli.Json,
+            cli.Quiet || cli.Json,
+            CliHost.ThemeFor(cli),
+            verbose: cli.Verbose,
+            budget: () => (session.TokensSpent, session.MaxTotalTokens ?? options.MaxTotalTokens));
+
 
         var report = await agent.RunTurnAsync(session, cli.Prompt, observer, cancellationToken).ConfigureAwait(false);
 

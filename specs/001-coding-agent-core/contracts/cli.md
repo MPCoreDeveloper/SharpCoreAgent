@@ -28,9 +28,9 @@ settings file, its precedence and its exit code are in
 | `--model <id>` | run, chat | provider default | Model identifier, e.g. `deepseek-chat`, `grok-4` |
 | `--workspace <path>` | run, chat | current directory | Root the tools may touch |
 | `--approval <mode>` | run, chat | `ask` | `readonly`, `ask`, `allow` |
-| `--max-iterations <n>` | run, chat | `24` | Loop bound |
+| `--max-iterations <n>` | run, chat | `400` | Loop bound: one turn is tens of model calls, not a handful |
 | `--max-output-tokens <n>` | run, chat | `8000` | Per-request output cap |
-| `--max-total-tokens <n>` | run, chat | `250000` | Session token budget |
+| `--max-total-tokens <n>` | run, chat | `10000000` | Session token budget; `/budget` raises it without a rebuild |
 | `--temperature <x>` | run, chat | `0.2` | Sampling temperature |
 | `--base-url <url>` | run, chat | — | Required for `openai-compatible` |
 | `--credential-file <path>` | all | — | `NAME=value` keys read before the environment; they win over it |
