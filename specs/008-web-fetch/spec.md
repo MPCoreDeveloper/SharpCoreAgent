@@ -1,7 +1,8 @@
 # 008 — Reading the web: one page at a time
 
 **Status**: implemented (T001–T028; T029–T033 deferred, listed in `tasks.md`)
-**Branch**: `feature/008-web-fetch`, merged to `main` as `201a431`
+**Branch**: `feature/008-web-fetch`, merged to `main` as `201a431`; follow-up `3550b53` added the banner-row
+tests and corrected the suite count
 **Depends on**: `001-coding-agent-core` (the tool model and the result contract), `003-terminal-console-agent`
 (the console surface), `007-external-roots` (the precedent for authority granted per invocation)
 
