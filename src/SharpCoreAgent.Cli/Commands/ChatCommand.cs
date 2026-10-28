@@ -138,6 +138,17 @@ internal static class ChatCommand
                 $"+{session.Workspace.Attachments.Count} read-only · {Shorten(session.Workspace.Attachments[0].Root)}")));
         }
 
+        // The network is a fact about this session, so it gets a row only when it is on. The count answers the
+        // follow-up question "and what may it reach?" — public hosts, or the ones named on the command line.
+        if (cli.Web)
+        {
+            rows.Add(("web", cli.WebAllowedHosts.Count == 0
+                ? "on · public hosts only"
+                : string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"on · +{cli.WebAllowedHosts.Count} named host(s)")));
+        }
+
         if (cli.SaveSession)
         {
             rows.Add(("session", path));

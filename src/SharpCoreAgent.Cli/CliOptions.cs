@@ -129,6 +129,24 @@ internal sealed record CliOptions
     public IReadOnlyList<string> AdditionalRoots { get; init; } = [];
 
     /// <summary>
+    /// Gets a value indicating whether this invocation may read the web.
+    /// </summary>
+    /// <remarks>
+    /// <c>--web</c>, and nothing else: not a settings key, not an environment variable. The network is a decision about
+    /// one task, and a default that outlived the task would be granted by whoever last ran <c>config set</c>.
+    /// </remarks>
+    public bool Web { get; init; }
+
+    /// <summary>
+    /// Gets the hosts this invocation may read even though their addresses are refused, in the order they were named.
+    /// </summary>
+    /// <remarks>
+    /// Filled by repeated <c>--web-allow</c>. It is authority for one invocation, like <see cref="AdditionalRoots"/>, and
+    /// <see cref="SettableNames"/> deliberately does not include it.
+    /// </remarks>
+    public IReadOnlyList<string> WebAllowedHosts { get; init; } = [];
+
+    /// <summary>
     /// Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.
     /// </summary>
     /// <remarks>
@@ -237,6 +255,8 @@ internal sealed record CliOptions
         ModelId = Model,
         WorkspaceRoot = Workspace,
         AdditionalRoots = AdditionalRoots,
+        WebAccessEnabled = Web,
+        WebAllowedHosts = WebAllowedHosts,
         Approval = Approval,
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
@@ -324,6 +344,15 @@ internal sealed record CliOptions
             {
                 AdditionalRoots = [.. parsed.AdditionalRoots, .. SplitRoots(environment("SHARPCOREAGENT_ADD_ROOTS"))],
             };
+
+            // A host named without the switch that would use it is refused, not ignored: the developer believes they have
+            // granted a host, and finding out at the refusal instead is how a usable tool turns into a mysterious one.
+            if (parsed.WebAllowedHosts.Count > 0 && !parsed.Web)
+            {
+                throw new CliUsageException(
+                    "--web-allow needs --web.",
+                    "For example: sharpcoreagent run \"read the changelog\" --web --web-allow localhost");
+            }
         }
 
         return ApplySettings(parsed, loadSettings, environment);
@@ -603,6 +632,7 @@ internal sealed record CliOptions
 
             case CliCommand.Index:
                 RejectAttachmentRoots(options);
+                RejectWebFlags(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException(
@@ -625,6 +655,7 @@ internal sealed record CliOptions
             case CliCommand.Config:
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
+                RejectWebFlags(options);
                 if (options.Json)
                 {
                     throw new CliUsageException(
@@ -637,6 +668,7 @@ internal sealed record CliOptions
             case CliCommand.Setup:
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
+                RejectWebFlags(options);
                 if (options.Json)
                 {
                     throw new CliUsageException(
@@ -656,6 +688,7 @@ internal sealed record CliOptions
             default:
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
+                RejectWebFlags(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException($"models does not take '{positionals[0]}'.");
@@ -1001,6 +1034,25 @@ internal sealed record CliOptions
     }
 
     /// <summary>
+    /// Rejects <c>--web</c> and <c>--web-allow</c> on the commands that never make a request.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">The network was asked for on a command that cannot use it.</exception>
+    /// <remarks>
+    /// The same reasoning as <see cref="RejectAttachmentRoots"/>, with a sharper edge: a developer who typed <c>--web</c>
+    /// and saw nothing happen would conclude the fetch was refused by the safety rules rather than never offered.
+    /// </remarks>
+    private static void RejectWebFlags(CliOptions options)
+    {
+        if (options.Web || options.WebAllowedHosts.Count > 0)
+        {
+            throw new CliUsageException(
+                "--web and --web-allow apply to run and chat.",
+                "For example: sharpcoreagent run \"read the release notes\" --web");
+        }
+    }
+
+    /// <summary>
     /// Parses an approval mode name.
     /// </summary>
     /// <param name="value">The text to parse, case-insensitively.</param>
@@ -1148,6 +1200,15 @@ internal sealed record CliOptions
                 return options with
                 {
                     AdditionalRoots = [.. options.AdditionalRoots, TakeValue(args, ref index, name)],
+                };
+
+            case "--web":
+                return options with { Web = true };
+
+            case "--web-allow":
+                return options with
+                {
+                    WebAllowedHosts = [.. options.WebAllowedHosts, TakeValue(args, ref index, name)],
                 };
 
             case "--approval":

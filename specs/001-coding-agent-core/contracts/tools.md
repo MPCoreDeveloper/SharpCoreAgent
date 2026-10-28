@@ -65,6 +65,11 @@ Obligations:
 {"type":"object","properties":{},"required":[],"additionalProperties":false}
 ```
 
+`fetch_url` (008 — registered only when `--web` is passed)
+```json
+{"type":"object","properties":{"url":{"type":"string","description":"Absolute http or https URL to read."},"max_chars":{"type":"integer","minimum":1,"maximum":60000,"description":"Longest text to return; defaults to the tool's ceiling."}},"required":["url"],"additionalProperties":false}
+```
+
 `write_file`
 ```json
 {"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"overwrite":{"type":"boolean","description":"Defaults to true. When false, an existing file is an error."}},"required":["path","content"],"additionalProperties":false}

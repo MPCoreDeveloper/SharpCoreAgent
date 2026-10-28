@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Net;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +14,7 @@ using SharpCoreAgent.Infrastructure.Credentials;
 using SharpCoreAgent.Infrastructure.Providers;
 using SharpCoreAgent.Infrastructure.Sessions;
 using SharpCoreAgent.Infrastructure.Tools;
+using SharpCoreAgent.Infrastructure.Web;
 
 namespace SharpCoreAgent.DependencyInjection;
 
@@ -99,6 +101,11 @@ public static class ServiceCollectionExtensions
 
         AddTools(services);
 
+        if (options.WebAccessEnabled)
+        {
+            AddWeb(services, options);
+        }
+
         if (options.IndexEnabled)
         {
             AddSharpCoreAgentIndex(services, options);
@@ -117,6 +124,9 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
+    /// <c>fetch_url</c> is not one of them: it is registered by <see cref="AddWeb"/> only when the developer asked for the
+    /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off.
+    ///
     /// The tools are singletons because they are stateless: each call resolves every path through the
     /// workspace it is handed, so one instance serves every session in the process. The five index-backed
     /// tools take an optional <c>ICodeIndex</c>, which the built-in container leaves null when the host
@@ -149,6 +159,37 @@ public static class ServiceCollectionExtensions
         // Built once from the registered tools; ToolRegistry rejects duplicate names, which turns a
         // copy-pasted registration into a startup failure instead of a model-visible ambiguity.
         services.AddSingleton<IToolRegistry>(provider => new ToolRegistry(provider.GetServices<ITool>()));
+    }
+
+    /// <summary>
+    /// Registers <c>fetch_url</c>: its client, its ceilings and its address resolver.
+    /// </summary>
+    /// <param name="services">The container to add to.</param>
+    /// <param name="options">The host's settings; the named hosts come from <see cref="SharpCoreAgentOptions.WebAllowedHosts"/>.</param>
+    /// <remarks>
+    /// Called only when the developer asked for the network, so a process that did not ask for it has no web client, no
+    /// fetch tool and no <see cref="ITool"/> that could reach anything. That is a stronger guarantee than a tool that
+    /// checks a flag at call time: the tool does not exist to be called.
+    /// <para>
+    /// The client is deliberately its own. It carries no default header, no cookie container and no automatic redirect,
+    /// because the tool counts and judges each hop itself — and because the model adapters' client carries an
+    /// <c>Authorization</c> header that must never travel to a third-party page.
+    /// </para>
+    /// </remarks>
+    private static void AddWeb(IServiceCollection services, SharpCoreAgentOptions options)
+    {
+        services.AddHttpClient(WebFetchOptions.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                ConnectTimeout = TimeSpan.FromSeconds(10),
+                AutomaticDecompression = DecompressionMethods.All,
+            });
+
+        services.TryAddSingleton<IWebAddressResolver>(DnsWebAddressResolver.Instance);
+        services.AddSingleton(new WebFetchOptions { AllowedHosts = options.WebAllowedHosts });
+        services.AddSingleton<ITool, FetchUrlTool>();
     }
 
     /// <summary>

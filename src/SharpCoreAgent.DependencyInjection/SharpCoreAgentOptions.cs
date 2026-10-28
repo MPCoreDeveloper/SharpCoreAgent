@@ -42,6 +42,26 @@ public sealed record SharpCoreAgentOptions
     /// </remarks>
     public IReadOnlyList<string> AdditionalRoots { get; init; } = [];
 
+    /// <summary>
+    /// Gets a value indicating whether this process may read the web. Default <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// The switch that registers <c>fetch_url</c>. Off by default, and deliberately not part of the settings file or the
+    /// environment: a preference that outlives one invocation is the wrong shape for a capability that reaches the
+    /// internet, because the developer who turned it on for one question would never learn it stayed on.
+    /// </remarks>
+    public bool WebAccessEnabled { get; init; }
+
+    /// <summary>
+    /// Gets the hosts the developer named for this invocation, which the address refusal does not apply to.
+    /// </summary>
+    /// <remarks>
+    /// Empty by default, and read only when <see cref="WebAccessEnabled"/> is set. A host, a <c>host:port</c>, or an IP
+    /// literal; matched exactly and case-insensitively. There are no wildcards: naming three hosts is a decision a
+    /// reviewer can check, while <c>*.internal</c> is a rule nobody reads.
+    /// </remarks>
+    public IReadOnlyList<string> WebAllowedHosts { get; init; } = [];
+
     /// <summary>Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.</summary>
     public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;
 
@@ -145,7 +165,7 @@ public sealed record SharpCoreAgentOptions
             Temperature = Temperature,
             Approval = Approval,
             SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt)
-                ? PromptLibrary.SystemPromptFor(IndexEnabled)
+                ? PromptLibrary.SystemPromptFor(IndexEnabled, WebAccessEnabled)
                 : SystemPrompt,
         }.Validate();
     }
