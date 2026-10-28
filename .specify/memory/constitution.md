@@ -1,6 +1,35 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.0.2 -> 1.1.0 (MINOR: three constraints materially expanded and one technical
+  constraint clarified; no principle removed, no gate relaxed, no existing code path invalidated)
+Amended:
+  - II. Tools Are the Only Door to the Machine — a workspace MAY carry additional roots the
+    developer names explicitly. Those roots are readable and never writable, and a write, a delete
+    or a shell command still resolves against the primary root alone. The change is what lets one
+    turn read a second project without turning every path on the machine into ambient authority.
+  - III. Untrusted Output, Validated at the Boundary — the ban on `Process.Start` outside the shell
+    tool gains a second, identically shaped exception: the MCP client. Both run a process the
+    developer named on the command line; neither runs one the model chose.
+  - VIII. Secrets Stay in the Process — "and nowhere else" is narrowed to what it always meant: no
+    telemetry, phone-home or update check. Network access beyond the model endpoint becomes a
+    capability the developer opts into per process (`--web`, `--mcp`), reached through a tool that is
+    bounded, approval-gated and recorded. Every rule about keys is unchanged.
+  - Technical Constraints — a process the developer supplies as an MCP server is not a native binary
+    this repository ships or distributes, so it is outside the "no native binaries" rule rather than
+    an exception to it.
+Added sections: none. Removed sections: none.
+Migration: none required. Every default is unchanged — no additional roots, no MCP server, web
+  access off — so a build that configures nothing behaves exactly as it did under 1.0.2. The
+  surfaces this amendment creates are `--add-root` / `SHARPCOREAGENT_ADD_ROOTS` (read-only attached
+  roots), `--web` (fetching a URL) and `--mcp` (a developer-supplied stdio server), each opt-in and
+  each documented in `HelpText` and `README.md` in the round that ships it.
+Follow-up TODOs: none.
+-->
+
+<!--
+Sync Impact Report
+==================
 Version change: 1.0.1 -> 1.0.2 (PATCH: one constraint sentence made explicit and enforceable; no
   principle, section or quality gate added, removed or reworded in intent)
 Amended: the Runtime constraint said `net11.0` for every project and excluded `net10.0`. It now says
@@ -73,7 +102,10 @@ The agent touches the filesystem, the shell and the network only through a regis
   gate before execution and every execution is recorded in the transcript.
 - Path-taking tools resolve their argument against the workspace root and MUST reject any
   resolution that escapes it (including `..`, absolute paths outside the root, and reparse points
-  that resolve outside the root).
+  that resolve outside the root). A workspace MAY carry additional roots the developer named
+  explicitly, on the command line or in the one environment variable that exists for them; those
+  roots are readable and never writable, and a tool that writes, deletes or runs a command resolves
+  against the primary root alone.
 - Destructive capabilities (write, delete, shell) are gated by an approval mode whose default is
   the safe one when the option is absent rather than when it is present.
 
@@ -90,7 +122,9 @@ Model output is user input from a stranger. It is parsed, never trusted, never e
 - Tool results returned to the model are bounded in size (a truncated result says that it was
   truncated) so one verbose command cannot silently consume the context window.
 - No `eval`, no `Invoke-Expression`, no dynamic assembly loading, no `Process.Start` outside the
-  shell tool. Shell arguments are passed as an argument list, never concatenated into a command
+  shell tool and the MCP client. Both exceptions have the same shape: a process the developer named
+  on the command line, never one the model chose, speaking a documented protocol over a pipe the
+  process owns. Shell arguments are passed as an argument list, never concatenated into a command
   string.
 - Text produced by the model or by a tool MUST NOT be interpreted as a control instruction by the
   host; only the orchestrator decides what happens next.
@@ -167,8 +201,10 @@ a victim.
 - The HTTP layer redacts `Authorization` and any configured header before a request is described.
 - Transcripts are written only when asked for, into `.sharpcoreagent/` inside the workspace, which is
   git-ignored.
-- No telemetry, no phone-home, no update check. Outbound traffic goes to the configured model
-  endpoint and nowhere else.
+- No telemetry, no phone-home, no update check. Without an explicit instruction, outbound traffic
+  goes to the configured model endpoint and nowhere else. Network access beyond it is a capability
+  the developer opts into per process (`--web`, `--mcp`) and never a default, and it is reached
+  through a tool that is bounded, approval-gated and recorded like any other.
 
 **Rationale**: the agent runs with the user's credentials on the user's machine. A key in a
 transcript is a key in a screenshot, a paste and a support ticket.
@@ -189,7 +225,9 @@ transcript is a key in a screenshot, a paste and a support ticket.
   `Microsoft.Extensions.Http` and `Microsoft.Extensions.Logging.Abstractions`. A new dependency
   needs a reason the BCL cannot satisfy, and the reason goes in the pull request.
 - **No native binaries** and no platform-specific code outside the shell tool, which selects its
-  launcher (`cmd.exe` on Windows, `/bin/sh` elsewhere) at construction time.
+  launcher (`cmd.exe` on Windows, `/bin/sh` elsewhere) at construction time. A process the developer
+  supplies as an MCP server is not a binary this repository ships or distributes: it is named on the
+  command line, speaks JSON-RPC over stdio, and is bound by what a shell command is bound by.
 - **Determinism**: the same transcript, the same options and the same scripted model produce the
   same events, in the same order, on every run.
 
@@ -221,7 +259,7 @@ rationale, the version bump described below, and a migration note for any surfac
 - `docs/` and `README.md` are governed as code: a behaviour change that contradicts them is a bug
   in one of the two, and the pull request fixes both.
 
-**Version**: 1.0.2 | **Ratified**: 2026-10-23 | **Last Amended**: 2026-10-25
+**Version**: 1.1.0 | **Ratified**: 2026-10-23 | **Last Amended**: 2026-10-28
 
 
 
