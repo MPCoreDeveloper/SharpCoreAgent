@@ -40,6 +40,8 @@ internal static class HelpText
           --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
           --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
+          --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
+          --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow
           --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
@@ -59,6 +61,11 @@ internal static class HelpText
           An attached root is read-only. read_file, list_directory and search_text answer from it when
           given an absolute path, list_roots reports every root, and every write, delete and shell
           command still resolves against --workspace alone. A relative path always means --workspace.
+
+          --web registers one more tool, fetch_url. It reads http and https only, sends no cookie and no
+          credential, follows at most five redirects, and refuses loopback, private, link-local and
+          cloud-metadata addresses unless --web-allow names the host. It returns text, never JavaScript,
+          and a result says whether it was cut. Neither flag is a setting: both are gone with the process.
 
         Config
           sharpcoreagent config                     every setting, its value and its source
