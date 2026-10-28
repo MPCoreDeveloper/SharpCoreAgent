@@ -333,9 +333,84 @@ public sealed class CliOptionsTests
         Assert.Throws<CliUsageException>(() => CliOptions.Parse(["setup", "--json"]));
     }
 
+    [Fact]
+    public void AddRootIsRepeatableAndKeepsTheOrderItWasGiven()
+    {
+        var options = CliOptions.Parse(
+            ["chat", "--add-root", "..\\Shared", "--add-root", "..\\Proto"],
+            NoEnvironment);
+
+        Assert.Equal(["..\\Shared", "..\\Proto"], options.AdditionalRoots);
+        Assert.Equal(options.AdditionalRoots, options.ToSharpCoreAgentOptions().AdditionalRoots);
+    }
+
+    [Fact]
+    public void AddRootIsAcceptedOnRunAndOnABareInvocation()
+    {
+        Assert.Equal(
+            ["..\\Shared"],
+            CliOptions.Parse(["run", "hi", "--add-root", "..\\Shared"], NoEnvironment).AdditionalRoots);
+        Assert.Equal(
+            ["..\\Shared"],
+            CliOptions.Parse(["--add-root", "..\\Shared"], NoEnvironment, Interactive).AdditionalRoots);
+    }
+
+    [Fact]
+    public void TheEnvironmentSuppliesRootsAfterTheCommandLinesOwn()
+    {
+        var separator = Path.PathSeparator;
+        var options = CliOptions.Parse(
+            ["chat", "--add-root", "typed"],
+            Environment(("SHARPCOREAGENT_ADD_ROOTS", $"first{separator}second")));
+
+        // Command line first, in its own order, then the variable's: no list is re-sorted.
+        Assert.Equal(["typed", "first", "second"], options.AdditionalRoots);
+    }
+
+    [Fact]
+    public void TheEnvironmentVariableDropsBlankEntries()
+    {
+        var separator = Path.PathSeparator;
+
+        Assert.Equal(
+            ["only"],
+            CliOptions.SplitRoots($"{separator}{separator} only {separator}"));
+        Assert.Empty(CliOptions.SplitRoots(null));
+        Assert.Empty(CliOptions.SplitRoots("   "));
+    }
+
+    [Fact]
+    public void AddRootIsAUsageErrorOnTheCommandsWithoutAWorkspace()
+    {
+        foreach (var command in new[] { "models", "index", "config" })
+        {
+            var error = Assert.Throws<CliUsageException>(() =>
+                CliOptions.Parse([command, "--add-root", "..\\Shared"], NoEnvironment));
+
+            Assert.Contains("--add-root applies to run and chat", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ABadRootFailsWhenTheWorkspaceIsOpenedAndNamesThePath()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "sharpcoreagent-missing-" + Guid.NewGuid().ToString("N"));
+        var options = CliOptions.Parse(["chat", "--add-root", missing], NoEnvironment);
+
+        // Parsing is pure: the directory is checked when the workspace is composed, which is where the message
+        // can name the root without the parser touching the file system.
+        var error = Assert.Throws<DirectoryNotFoundException>(
+            () => options.ToSharpCoreAgentOptions().CreateWorkspace());
+
+        Assert.Contains(missing, error.Message, StringComparison.Ordinal);
+        Assert.Contains("attachment root", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 
     private static bool NotInteractive() => false;
+
+    private static bool Interactive() => true;
 
 
     private static Func<string, string?> Environment(params (string Name, string Value)[] pairs) =>

@@ -131,6 +131,25 @@ preserves one index, one staleness story and one meaning for `index verify`.
 `ToolResult`, the command writes it to the console, and the banner uses only the count, because one
 line of chrome is enough.
 
+## As built — where the implementation left this plan
+
+Four places differ from the plan, each for a reason the round's own requirements forced:
+
+1. **`search_text` gained an optional `path` argument.** The tool had no path argument at all — it always
+   walked `Workspace.Root` — so "`search_text` accepts the same absolute path" (US1) could not be true
+   without one. It is additive: absent, the tool behaves exactly as before, and a path that names a file
+   searches that file.
+2. **`owner` is `null` for the primary root.** The plan had it point at whichever root answered; making it
+   `null` for the primary root keeps "is this an attachment?" a comparison-free question for the index
+   tools, and read tools spend one `??` to get the root they should render against.
+3. **The banner shortens the attachment path itself** (46 characters, tail kept) before the row renderer
+   sees it. The renderer drops the *head* of a value that does not fit, and the head of this value is the
+   count — so without this, a deep checkout would print a roots row with no number in it, which is the one
+   thing FR-011 asks the row to say.
+4. **A resumed `chat` re-applies the current invocation's roots** to the workspace root recorded in the
+   transcript. FR-009 says a resume inherits nothing; without the re-application, an attachment passed to
+   the resuming command would be silently absent from the session.
+
 ## Complexity Tracking
 
 - **A four-parameter read resolver (`path`, `full`, `owner`, `error`).** The `owner` out-parameter is

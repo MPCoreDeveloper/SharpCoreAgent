@@ -137,6 +137,57 @@ public sealed class InteractiveStartTests
         }
     }
 
+    [Fact]
+    public async Task TheBannerNamesTheAttachmentsWhenThereAreAny()
+    {
+        using var directory = TempDirectory.Create();
+        var app = Directory.CreateDirectory(Path.Combine(directory.Path, "app")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(directory.Path, "shared")).FullName;
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = Interactive;
+
+        try
+        {
+            using var console = new ConsoleScope(string.Empty);
+            var exitCode = await ProgramEntry.RunAsync(
+                ["--provider", "demo", "--workspace", app, "--add-root", shared, "--no-session"]);
+
+            var banner = console.Error.ToString();
+            Assert.Equal(0, exitCode);
+
+            // The count always survives: the row shortens its own path rather than letting the box drop the head
+            // of the value, which is where the count lives.
+            Assert.Contains("roots      +1 read-only · ", banner, StringComparison.Ordinal);
+            Assert.Contains(Path.GetFileName(shared), banner, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
+    [Fact]
+    public async Task TheBannerHasNoRootsRowWithoutAttachments()
+    {
+        using var directory = TempDirectory.Create();
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = Interactive;
+
+        try
+        {
+            using var console = new ConsoleScope(string.Empty);
+            var exitCode = await ProgramEntry.RunAsync(
+                ["--provider", "demo", "--workspace", directory.Path, "--no-session"]);
+
+            Assert.Equal(0, exitCode);
+            Assert.DoesNotContain("roots      ", console.Error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
     private static bool Interactive() => true;
 
     private static bool NotInteractive() => false;

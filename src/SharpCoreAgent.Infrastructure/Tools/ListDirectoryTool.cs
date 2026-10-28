@@ -18,12 +18,12 @@ public sealed class ListDirectoryTool : ITool
     public const string Name = "list_directory";
 
     private const string Schema =
-        """{"type":"object","properties":{"path":{"type":"string","description":"Directory relative to the workspace root. Defaults to the root."},"recursive":{"type":"boolean","description":"Recurse into subdirectories."}},"required":[],"additionalProperties":false}""";
+        """{"type":"object","properties":{"path":{"type":"string","description":"Directory relative to the workspace root, or an absolute path inside an attachment. Defaults to the root."},"recursive":{"type":"boolean","description":"Recurse into subdirectories."}},"required":[],"additionalProperties":false}""";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "List files and directories under a path in the workspace. Directories end with '/'. Use it to find out what exists before reading or writing.",
+        "List files and directories under a path in the workspace, or under an absolute path inside a read-only attachment that list_roots reports. Directories end with '/'. Use it to find out what exists before reading or writing.",
         Schema);
 
     /// <inheritdoc />
@@ -42,12 +42,14 @@ public sealed class ListDirectoryTool : ITool
         var path = arguments.GetOptionalString("path") ?? ".";
         var recursive = arguments.GetOptionalBool("recursive", false);
 
-        if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
+        if (!PathSafety.TryResolveRead(context.Workspace, path, out var fullPath, out var owner, out var error))
         {
             return ValueTask.FromResult(ToolResult.Refused(toolCall.Id, Name, error!));
         }
 
-        var relative = context.Workspace.ToRelative(fullPath);
+        // An attachment answers with paths relative to itself, because that is the tree the model asked about.
+        var answered = owner ?? context.Workspace;
+        var relative = answered.ToRelative(fullPath);
         if (!Directory.Exists(fullPath))
         {
             return ValueTask.FromResult(ToolResult.Failure(
@@ -69,7 +71,7 @@ public sealed class ListDirectoryTool : ITool
                 break;
             }
 
-            var shown = recursive ? context.Workspace.ToRelative(entry.Path) : entry.Name;
+            var shown = recursive ? answered.ToRelative(entry.Path) : entry.Name;
             lines.Add(entry.IsDirectory
                 ? string.Create(CultureInfo.InvariantCulture, $"d {shown}/")
                 : string.Create(CultureInfo.InvariantCulture, $"f {shown}"));

@@ -90,4 +90,41 @@ public sealed class SearchTextToolTests
         Assert.EndsWith(TextLimits.TruncatedMarker, result.Content, StringComparison.Ordinal);
         Assert.Equal(2, result.Content.Split('\n').Length - 1);
     }
+
+    [Fact]
+    public async Task SearchesAnAttachmentWhenGivenItsAbsolutePath()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        ToolTestWorkspace.WriteUnder(attachment, "src/Order.cs", "// needle in the attachment\n");
+        sandbox.Write("src/app.cs", "// needle in the workspace\n");
+
+        var result = await new SearchTextTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "search_text",
+                ToolTestWorkspace.Args(new { pattern = "needle", path = attachment })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Equal("src/Order.cs:1: // needle in the attachment", result.Content);
+
+        // The hit is reported relative to the tree that answered, and the effect says which scope was searched.
+        Assert.Equal(new ToolEffect(ToolEffectKind.Read, "."), Assert.Single(result.Effects));
+    }
+
+    [Fact]
+    public async Task ASingleFilePathSearchesThatFileOnly()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write("a.txt", "needle\n");
+        sandbox.Write("b.txt", "needle\n");
+
+        var result = await new SearchTextTool().ExecuteAsync(
+            ToolTestWorkspace.Call("search_text", """{"pattern":"needle","path":"a.txt"}"""),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.Equal("a.txt:1: needle", result.Content);
+    }
 }

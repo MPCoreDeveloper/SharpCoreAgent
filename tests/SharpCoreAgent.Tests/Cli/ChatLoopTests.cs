@@ -212,6 +212,34 @@ public sealed class ChatLoopTests
         Assert.DoesNotContain("(this session only", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SlashRootsNamesThePrimaryRootAndEveryAttachment()
+    {
+        using var directory = TempDirectory.Create();
+        var app = Directory.CreateDirectory(Path.Combine(directory.Path, "app")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(directory.Path, "shared")).FullName;
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = () => true;
+
+        try
+        {
+            using var console = new ConsoleScope("/roots\n/exit\n");
+            var exitCode = await ProgramEntry.RunAsync(
+                [
+                    "--provider", "demo", "--workspace", app, "--add-root", shared, "--no-session",
+                ]).WaitAsync(Ceiling, TestContext.Current.CancellationToken);
+
+            var output = console.Out.ToString();
+            Assert.Equal(0, exitCode);
+            Assert.Contains($"primary    {app}", output, StringComparison.Ordinal);
+            Assert.Contains($"read-only  {shared}", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
     /// <summary>
     /// Counts how often a line appears in a stream, so a test can prove the loop took the same door twice.
     /// </summary>

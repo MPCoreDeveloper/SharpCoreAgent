@@ -44,7 +44,7 @@ public sealed class ReplaceInFileTool : ITool, IToolPreview
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Replace fragments in an existing file, leaving the rest of the file byte-identical. Prefer this over write_file: it cannot drop lines the model did not intend to change. Pass find/replace for one fragment, or edits for several applied in order (the call is all-or-nothing). A fragment must be unique unless all=true; trailing whitespace and indentation differences are tolerated and reported.",
+        "Replace fragments in an existing file in the workspace. An attached root is read-only and refuses every write. Prefer this over write_file: it cannot drop lines the model did not intend to change. Pass find/replace for one fragment, or edits for several applied in order (the call is all-or-nothing). A fragment must be unique unless all=true; trailing whitespace and indentation differences are tolerated and reported.",
         Schema);
 
     /// <inheritdoc />
@@ -116,7 +116,7 @@ public sealed class ReplaceInFileTool : ITool, IToolPreview
 
         if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
         {
-            return (null, error, true);
+            return (null, PathSafety.ExplainWriteRefusal(context.Workspace, path, error!), true);
         }
 
         var relative = context.Workspace.ToRelative(fullPath);

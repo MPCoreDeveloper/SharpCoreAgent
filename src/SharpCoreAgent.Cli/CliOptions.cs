@@ -119,6 +119,16 @@ internal sealed record CliOptions
     public string Workspace { get; init; } = Directory.GetCurrentDirectory();
 
     /// <summary>
+    /// Gets the read-only roots the read tools may answer from, in the order they were named.
+    /// </summary>
+    /// <remarks>
+    /// Filled by repeated <c>--add-root</c> and then by <c>SHARPCOREAGENT_ADD_ROOTS</c>. Exactly one setting
+    /// feeds it and the values are never persisted: this is authority for one invocation, not a preference, and
+    /// <see cref="SettableNames"/> deliberately does not include it.
+    /// </remarks>
+    public IReadOnlyList<string> AdditionalRoots { get; init; } = [];
+
+    /// <summary>
     /// Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.
     /// </summary>
     /// <remarks>
@@ -226,6 +236,7 @@ internal sealed record CliOptions
         Provider = Provider,
         ModelId = Model,
         WorkspaceRoot = Workspace,
+        AdditionalRoots = AdditionalRoots,
         Approval = Approval,
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
@@ -303,8 +314,33 @@ internal sealed record CliOptions
             };
         }
 
+        // A root is authority for a session rather than a preference for the build, so the variable is read
+        // only where a session exists: `models` and `config` never open a workspace, and `index` describes
+        // exactly one tree. Its roots come after the ones typed here, in the order given, so the command line
+        // wins the order without either list being re-sorted.
+        if (parsed.Command is CliCommand.Run or CliCommand.Chat)
+        {
+            parsed = parsed with
+            {
+                AdditionalRoots = [.. parsed.AdditionalRoots, .. SplitRoots(environment("SHARPCOREAGENT_ADD_ROOTS"))],
+            };
+        }
+
         return ApplySettings(parsed, loadSettings, environment);
     }
+
+    /// <summary>
+    /// Splits the <c>SHARPCOREAGENT_ADD_ROOTS</c> value into its entries.
+    /// </summary>
+    /// <param name="value">The variable's value, or <see langword="null"/> when it is unset.</param>
+    /// <returns>The entries, in order, with blank ones dropped.</returns>
+    /// <remarks>
+    /// Split on <see cref="Path.PathSeparator"/> — <c>;</c> on Windows, <c>:</c> elsewhere — because a Windows
+    /// absolute path already contains a colon, so one separator cannot serve both platforms.
+    /// </remarks>
+    public static IReadOnlyList<string> SplitRoots(string? value) => string.IsNullOrWhiteSpace(value)
+        ? []
+        : [.. value.Split(Path.PathSeparator).Select(entry => entry.Trim()).Where(entry => entry.Length > 0)];
 
     /// <summary>
     /// Gets the names <c>config</c> accepts, in the order <c>config show</c> prints them.
@@ -566,6 +602,7 @@ internal sealed record CliOptions
                 return options with { Command = CliCommand.Chat };
 
             case CliCommand.Index:
+                RejectAttachmentRoots(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException(
@@ -587,6 +624,7 @@ internal sealed record CliOptions
 
             case CliCommand.Config:
                 RejectIndexFlags(options);
+                RejectAttachmentRoots(options);
                 if (options.Json)
                 {
                     throw new CliUsageException(
@@ -598,6 +636,7 @@ internal sealed record CliOptions
 
             case CliCommand.Setup:
                 RejectIndexFlags(options);
+                RejectAttachmentRoots(options);
                 if (options.Json)
                 {
                     throw new CliUsageException(
@@ -616,6 +655,7 @@ internal sealed record CliOptions
 
             default:
                 RejectIndexFlags(options);
+                RejectAttachmentRoots(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException($"models does not take '{positionals[0]}'.");
@@ -942,6 +982,25 @@ internal sealed record CliOptions
     }
 
     /// <summary>
+    /// Rejects <c>--add-root</c> on the commands that have no workspace to attach a root to.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">A root was named for a command that cannot use one.</exception>
+    /// <remarks>
+    /// Accepting the flag and ignoring it would be worse than refusing it: the developer would believe the
+    /// session could read the other repository and only find out when a read was refused.
+    /// </remarks>
+    private static void RejectAttachmentRoots(CliOptions options)
+    {
+        if (options.AdditionalRoots.Count > 0)
+        {
+            throw new CliUsageException(
+                "--add-root applies to run and chat.",
+                "For example: sharpcoreagent chat --add-root ..\\Shared.Contracts");
+        }
+    }
+
+    /// <summary>
     /// Parses an approval mode name.
     /// </summary>
     /// <param name="value">The text to parse, case-insensitively.</param>
@@ -1084,6 +1143,12 @@ internal sealed record CliOptions
 
             case "--workspace":
                 return options with { Workspace = TakeValue(args, ref index, name) };
+
+            case "--add-root":
+                return options with
+                {
+                    AdditionalRoots = [.. options.AdditionalRoots, TakeValue(args, ref index, name)],
+                };
 
             case "--approval":
                 var approval = TakeValue(args, ref index, name);

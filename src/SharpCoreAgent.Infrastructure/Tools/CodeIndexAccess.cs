@@ -1,3 +1,4 @@
+using System.Globalization;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Index;
@@ -154,11 +155,49 @@ internal static class CodeIndexAccess
 
         if (!workspace.TryResolve(path.Trim(), out var fullPath, out var error))
         {
+            // A path an attachment would have accepted is not an escape: the index simply does not describe
+            // that tree. Saying which of the two it is sends the model to read_file instead of to a guess.
+            if (workspace.TryResolveRead(path.Trim(), out var attachmentPath, out var owner, out _) && owner is not null)
+            {
+                refusal = ToolResult.Refused(callId, toolName, NotIndexed(owner, attachmentPath));
+                return null;
+            }
+
             refusal = ToolResult.Refused(callId, toolName, error ?? $"path '{path}' is not inside the workspace.");
             return null;
         }
 
         var relative = workspace.ToRelative(fullPath);
         return string.Equals(relative, ".", StringComparison.Ordinal) ? null : relative;
+    }
+
+    /// <summary>
+    /// Names the attachment a path belongs to, so the model learns why the index cannot answer.
+    /// </summary>
+    /// <param name="attachment">The attachment that contains the path.</param>
+    /// <param name="fullPath">The path inside it.</param>
+    /// <returns>One sentence naming the tree and the two tools that can read it.</returns>
+    /// <remarks>
+    /// The label is the attachment's leaf name plus the path inside it, which is short enough for a result the
+    /// model pays for and specific enough that two attachments with the same layout cannot be confused.
+    /// </remarks>
+    private static string NotIndexed(Workspace attachment, string fullPath)
+    {
+        var relative = attachment.ToRelative(fullPath);
+        var leaf = Path.GetFileName(attachment.Root);
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"'{Label(leaf, relative)}' is an attachment and is not indexed. read_file and search_text can read it; search_code answers from the primary root only.");
+    }
+
+    private static string Label(string leaf, string relative)
+    {
+        if (relative == ".")
+        {
+            return leaf;
+        }
+
+        return leaf.Length == 0 ? relative : string.Concat(leaf, "/", relative);
     }
 }

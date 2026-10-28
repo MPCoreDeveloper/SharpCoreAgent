@@ -31,6 +31,17 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the directory the tools are confined to. Default the current directory.</summary>
     public string WorkspaceRoot { get; init; } = Directory.GetCurrentDirectory();
 
+    /// <summary>
+    /// Gets the read-only roots the read tools may also answer from, in the order the developer named them.
+    /// </summary>
+    /// <remarks>
+    /// Empty by default, and deliberately not part of the settings file: a directory the agent may read is
+    /// authority for one invocation, not a preference that outlives it. <see cref="CreateWorkspace"/> is the one
+    /// place they are applied, so the workspace a session uses and the workspace the index registration creates
+    /// cannot disagree about which roots exist.
+    /// </remarks>
+    public IReadOnlyList<string> AdditionalRoots { get; init; } = [];
+
     /// <summary>Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.</summary>
     public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;
 
@@ -105,11 +116,18 @@ public sealed record SharpCoreAgentOptions
     public ModelDescriptor Descriptor => ModelCatalog.DescriptorFor(Provider, ModelId);
 
     /// <summary>
-    /// Opens the workspace the tools are confined to.
+    /// Opens the workspace the tools are confined to, with every read-only root attached.
     /// </summary>
     /// <returns>The normalised workspace.</returns>
-    /// <exception cref="DirectoryNotFoundException">The directory does not exist.</exception>
-    public Workspace CreateWorkspace() => Workspace.Create(WorkspaceRoot);
+    /// <exception cref="DirectoryNotFoundException">
+    /// The workspace root, or one of <see cref="AdditionalRoots"/>, is not an existing directory.
+    /// </exception>
+    /// <remarks>
+    /// The single place attachments are applied. A host that opened a workspace itself and then built its own
+    /// would be free to leave them out, and a tool would answer from fewer roots than the developer granted
+    /// without anything failing; keeping the composition here makes that mistake impossible.
+    /// </remarks>
+    public Workspace CreateWorkspace() => Workspace.Create(WorkspaceRoot).WithAttachments(AdditionalRoots);
 
     /// <summary>
     /// Projects these settings onto the loop's budgets.

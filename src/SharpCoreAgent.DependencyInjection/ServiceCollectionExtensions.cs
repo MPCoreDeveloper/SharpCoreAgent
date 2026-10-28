@@ -113,7 +113,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the fourteen workspace tools and the registry that advertises them.
+    /// Registers the fifteen workspace tools and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
@@ -133,6 +133,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, ListDirectoryTool>();
         services.AddSingleton<ITool, ReadFileTool>();
         services.AddSingleton<ITool, SearchTextTool>();
+        services.AddSingleton<ITool, ListRootsTool>();
         services.AddSingleton<ITool, WriteFileTool>();
         services.AddSingleton<ITool, ReplaceInFileTool>();
         services.AddSingleton<ITool, DeleteFileTool>();

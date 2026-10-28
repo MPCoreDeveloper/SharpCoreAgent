@@ -39,6 +39,7 @@ internal static class HelpText
           --model <id>             run, chat   provider default (deepseek-flash, grok-4.7)
           --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
+          --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
           --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow
           --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
@@ -54,6 +55,10 @@ internal static class HelpText
           --quiet                  run, chat   off         no thinking, tool lines or summary
           --verbose                run, chat   off         stack traces, and a line as each turn starts
           --                       run         —           everything after it is part of the prompt
+
+          An attached root is read-only. read_file, list_directory and search_text answer from it when
+          given an absolute path, list_roots reports every root, and every write, delete and shell
+          command still resolves against --workspace alone. A relative path always means --workspace.
 
         Config
           sharpcoreagent config                     every setting, its value and its source
@@ -90,6 +95,7 @@ internal static class HelpText
           SHARPCOREAGENT_PROVIDER      provider used when --provider is absent
           SHARPCOREAGENT_MODEL         model used when --model is absent
           SHARPCOREAGENT_WORKSPACE     workspace used when --workspace is absent
+          SHARPCOREAGENT_ADD_ROOTS     read-only roots for run and chat, separated by the platform's path separator
           SHARPCOREAGENT_CREDENTIAL_FILE  credential file used when --credential-file is absent
           NO_COLOR                  any value disables colour, as --color never does
           DEEPSEEK_API_KEY         credential for deepseek
@@ -134,6 +140,7 @@ internal static class HelpText
           /cost                    what the reported tokens cost, from a dated table (peak rate where tiered)
           /files                   files and commands from the last turn
           /session                 where the transcript is being written
+          /roots                   the primary root and every read-only attachment, with its absolute path
           /config [verb]           show, path, set <name> <value>, or ask the questions and save
           /help                    this list
           /exit, /quit             leave; the transcript is saved first

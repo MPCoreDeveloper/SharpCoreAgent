@@ -1,6 +1,6 @@
 # Roadmap — the capability rounds
 
-**Status**: round 0 landed (constitution 1.1.0), round 1 specified, rounds 2–5 planned
+**Status**: round 0 landed (constitution 1.1.0), round 1 implemented on `feature/007-external-roots`, rounds 2–5 planned
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
 ## Why rounds rather than one specification

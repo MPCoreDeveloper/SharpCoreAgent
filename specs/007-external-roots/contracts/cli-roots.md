@@ -106,7 +106,8 @@ legal is its whole job.
 
 The row appears only when at least one attachment exists, so a session without them prints the banner
 006 documents byte for byte. A value that does not fit loses its head, never its label, by the rule the
-other rows already follow.
+other rows already follow — except that a path longer than 46 characters is shortened here first, because
+the head of this value is the count and a roots row without a number answers nothing.
 
 ## `/roots`
 

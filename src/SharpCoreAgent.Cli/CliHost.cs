@@ -59,12 +59,18 @@ internal static class CliHost
     }
 
     /// <summary>
-    /// Opens the workspace the tools are confined to.
+    /// Opens the workspace the tools are confined to, with every read-only root attached.
     /// </summary>
     /// <param name="options">The parsed command line.</param>
     /// <param name="error">Where the reason goes when the directory cannot be opened.</param>
     /// <param name="workspace">The workspace, when the call succeeds.</param>
-    /// <returns><see langword="true"/> when the workspace exists and is a directory.</returns>
+    /// <returns><see langword="true"/> when the workspace and every attachment exist and are directories.</returns>
+    /// <remarks>
+    /// The workspace comes from the container's own options, so the value a command hands to
+    /// <c>AgentSession</c> is the one the index registration also builds. A bad attachment root arrives as the
+    /// same <see cref="DirectoryNotFoundException"/> a bad <c>--workspace</c> does, so a root that does not exist
+    /// fails here — before the first request — and needs no new error plumbing: the message already names the path.
+    /// </remarks>
     public static bool TryOpenWorkspace(CliOptions options, TextWriter error, out Workspace? workspace)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -72,7 +78,7 @@ internal static class CliHost
 
         try
         {
-            workspace = Workspace.Create(options.Workspace);
+            workspace = options.ToSharpCoreAgentOptions().CreateWorkspace();
             return true;
         }
         catch (Exception ex) when (ex is DirectoryNotFoundException or ArgumentException or NotSupportedException)

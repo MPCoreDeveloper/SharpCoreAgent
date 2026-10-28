@@ -1,6 +1,6 @@
 # 007 — Look into another project: read-only attached roots
 
-**Status**: specified
+**Status**: implemented on `feature/007-external-roots` (merge to `main` is the last step of the round)
 **Branch**: `feature/007-external-roots`
 **Depends on**: `001-coding-agent-core` (the tool model and `Workspace`), `003-terminal-console-agent`
 (the console surface this extends), `006-interactive-start-and-config` (the precedence rules this

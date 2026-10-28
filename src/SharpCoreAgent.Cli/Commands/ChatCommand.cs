@@ -126,6 +126,18 @@ internal static class ChatCommand
                 $"{Name(cli.Approval)} · mode {Name(cli.Mode)} · budget {BudgetText(session.MaxTotalTokens)}")),
         };
 
+        // A row only when something is attached, so a session without attachments prints the same banner it
+        // always did. The count and the first root answer "may I read somewhere else, and where?" without
+        // spending a line per attachment; /roots and list_roots name them all.
+        if (session.Workspace.HasAttachments)
+        {
+            // The path is shortened here rather than by the row renderer, which drops the head of a long value:
+            // the head of this one is the count, and a count nobody can read is not the answer FR-011 asks for.
+            rows.Insert(2, ("roots", string.Create(
+                CultureInfo.InvariantCulture,
+                $"+{session.Workspace.Attachments.Count} read-only · {Shorten(session.Workspace.Attachments[0].Root)}")));
+        }
+
         if (cli.SaveSession)
         {
             rows.Add(("session", path));
@@ -148,6 +160,18 @@ internal static class ChatCommand
             theme.Dim("/help commands · /budget raise the session budget · Ctrl+C cancels a turn · /exit leaves"),
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Shortens a path from its head so the value of a banner row keeps a readable length.
+    /// </summary>
+    /// <param name="path">The path to shorten.</param>
+    /// <returns>The path, or its tail behind an ellipsis when it is longer than <see cref="BannerPathLength"/>.</returns>
+    /// <remarks>
+    /// The end of a path is the part that tells two checkouts apart, which is why the head goes. The budget is
+    /// small enough that the count in front of the path always survives the row renderer's own shortening.
+    /// </remarks>
+    private static string Shorten(string path) =>
+        path.Length <= BannerPathLength ? path : "…" + path[^(BannerPathLength - 1)..];
 
     /// <summary>
     /// Lays one banner row out: the label, then the value, shortened from its head when it will not fit.
@@ -465,7 +489,7 @@ internal static class ChatCommand
             // command line: resuming with a different model would change the meaning of the transcript.
             var resumedModel = ModelCatalog.DescriptorFor(snapshot.Provider, snapshot.ModelId);
             var resumedWorkspace = Directory.Exists(snapshot.WorkspaceRoot)
-                ? Workspace.Create(snapshot.WorkspaceRoot)
+                ? Workspace.Create(snapshot.WorkspaceRoot).WithAttachments(cli.AdditionalRoots)
                 : workspace;
             var session = AgentSession.FromSnapshot(snapshot, resumedWorkspace, resumedModel);
             session.Mode = cli.Mode;
@@ -631,6 +655,14 @@ internal static class ChatCommand
         if (Is(command, "/session"))
         {
             Console.Out.WriteLine(cli.SaveSession ? path : "session saving is off (--no-session)");
+            return (true, last);
+        }
+
+        if (Is(command, "/roots"))
+        {
+            // The same formatter list_roots uses, so the answer a developer reads and the answer the model reads
+            // cannot drift apart. Native separators here: this line is for the shell, not for a tool call.
+            Console.Out.WriteLine(RootListing.DescribeForConsole(session.Workspace));
             return (true, last);
         }
 
@@ -1015,6 +1047,15 @@ internal static class ChatCommand
 
     /// <summary>The column every banner label is padded to, so each value starts in the same place.</summary>
     private const int LabelWidth = 9;
+
+    /// <summary>
+    /// How much of an attachment path the banner shows before it keeps only the tail.
+    /// </summary>
+    /// <remarks>
+    /// Chosen so <c>+N read-only · </c> plus the path still fits the widest box (74 columns minus the label
+    /// column), which is what keeps the count visible for any checkout depth.
+    /// </remarks>
+    private const int BannerPathLength = 46;
 
     /// <summary>The smallest ceiling <c>/budget</c> accepts, matching the floor on <c>--max-total-tokens</c>.</summary>
     private const long MinimumCeiling = 1_000;

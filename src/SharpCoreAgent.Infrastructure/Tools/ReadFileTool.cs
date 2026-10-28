@@ -24,7 +24,7 @@ public sealed class ReadFileTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Read a text file from the workspace. Lines are numbered; read_file is always safe to call twice.",
+        "Read a text file from the workspace. A relative path is resolved against the workspace root; an absolute path may also name a file in a read-only attachment that list_roots reports. Lines are numbered; read_file is always safe to call twice.",
         Schema);
 
     /// <inheritdoc />
@@ -44,12 +44,14 @@ public sealed class ReadFileTool : ITool
         var startLine = arguments.GetOptionalInt("start_line", 1, minimum: 1);
         var lineCount = arguments.GetOptionalInt("line_count", TextLimits.MaxFileLines, minimum: 1, maximum: TextLimits.MaxFileLines);
 
-        if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
+        if (!PathSafety.TryResolveRead(context.Workspace, path, out var fullPath, out var owner, out var error))
         {
             return ToolResult.Refused(toolCall.Id, Name, error!);
         }
 
-        var relative = context.Workspace.ToRelative(fullPath);
+        // The attachment that answered, when one did: a path shown relative to the tree the file lives in,
+        // never an absolute one, because list_roots is the single result allowed to print those.
+        var relative = (owner ?? context.Workspace).ToRelative(fullPath);
         if (Directory.Exists(fullPath))
         {
             return ToolResult.Failure(
