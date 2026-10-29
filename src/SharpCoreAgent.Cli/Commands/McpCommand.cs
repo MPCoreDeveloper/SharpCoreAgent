@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreAgent.DependencyInjection;
 using SharpCoreAgent.Domain;
@@ -8,29 +9,29 @@ using SharpCoreAgent.Infrastructure.McpServer;
 namespace SharpCoreAgent.Cli;
 
 /// <summary>
-/// Implements <c>sharpcoreagent mcp serve</c>: one stdio MCP server for one workspace, until stdin ends.
+/// Implements <c>sharpcoreagent mcp</c>: the stdio server for one workspace, and the snippet that wires a client to it.
 /// </summary>
 /// <remarks>
-/// The command is the process's plumbing and nothing else. It opens the workspace, builds the container, writes
-/// the one ready line to stderr and hands the loop the token Ctrl+C sets. Every protocol decision belongs to
+/// The command is the process's plumbing and nothing else. <c>serve</c> opens the workspace, builds the container,
+/// writes the one ready line to stderr and hands the loop the token Ctrl+C sets. Every protocol decision belongs to
 /// <see cref="McpServerSession"/> and every index decision to the tools, which is what lets the same session be
-/// tested over two memory streams.
+/// tested over two memory streams. <c>config</c> is the opposite: it opens nothing, reads nothing and prints one block.
 /// <para>
-/// Nothing here writes to stdout except the session: a banner on stdout would be the first token of a JSON-RPC
-/// conversation, and the client would spend the rest of the session resynchronising.
+/// Nothing here writes to stdout except what was asked for: a banner in front of the protocol would be the first token
+/// of a JSON-RPC conversation, and the client would spend the rest of the session resynchronising.
 /// </para>
 /// </remarks>
 internal static class McpCommand
 {
     /// <summary>
-    /// Serves the workspace over a pair of streams.
+    /// Runs the verb the command line asked for.
     /// </summary>
-    /// <param name="options">The parsed command line: the workspace, the refresh switch and verbosity.</param>
+    /// <param name="options">The parsed command line: the action, the workspace, the refresh switch and verbosity.</param>
     /// <param name="input">What the client writes; read until it ends.</param>
-    /// <param name="output">Where answers go, one JSON object per line.</param>
+    /// <param name="output">Where answers go, one JSON object per line — or the snippet.</param>
     /// <param name="error">Where the ready line and the diagnostics go.</param>
     /// <param name="cancellationToken">Cancels the loop; Ctrl+C and a closed stdin both end it at 0.</param>
-    /// <returns>The process exit code: 0 for end of input or cancellation, 2 for an unusable workspace.</returns>
+    /// <returns>The process exit code: 0 for a printed snippet, end of input or cancellation, 2 for an unusable workspace.</returns>
     /// <remarks>
     /// The streams are parameters rather than <see cref="Console"/> reads so that a test can run the whole
     /// command — container, ready line, loop and exit code — without a child process.
@@ -47,6 +48,27 @@ internal static class McpCommand
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
+        return options.McpAction == McpAction.Config
+            ? await WriteSnippetAsync(options, output, error, cancellationToken).ConfigureAwait(false)
+            : await ServeAsync(options, input, output, error, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Serves the workspace over a pair of streams.
+    /// </summary>
+    /// <param name="options">The parsed command line: the workspace, the refresh switch and verbosity.</param>
+    /// <param name="input">What the client writes; read until it ends.</param>
+    /// <param name="output">Where answers go, one JSON object per line.</param>
+    /// <param name="error">Where the ready line and the diagnostics go.</param>
+    /// <param name="cancellationToken">Cancels the loop; Ctrl+C and a closed stdin both end it at 0.</param>
+    /// <returns>The process exit code: 0 for end of input or cancellation, 2 for an unusable workspace.</returns>
+    private static async Task<int> ServeAsync(
+        CliOptions options,
+        Stream input,
+        Stream output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
         if (!CliHost.TryOpenWorkspace(options, error, out var opened))
         {
             return ExitCodes.Usage;
@@ -110,5 +132,48 @@ internal static class McpCommand
                 "refresh is off (--no-refresh): answers describe the index as it is".AsMemory(),
                 cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Prints the block that adds this server to another agent's configuration.
+    /// </summary>
+    /// <param name="options">The parsed command line: the client and the workspace the note names.</param>
+    /// <param name="output">Where the block goes, and nothing else.</param>
+    /// <param name="error">Where the one line naming the file goes.</param>
+    /// <param name="cancellationToken">Cancels the write, which only happens if the reader stopped reading.</param>
+    /// <returns>The process exit code: always 0, because a block that can be printed is a block that can be pasted.</returns>
+    /// <remarks>
+    /// No workspace is opened and no index is read: the command answers a question about configuration, and a
+    /// developer wiring up a client should not need an index to exist first. The bytes are written without a
+    /// byte-order mark, because the common case is a redirect into the file itself.
+    /// </remarks>
+    private static async Task<int> WriteSnippetAsync(
+        CliOptions options,
+        Stream output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        // FinishMcp refuses `mcp config` without a client before the command runs. The guard stays because the
+        // alternative — a default — would print a block for a client nobody named, and that is the one mistake a
+        // snippet command must not make.
+        var client = options.McpClient
+            ?? throw new CliUsageException(
+                "mcp config needs --client.",
+                "Use --client claude, --client vscode or --client codex.");
+
+        var (command, arguments) = McpClientSnippets.Invocation();
+        var destination = McpClientSnippets.Destination(client, Path.GetFullPath(options.Workspace));
+
+        await output
+            .WriteAsync(Encoding.UTF8.GetBytes(McpClientSnippets.Render(client, command, arguments)), cancellationToken)
+            .ConfigureAwait(false);
+
+        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+        await error
+            .WriteLineAsync(McpClientSnippets.Note(client, destination).AsMemory(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return ExitCodes.Success;
     }
 }

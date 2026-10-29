@@ -44,12 +44,14 @@ public sealed class McpServeParsingTests
     }
 
     [Fact]
-    public void AnUnknownActionIsRefusedAndNamesTheOneThereIs()
+    public void AnUnknownActionIsRefusedAndNamesTheTwoThereAre()
     {
-        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "config"], NoEnvironment));
+        // `bench` is the round-after-next verb: until it exists, asking for it has to name the two that do.
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "bench"], NoEnvironment));
 
-        Assert.Equal("'config' is not an mcp action.", error.Message);
+        Assert.Equal("'bench' is not an mcp action.", error.Message);
         Assert.Contains("serve", error.Hint, StringComparison.Ordinal);
+        Assert.Contains("config", error.Hint, StringComparison.Ordinal);
     }
 
     [Fact]

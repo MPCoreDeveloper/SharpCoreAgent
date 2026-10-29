@@ -92,13 +92,35 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
 
 ## Phase 4 — the snippet
 
-- [ ] T018 `mcp config --client <claude|vscode|codex>`: three shapes — `.mcp.json`, `.vscode/mcp.json`, a Codex
+- [X] T018 `mcp config --client <claude|vscode|codex>`: three shapes — `.mcp.json`, `.vscode/mcp.json`, a Codex
   `config.toml` block — each naming the absolute path of the running binary and `mcp serve`, printed and exited 0
-  (FR-002).
-- [ ] T019 `HelpText`, `README.md`, `specs/001-coding-agent-core/contracts/cli.md` and
-  `contracts/mcp-server.md` kept in step with what shipped (FR-018).
-- [ ] T020 Tests: the three blocks parsed back as JSON/TOML, the `--client` value required and validated, and the
-  help golden test.
+  (FR-002). As built: `McpAction.Config` joined `Serve`, and `McpCommand` answers it without opening a workspace or
+  touching the index — a developer wiring up a client should not have to build an index first. `McpClientSnippets`
+  renders the block: JSON through `JsonNode` so a Windows path arrives escaped, TOML with a literal string so the
+  same path needs no escaping at all. The command is `Environment.ProcessPath`, and when that is the .NET host the
+  entry assembly is named first, so the snippet runs under a debugger too; on this build the apphost form printed
+  `command = '<…>\sharpcoreagent.exe'`, `args = ['mcp', 'serve']`, and starting exactly that served `initialize`
+  and `tools/list`. The file each block belongs in is named on stderr, not in the block, so
+  `mcp config --client vscode > .vscode/mcp.json` writes a file the agent can read. The entry is filed as
+  `sharpcoreagent`, which is what `serverInfo` answers and what FR-017 expects the tools to be called.
+- [X] T019 `HelpText`, `README.md`, `specs/001-coding-agent-core/contracts/cli.md` and
+  `contracts/mcp-server.md` kept in step with what shipped (FR-018). As built: the usage block gained the verb and
+  the `--client` row, the `Serve` section gained the second verb and a paragraph on which file each client reads,
+  and the examples gained the redirect form. `contracts/mcp-server.md` now carries the three blocks, the scope of
+  each file, the date the three shapes were checked against `docs.claude.com` (project-scope `.mcp.json`,
+  `mcpServers`), `code.visualstudio.com` (`servers`, typed stdio entries) and `developers.openai.com`
+  (`[mcp_servers.<name>]`), and the reason the portable block and the VS Code one are not interchangeable. The
+  README gained `### Serving it to another agent` under the index section, plus the `--no-refresh` and `--client`
+  rows its option table was missing.
+- [X] T020 Tests: the three blocks parsed back as JSON/TOML, the `--client` value required and validated, and the
+  help golden test. As built: `McpConfigCommandTests` (7) parses the two JSON blocks with `JsonDocument` and the
+  TOML by its three lines — the repository has no TOML reader, and adding one to check three keys would be a
+  dependency kept for a fixture — and asserts that the file each block names exists and that the arguments end in
+  `mcp serve`. `McpConfigParsingTests` (24, three of them theories) covers the required client, the unknown
+  client, the operand after `config`, `--client` refused on the other six commands and on `serve`, `--no-refresh`
+  and `--no-index` refused here, and exit 2 with an empty stdout. `HelpTextTests` gained the verb, the four columns
+  of the new row and `TheServeSectionIsGolden`, which compares the section verbatim — the plan's help golden test.
+  Suite: 1070 passing.
 
 ## Phase 5 — the evidence
 

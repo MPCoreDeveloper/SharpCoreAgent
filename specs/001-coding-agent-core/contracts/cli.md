@@ -12,6 +12,8 @@ sharpcoreagent chat [options]                # interactive loop
 sharpcoreagent models [--provider <name>]    # list known models
 sharpcoreagent index [options]               # build, inspect or repair the index (002)
 sharpcoreagent config [show|get|set|unset|path]   # settings and their provenance (006)
+sharpcoreagent mcp serve [options]           # this workspace's index as an MCP server on stdio (013)
+sharpcoreagent mcp config --client <name>    # the block that adds it to claude, vscode or codex (013)
 sharpcoreagent --help | --version
 ```
 
@@ -31,6 +33,7 @@ settings file, its precedence and its exit code are in
 | `--web` | run, chat | — | Register `fetch_url` for this process; refused on `models`, `index`, `config` and `setup` (008) |
 | `--web-allow <host>` | run, chat | — | Exempt a host from `fetch_url`'s address refusal; repeatable, needs `--web`, and has no settings key or environment variable (008) |
 | `--mcp <command>` | run, chat | — | Start one stdio MCP server and register the tools it lists for this process; repeatable, refused on `models`, `index`, `config` and `setup`, and has no settings key or environment variable (009) |
+| `--client <name>` | mcp config | — | `claude`, `vscode` or `codex`: whose configuration the printed block is for; refused on every other command, and required — `mcp config` without it exits `2` (013) |
 | `--approval <mode>` | run, chat | `ask` | `readonly`, `ask`, `allow` |
 | `--max-iterations <n>` | run, chat | `400` | Loop bound: one turn is tens of model calls, not a handful |
 | `--max-output-tokens <n>` | run, chat | `8000` | Per-request output cap |

@@ -44,6 +44,26 @@ internal enum McpAction
 {
     /// <summary>Answer a client's JSON-RPC on stdin until it ends.</summary>
     Serve,
+
+    /// <summary>Print the block that adds this server to another agent's configuration.</summary>
+    Config,
+}
+
+/// <summary>Whose configuration <c>mcp config</c> prints a block for.</summary>
+/// <remarks>
+/// Three files with three shapes, which is the whole reason the command exists: a developer should not have to
+/// discover that VS Code says <c>servers</c> where Claude Code says <c>mcpServers</c> by reading a blog post.
+/// </remarks>
+internal enum McpClientKind
+{
+    /// <summary>Claude Code: <c>.mcp.json</c> at the repository root, under <c>mcpServers</c>.</summary>
+    Claude,
+
+    /// <summary>VS Code: <c>.vscode/mcp.json</c>, under <c>servers</c> and with an explicit <c>type</c>.</summary>
+    VsCode,
+
+    /// <summary>Codex CLI: the <c>[mcp_servers.sharpcoreagent]</c> table in <c>config.toml</c>.</summary>
+    Codex,
 }
 
 /// <summary>What <c>config</c> was asked to do.</summary>
@@ -94,6 +114,13 @@ internal sealed record CliOptions
 
     /// <summary>Gets which verb <c>mcp</c> runs. Default <see cref="McpAction.Serve"/>.</summary>
     public McpAction McpAction { get; init; } = McpAction.Serve;
+
+    /// <summary>Gets the client <c>mcp config</c> prints a block for, or <see langword="null"/> when none was named.</summary>
+    /// <remarks>
+    /// Nullable rather than defaulted: <c>mcp config</c> without a client has nothing to print, and the refusal
+    /// named the three clients is the only useful answer. <c>mcp serve</c> never reads it.
+    /// </remarks>
+    public McpClientKind? McpClient { get; init; }
 
     /// <summary>Gets the setting <c>config get</c>, <c>set</c> or <c>unset</c> names.</summary>
     public string? ConfigName { get; init; }
@@ -660,6 +687,7 @@ internal sealed record CliOptions
         if (command is not (CliCommand.Mcp or CliCommand.Help or CliCommand.Version))
         {
             RejectNoRefresh(options);
+            RejectClientFlag(options);
         }
 
         switch (command)
@@ -779,16 +807,6 @@ internal sealed record CliOptions
                         "The server answers JSON-RPC on stdout; diagnostics go to stderr.");
                 }
 
-                if (!options.IndexEnabled)
-                {
-                    // Every tool this command publishes reads the index, so --no-index leaves it with nothing to
-                    // answer from. Accepting it and walking the tree anyway would be the one outcome the developer
-                    // typing it was trying to avoid.
-                    throw new CliUsageException(
-                        "--no-index leaves mcp serve with nothing to answer from.",
-                        "Use --no-refresh to serve the index as it is, without a refresh before each call.");
-                }
-
                 return FinishMcp(options, positionals);
 
             default:
@@ -877,10 +895,11 @@ internal sealed record CliOptions
     /// <param name="options">The options the flags produced.</param>
     /// <param name="positionals">The arguments after the command.</param>
     /// <returns>The options with the action.</returns>
-    /// <exception cref="CliUsageException">The action is unknown, or <c>serve</c> was given an operand.</exception>
+    /// <exception cref="CliUsageException">The action is unknown, or the action was given an operand.</exception>
     /// <remarks>
-    /// One action for now, in the shape <c>config</c> already uses: the verb is a word rather than a flag, so a
-    /// second verb (<c>config</c>, the client snippet) can join it without a second command.
+    /// Two actions in the shape <c>config</c> already uses: the verb is a word rather than a flag, so a second one
+    /// joined the first without a second command — and each verb keeps its own flags, <c>--no-refresh</c> for the
+    /// server and <c>--client</c> for the snippet.
     /// </remarks>
     private static CliOptions FinishMcp(CliOptions options, List<string> positionals)
     {
@@ -903,12 +922,57 @@ internal sealed record CliOptions
                         "It takes --workspace, --no-refresh and --verbose.");
                 }
 
+                // Every tool this command publishes reads the index, so --no-index leaves it with nothing to
+                // answer from. Accepting it and walking the tree anyway would be the one outcome the developer
+                // typing it was trying to avoid.
+                if (!options.IndexEnabled)
+                {
+                    throw new CliUsageException(
+                        "--no-index leaves mcp serve with nothing to answer from.",
+                        "Use --no-refresh to serve the index as it is, without a refresh before each call.");
+                }
+
+                RejectClientFlag(options);
+
                 return options with { Command = CliCommand.Mcp, McpAction = McpAction.Serve };
+
+            case "config":
+                if (rest.Count > 0)
+                {
+                    throw new CliUsageException(
+                        $"mcp config does not take '{rest[0]}'.",
+                        "The client is named with --client: claude, vscode or codex.");
+                }
+
+                // Neither of the index flags means anything here: the command prints a block, reads no file and
+                // opens no index. Refused for the reason every other misplaced flag is.
+                if (!options.IndexEnabled)
+                {
+                    throw new CliUsageException(
+                        "--no-index does not apply to mcp config.",
+                        "It prints a block for another agent; it opens no index.");
+                }
+
+                RejectNoRefresh(options);
+
+                if (options.McpClient is not { } client)
+                {
+                    throw new CliUsageException(
+                        "mcp config needs --client.",
+                        "Use --client claude, --client vscode or --client codex.");
+                }
+
+                return options with
+                {
+                    Command = CliCommand.Mcp,
+                    McpAction = McpAction.Config,
+                    McpClient = client,
+                };
 
             default:
                 throw new CliUsageException(
                     $"'{positionals[0]}' is not an mcp action.",
-                    "The action is serve.");
+                    "The actions are serve and config.");
         }
     }
 
@@ -929,6 +993,25 @@ internal sealed record CliOptions
             throw new CliUsageException(
                 "--no-refresh applies to mcp serve.",
                 "For example: sharpcoreagent mcp serve --no-refresh");
+        }
+    }
+
+    /// <summary>
+    /// Rejects <c>--client</c> on the commands that print no snippet.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">A client was named on a command that cannot use one.</exception>
+    /// <remarks>
+    /// The same reasoning as <see cref="RejectWebFlags"/>: a developer who typed a client and watched a turn start
+    /// would believe a configuration file had been written for them, and look for it.
+    /// </remarks>
+    private static void RejectClientFlag(CliOptions options)
+    {
+        if (options.McpClient is not null)
+        {
+            throw new CliUsageException(
+                "--client applies to mcp config.",
+                "For example: sharpcoreagent mcp config --client claude");
         }
     }
 
@@ -1366,6 +1449,26 @@ internal sealed record CliOptions
                 $"'{value}' is not a fallback this build can use.",
                 $"Name a provider this build knows ({string.Join(", ", ModelCatalog.Providers)}) and a model, for example grok:grok-4.7.");
 
+    /// <summary>
+    /// Parses <c>--client</c>, the agent whose configuration <c>mcp config</c> prints a block for.
+    /// </summary>
+    /// <param name="value">The client's name, matched case-insensitively.</param>
+    /// <returns>The client.</returns>
+    /// <exception cref="CliUsageException">The name is not one of the three this build knows.</exception>
+    /// <remarks>
+    /// Refused at parse time rather than after the snippet was half rendered: a typo in the client name is a typo
+    /// in the command line, and the answer that names all three clients is the one that fixes it.
+    /// </remarks>
+    private static McpClientKind ParseClient(string value) => value.ToLowerInvariant() switch
+    {
+        "claude" => McpClientKind.Claude,
+        "vscode" => McpClientKind.VsCode,
+        "codex" => McpClientKind.Codex,
+        _ => throw new CliUsageException(
+            $"unknown client '{value}'.",
+            "Use claude, vscode or codex."),
+    };
+
     private static CliOptions ApplyOption(CliOptions options, string[] args, ref int index, string name)
     {
         switch (name)
@@ -1403,6 +1506,9 @@ internal sealed record CliOptions
                 {
                     McpServers = [.. options.McpServers, TakeValue(args, ref index, name)],
                 };
+
+            case "--client":
+                return options with { McpClient = ParseClient(TakeValue(args, ref index, name)) };
 
             case "--approval":
                 var approval = TakeValue(args, ref index, name);

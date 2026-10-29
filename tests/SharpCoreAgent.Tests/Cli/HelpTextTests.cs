@@ -114,6 +114,93 @@ public sealed class HelpTextTests
     }
 
     [Fact]
+    public void TheUsageBlockDocumentsTheConfigCommandForClients()
+    {
+        // Two of the three files are found from the repository, so the shape of the verb has to be in the block a
+        // developer reads before running anything.
+        Assert.Contains("sharpcoreagent mcp config --client", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("--client <name>", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("mcp config  —", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("[mcp_servers.sharpcoreagent]", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains(".vscode/mcp.json", HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheServeSectionIsGolden()
+    {
+        // The whole section, verbatim: a paragraph that drifts from the shipped behaviour is the one kind of help
+        // text that is worse than no help text, and comparing it as a block is how a drift gets noticed.
+        string[] section =
+        [
+            "Serve",
+            "  sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served",
+            "  sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode or codex",
+            "  Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only",
+            "  evidence tools — search_code, find_symbol, find_references, code_context and index_status —",
+            "  and nothing else. No key, no chat model, no network and no tool that writes or starts a",
+            "  process is in the process at all.",
+            string.Empty,
+            "  Before a tool call answers, the index is brought up to date at most once every five seconds",
+            "  and never for longer than three. A refresh that cannot run — no index yet, another writer,",
+            "  a read-only checkout — is not an error: the call answers from the index that is there and the",
+            "  tool's own heading says how fresh it is. --no-refresh skips the walk entirely, for a checkout",
+            "  nobody should write to. Nothing here is a setting; both budgets belong to the capability.",
+            string.Empty,
+            "  stdout carries the protocol and nothing else. The ready line and every diagnostic go to",
+            "  stderr, and the index is opened per call and released again, so a server held open for a day",
+            "  never stops 'sharpcoreagent index' in another terminal. End of input or Ctrl+C ends it at 0.",
+            string.Empty,
+            "  Nothing here is a setting and nothing here needs a key, which is why wiring an agent is one",
+            "  command: 'mcp config --client claude' prints the block for .mcp.json at the repository root,",
+            "  'vscode' the one for .vscode/mcp.json, and 'codex' the [mcp_servers.sharpcoreagent] table for",
+            "  ~/.codex/config.toml. Each names this binary's absolute path and 'mcp serve', so the agent",
+            "  serves the directory it starts the server in; put --workspace in the args to pin another.",
+            "  The block is the only thing on stdout, so a redirect writes the file, and the one line",
+            "  naming that file goes to stderr.",
+        ];
+
+        Assert.Contains(string.Join('\n', section), Normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryOptionsRowKeepsItsThreeColumns()
+    {
+        // Flag at 2, the commands it applies to at 27, the default at 39 — the raw string literal in HelpText strips
+        // the source indentation, so these are the columns a reader's terminal shows. Rows differ in whether they
+        // carry a sentence (`--max-iterations` needs none, its value is the whole answer), so the three cells every
+        // row has are what this pins.
+        var rows = HelpText.Usage
+            .Split('\n')
+            .Where(line => line.StartsWith("  --", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(rows);
+        Assert.All(
+            rows,
+            row =>
+            {
+                Assert.Equal(2, row.IndexOf("--", StringComparison.Ordinal));
+                Assert.True(row.Length > 39, $"'{row}' is too short to reach the default column.");
+                Assert.NotEqual(' ', row[27]);
+                Assert.NotEqual(' ', row[39]);
+            });
+    }
+
+    [Fact]
+    public void TheClientRowReachesTheDescriptionColumn()
+    {
+        // The one row this round added, in all four columns: the flag, the command it belongs to, the dash that says
+        // it has no default, and the sentence naming the three clients.
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.StartsWith("  --client <name>", StringComparison.Ordinal));
+
+        Assert.Equal(27, row.IndexOf("mcp config", StringComparison.Ordinal));
+        Assert.Equal(39, row.IndexOf('—'));
+        Assert.Equal(51, row.IndexOf("claude, vscode or codex", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void TheUsageBlockDocumentsTheServeCommand()
     {
         // The command an editor starts rather than a developer: a reader has to be able to find its shape, and the
@@ -150,4 +237,7 @@ public sealed class HelpTextTests
 
         Assert.Contains("credential file", row, StringComparison.Ordinal);
     }
+
+    /// <summary>Gets the usage block with one kind of line ending, so a comparison does not depend on the checkout.</summary>
+    private static string Normalized => HelpText.Usage.Replace("\r\n", "\n", StringComparison.Ordinal);
 }

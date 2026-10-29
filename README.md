@@ -139,6 +139,9 @@ sharpcoreagent chat [options]                interactive loop
 sharpcoreagent models [--provider <name>]    list the models this build knows
 sharpcoreagent index [options]               build, inspect or repair the code index
 sharpcoreagent config [show|get|set|unset|path]   settings, and where each value comes from
+sharpcoreagent setup                        the preferences, asked for one at a time
+sharpcoreagent mcp serve [options]          this workspace's index as an MCP server on stdio
+sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode or codex
 sharpcoreagent --help | --version
 ```
 
@@ -174,6 +177,7 @@ keep working on the file that needs repairing.
 | `--web` | run, chat | off — `fetch_url` may read http and https pages; the network is off otherwise |
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
+| `--client <name>` | mcp config | none — `claude`, `vscode` or `codex`: whose configuration the printed block is for |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
@@ -189,6 +193,7 @@ keep working on the file that needs repairing.
 | `--quiet` / `--verbose` | run, chat | off / off — `--verbose` also names each turn as it starts |
 | `--` | run | everything after it is part of the prompt |
 | `--no-index` | run, chat | off — no index read, write or refresh in this process |
+| `--no-refresh` | mcp serve | off — answer from the index as it is, with no walk before a call |
 | `--index-budget <ms>` | run, chat | `3000` — the refresh ceiling; `0` keeps reads and stops refreshing |
 | `--status` | index | off — coverage and freshness; never writes |
 | `--rebuild` | index | off — delete every row and build from scratch |
@@ -387,6 +392,43 @@ and the seven workspace tools still answer.
 `specs/002-code-evidence-index/quickstart.md` is the walkthrough, including the ways the index can
 fail: exit code `6` means it could not be created, written or read, and `state corrupt` means
 `--rebuild` is the repair.
+
+### Serving it to another agent
+
+`sharpcoreagent mcp serve` turns the argument around: instead of this program calling another agent's MCP
+server (`--mcp`), it answers one, so Copilot agent mode, Claude Code or Codex CLI can ask this repository
+where something is instead of grepping for it.
+
+```text
+sharpcoreagent index                     # once, after cloning: nothing here builds an index for you
+sharpcoreagent mcp serve --workspace .    # then the agent starts this
+```
+
+It speaks JSON-RPC 2.0 on stdin and stdout, one object per line, and offers the five read-only evidence
+tools — `search_code`, `find_symbol`, `find_references`, `code_context` and `index_status` — with the
+schemas they already carry. Nothing that writes, starts a process or reaches the network is in that
+process: no key, no chat model, no `fetch_url`, no shell. The whole surface is
+`specs/013-evidence-mcp-server/contracts/mcp-server.md`.
+
+Freshness is a bounded walk, not a rebuild: before a tool call answers, the index is brought up to date at
+most once every five seconds and never for longer than three. A refresh that cannot run — no index yet,
+another writer, a read-only checkout — is not an error: the call answers from the index that is there and
+the tool's own heading says how fresh it is. `--no-refresh` skips the walk. The index is opened per call
+and released again, so a server left running for a day never stops `sharpcoreagent index` in another
+terminal.
+
+Wiring a client is one command, which prints the block for the file that client reads and names the
+absolute path of the binary that is running:
+
+```text
+sharpcoreagent mcp config --client claude    # .mcp.json at the repository root, project scope
+sharpcoreagent mcp config --client vscode    # .vscode/mcp.json, which wants "servers" and a "type"
+sharpcoreagent mcp config --client codex     # the [mcp_servers.sharpcoreagent] table for config.toml
+```
+
+stdout carries the block and nothing else, so `sharpcoreagent mcp config --client vscode > .vscode/mcp.json`
+writes the file; the line naming that file goes to stderr. None of it is a setting and none of it needs a
+key, which is the point: an agent that is not this one gets this repository's index for a command line.
 
 ## Architecture
 

@@ -30,6 +30,7 @@ internal static class HelpText
                                                        settings, and where each value comes from
           sharpcoreagent setup                         the preferences, asked for one at a time
           sharpcoreagent mcp serve [options]           this workspace's index as an MCP server on stdio
+          sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode or codex
           sharpcoreagent --help | --version
 
           With no command and a terminal on both ends, a session starts. When either stream is
@@ -44,6 +45,7 @@ internal static class HelpText
           --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
+          --client <name>          mcp config  —           claude, vscode or codex: whose configuration gets the block
           --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow
           --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
@@ -108,7 +110,8 @@ internal static class HelpText
           --tier <name>            index       lean        lean; rich is not in this build
 
         Serve
-          sharpcoreagent mcp serve [options]        the same shape the --mcp flag speaks, served
+          sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served
+          sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode or codex
           Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only
           evidence tools — search_code, find_symbol, find_references, code_context and index_status —
           and nothing else. No key, no chat model, no network and no tool that writes or starts a
@@ -123,6 +126,14 @@ internal static class HelpText
           stdout carries the protocol and nothing else. The ready line and every diagnostic go to
           stderr, and the index is opened per call and released again, so a server held open for a day
           never stops 'sharpcoreagent index' in another terminal. End of input or Ctrl+C ends it at 0.
+
+          Nothing here is a setting and nothing here needs a key, which is why wiring an agent is one
+          command: 'mcp config --client claude' prints the block for .mcp.json at the repository root,
+          'vscode' the one for .vscode/mcp.json, and 'codex' the [mcp_servers.sharpcoreagent] table for
+          ~/.codex/config.toml. Each names this binary's absolute path and 'mcp serve', so the agent
+          serves the directory it starts the server in; put --workspace in the args to pin another.
+          The block is the only thing on stdout, so a redirect writes the file, and the one line
+          naming that file goes to stderr.
 
         Chat
           /help                    every chat command, including /cost and /usage
@@ -159,6 +170,7 @@ internal static class HelpText
           sharpcoreagent index --rebuild --workspace .
           sharpcoreagent run "find the TODO comments" --provider openai-compatible --base-url http://localhost:1234/v1
           sharpcoreagent chat --mcp "npx -y @modelcontextprotocol/server-filesystem ."
+          sharpcoreagent mcp config --client vscode > .vscode/mcp.json
         """;
 
     /// <summary>Gets the commands the interactive loop understands.</summary>

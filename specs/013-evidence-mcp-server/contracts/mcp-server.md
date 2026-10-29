@@ -90,13 +90,64 @@ readable id.
 
 ## Client configuration
 
-`sharpcoreagent mcp config --client <claude|vscode|codex>` prints the block below for the running binary.
-The exact file each agent reads is verified against that agent's documentation when the snippets ship; what
-is contractual here is only that the command exists and names an absolute path.
+`sharpcoreagent mcp config --client <claude|vscode|codex>` prints the block for the running binary and exits 0.
+It opens no workspace, reads no index and needs no key: it answers a question about configuration, and a
+developer wiring up a client should not have to build an index first.
+
+What is contractual: the command exists, the block names the absolute path of the executable that is running
+(and, when that executable is the .NET host, the assembly it should load), the two `mcp serve` arguments are
+last, and the block is the only thing on stdout. The line naming the file goes to stderr, so
+`mcp config --client vscode > .vscode/mcp.json` writes the file and a paste still reads.
+
+The entry is filed as `sharpcoreagent`, the name the server answers in `serverInfo` and the prefix an agent
+puts in front of each tool (`sharpcoreagent_search_code`).
+
+| Client | File | Top-level shape |
+|---|---|---|
+| `claude` | `.mcp.json` at the repository root — project scope, committed and shared | `mcpServers` |
+| `vscode` | `.vscode/mcp.json` — workspace scope | `servers`, with `"type": "stdio"` |
+| `codex` | `~/.codex/config.toml` — user scope | the `[mcp_servers.sharpcoreagent]` table |
 
 ```json
-{ "mcpServers": { "ariadne": { "command": "<path to sharpcoreagent>", "args": ["mcp", "serve"] } } }
+{
+  "mcpServers": {
+    "sharpcoreagent": {
+      "command": "<absolute path to sharpcoreagent>",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
 ```
+
+```json
+{
+  "servers": {
+    "sharpcoreagent": {
+      "type": "stdio",
+      "command": "<absolute path to sharpcoreagent>",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+```toml
+[mcp_servers.sharpcoreagent]
+command = '<absolute path to sharpcoreagent>'
+args = ['mcp', 'serve']
+```
+
+Two details that are not cosmetic and are why the command exists rather than one generic block: VS Code's own
+format says `servers` where the portable format says `mcpServers`, and Codex reads TOML, not JSON. The TOML
+path is a literal string (`'…'`), which is the one form in which a Windows separator stays a separator.
+
+Checked against each agent's documentation on 2026-10-29: Claude Code's MCP page (project scope, `.mcp.json`,
+`mcpServers`), VS Code's MCP configuration reference (`servers`, stdio entries typed), and Codex's config
+reference (`[mcp_servers.<name>]` with `command` and `args`). Where a file is user-scope rather than
+repository-scope, the block is a table to add, not a file to replace — which is what the stderr line says.
+
+The block does not carry `--workspace`: the agent starts the server in the directory it is working in, which is
+the workspace the developer opened. Pinning another one is an `args` edit, and the help says so.
 
 ## Ready line (stderr, not protocol)
 
