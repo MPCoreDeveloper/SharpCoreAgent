@@ -89,6 +89,7 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   against a live lease), `McpServerCompositionTests` (4), `McpServeParsingTests` (23) and `McpServeCommandTests`
   (6). The cross-process check is the measurement in T013 rather than a test that would need the CLI's own
   runtimeconfig copied next to the test assembly; the lock it exercises is already covered by `WriterLockTests`.
+  (T021 later did copy it, because the dogfood test's whole point is the process boundary — see below.)
 
 ## Phase 4 — the snippet
 
@@ -124,9 +125,19 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
 
 ## Phase 5 — the evidence
 
-- [ ] T021 Dogfood test: this product's `--mcp` client starts `mcp serve` on a fixture workspace, sees
+- [X] T021 Dogfood test: this product's `--mcp` client starts `mcp serve` on a fixture workspace, sees
   `sharpcoreagent_search_code`, calls it, and gets the same text the in-process tool returns — no key, no network
-  (FR-017).
+  (FR-017). As built: `Infrastructure/McpServerDogfoodTests` (2) starts the real CLI — a new `CopyProductCli`
+  target in the test project copies the CLI's whole output to `$(OutDir)Cli`, so the child is the binary this
+  build produced and the launch is one a user could type. The first test reads the five names off `McpToolHost`
+  and asserts `sharpcoreagent_<tool>`; the prefix is the executable's stem, which is why the snippet names the
+  apphost and not `dotnet <dll>`. It also asserts the server's own `mcp serve:` line arrived on stderr, so the
+  child is the command rather than a stand-in. The second test compares `servers[0].CallAsync("search_code")`
+  with the `SearchCodeTool` resolved from the container `mcp serve` builds (`AddMcpServer`, `Refresh = false`)
+  and finds the text equal character for character (SC-002), then asserts the `McpTool` adapter a turn calls
+  returns that same text, so the hop and the wrapper both add nothing. The index is built by the test and the
+  child runs `--no-refresh`, so a broken index fails on the evidence (`src/Thermometer.cs` must be cited) rather
+  than hiding behind a build. Suite: 1072 passing.
 - [ ] T022 `mcp bench`: the twelve fixture queries, the evidence-to-source ratio of SC-006 and the latency of
   SC-005, sharing the tool code path rather than a script that reimplements it (FR-019).
 - [ ] T023 Run it once and paste the numbers into `plan.md`, including a bad result.

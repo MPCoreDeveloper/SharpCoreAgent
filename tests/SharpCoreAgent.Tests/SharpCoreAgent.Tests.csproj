@@ -42,6 +42,25 @@
     <ProjectReference Include="..\SharpCoreAgent.TestMcpServer\SharpCoreAgent.TestMcpServer.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <Target Name="CopyProductCli" AfterTargets="Build">
+    <!--
+      `McpServerDogfoodTests` starts `mcp serve` as a child process, exactly as `mcp config` tells another agent to.
+      It launches the CLI from this folder rather than from `src` so the binary under test is the one this build just
+      produced, and so the launch is a path a user could type. The whole output travels, not just the assembly: the
+      apphost needs its `runtimeconfig.json` and `deps.json` beside it.
+    -->
+    <ItemGroup>
+      <_ProductCliFiles Include="$(MSBuildThisFileDirectory)..\..\src\SharpCoreAgent.Cli\bin\$(Configuration)\net11.0\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ProductCliFiles)" DestinationFolder="$(OutDir)Cli\%(RecursiveDir)" SkipUnchangedFiles="true" />
+
+    <!--
+      A manual `sharpcoreagent index` run in the CLI's own output folder leaves an index behind it. That is somebody's
+      workspace data rather than build output, and a test that found one here would be reading the wrong index.
+    -->
+    <RemoveDir Directories="$(OutDir)Cli\.sharpcoreagent" />
+  </Target>
+
   <Target Name="CopyTestMcpServer" AfterTargets="Build">
     <!--
       After Build, so the referenced project has already produced its output. The tests launch this server as a
