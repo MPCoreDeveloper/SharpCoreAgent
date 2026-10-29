@@ -157,7 +157,16 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   index), `McpServeParsingTests` (3 more, and the unknown action is now `demo`), `HelpTextTests` (the usage line,
   the verb in the Serve section, and the golden section extended). A new `CliBinary` helper names the copied CLI,
   and the dogfood test uses it too. Suite: 1085 passing.
-- [ ] T023 Run it once and paste the numbers into `plan.md`, including a bad result.
+- [X] T023 Run it once and paste the numbers into `plan.md`, including a bad result. As built: the run is in
+  `plan.md` under "What it printed (2026-10-29, this repository)" — 606 files, 12 420 passages, 233.4 MiB index,
+  `ratio 0.017` (138 723 characters of evidence for 8 134 414 of cited source, about 1/59th) and `p95 4425 ms`
+  against SC-005's 300 ms budget, so SC-006 is met and SC-005 is missed by an order of magnitude. The bad results
+  are published as such: the latency one, with the `--verbose` split showing in-process and stdio within a few
+  hundred milliseconds of each other (so the hop is free and the *call* is the three seconds — the per-call lease
+  on a 233 MiB index, which is the price Complexity Tracking item 3 said would be measured); and the ratio on a
+  two-file fixture, `3.427`, which says the claim only means something at repository scale. The plan's `[--json]`
+  is recorded as dropped, with `--verbose` in its place. One observation is left for round 002: an incremental
+  `index` run crashed with `Index was outside the bounds of the array.` and `--rebuild` (841 s) repaired it.
 
 ## Phase 6 — the round
 

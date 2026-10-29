@@ -154,18 +154,67 @@ Every test runs from streams or a child process with no live endpoint and no key
 
 The claim this round is allowed to make is the one it measures. `specs/013-evidence-mcp-server/bench/queries.txt`
 holds twelve questions a developer would actually ask of this repository ("where is a tool result trimmed to
-the budget", "who calls `Passages` before it is written", …). The harness reads that file, and for each query:
+the budget", …). `sharpcoreagent mcp bench` reads that file — there is no flag, so the questions a published
+number was measured on cannot be edited at the keyboard — and for each query:
 
 1. calls `search_code` in-process and over stdio, asserting both texts are identical (SC-002);
 2. sums the characters of the distinct files the answer cites, and the characters of the answer;
 3. reports per query and in total: characters spent, characters of the sources, the ratio, and the wall-clock
    of the stdio call (SC-005 p95).
 
-The harness is `sharpcoreagent mcp bench [--json]` rather than a PowerShell script, for the same reason the
+The harness is `sharpcoreagent mcp bench` rather than a PowerShell script, for the same reason the
 index command exists: it runs wherever the product runs, it shares the tool code path, and it is testable. It
-requires a built index and no key, and its numbers are pasted into this file before the merge. A number that
-does not beat "read the files" is the most important result this round could produce, and it would be published
-the same way.
+requires a built index and no key, and its numbers are pasted below before the merge. A number that does not
+beat "read the files" is the most important result this round could produce, and it is published the same way.
+
+The plan asked for `[--json]`. It was dropped in implementation and the reason is recorded rather than the
+flag: the table is the artefact the numbers are pasted from, a second shape would be a second thing to keep in
+step, and the option table has no column wide enough to name a fourth command for that flag. `--verbose` was
+added in its place, and it is what the analysis below is built on.
+
+### What it printed (2026-10-29, this repository)
+
+606 files, 12 420 passages, 233.4 MiB index, `state fresh`, Windows 11, Debug build, nothing else running:
+
+```
+bench · 12 queries · evidence 138 723 chars · sources 8 134 414 chars · ratio 0.017 · p95 4425 ms · parity 12/12
+```
+
+| answer chars | cited source chars | ratio | stdio ms | query |
+|---|---|---|---|---|
+| 8 283 | 438 575 | 0.019 | 4 425 | where is a tool result trimmed to the character budget |
+| 14 529 | 121 683 | 0.119 | 3 204 | which wrapper opens the index for one call and releases it again |
+| 13 094 | 83 331 | 0.157 | 3 334 | where is an MCP tool name folded into letters and underscores |
+| 10 616 | 338 661 | 0.031 | 2 892 | how is the refresh budget kept between two calls |
+| 11 766 | 1 206 775 | 0.010 | 2 671 | which type writes one JSON-RPC frame on a single line |
+| 8 848 | 617 678 | 0.014 | 2 825 | where is the exit code chosen for a refused flag |
+| 11 605 | 967 760 | 0.012 | 2 950 | how does the agent know which tools may run without asking |
+| 9 745 | 968 354 | 0.010 | 2 946 | which file writes the transcript of a turn |
+| 10 691 | 970 551 | 0.011 | 2 971 | where is a provider's rate limit read from its answer |
+| 12 898 | 778 667 | 0.017 | 2 695 | how is the line range of an evidence block addressed |
+| 14 144 | 643 013 | 0.022 | 2 801 | which command prints the settings file in use |
+| 12 504 | 999 366 | 0.013 | 2 832 | where is the search answer rendered with its heading |
+
+**SC-006: met, and not by a small margin.** 138 723 characters of evidence stood in for 8 134 414 characters of
+source — a ratio of **0.017**, or about 1/59th. The worst query is still 1/6th (0.157) and the best is 1/100th.
+
+**SC-005: missed, by an order of magnitude.** The p95 of the stdio call is **4.4 s** against a budget of 300 ms.
+`--verbose` prints both halves per query and they are the same number — in-process 2.6–4.6 s, stdio 2.7–4.4 s —
+so the hop costs nothing measurable: what costs three seconds is the *call*, on both sides. That is the lease
+Complexity Tracking item 3 said would be measured rather than assumed: one open of a 233 MiB index per call,
+plus the graph hop over 12 420 passages, is what a client waits for. The honest reading is that this is
+affordable for an agent's first move in a turn and not for a loop that asks ten questions, and the number is
+published rather than tuned away by quoting the answer instead of the call.
+
+**A second result that is not good news: the ratio only means something at scale.** The same command on a
+two-file fixture prints `ratio 3.427` — 353 characters of answer against 103 characters of source — because the
+heading, the hash and the line numbers alone cite more than the file holds. SC-006 is a claim about a real
+repository, and a small workspace would have produced a number that flattered nobody.
+
+**Observation, not this round's bug:** the incremental `index` run before the measurement crashed once with
+`error: Index was outside the bounds of the array.` after the tree had grown a few hundred files; `index
+--rebuild` (841 s) repaired it. Recorded here because a bench over a corrupt index would have published twelve
+identical failures as a result. It belongs to round 002 and is left there rather than fixed in passing.
 
 ## Complexity Tracking
 

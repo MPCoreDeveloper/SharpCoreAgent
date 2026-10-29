@@ -214,8 +214,14 @@ internal static class McpBench
             return ExitCodes.Failed;
         }
 
-        var rows = await MeasureAsync(tool, host.Servers[0], workspace, queries, error, cancellationToken)
-            .ConfigureAwait(false);
+        var rows = await MeasureAsync(
+            tool,
+            host.Servers[0],
+            workspace,
+            queries,
+            options.Verbose,
+            error,
+            cancellationToken).ConfigureAwait(false);
 
         var report = new BenchReport(rows, queries.Count);
 
@@ -233,6 +239,7 @@ internal static class McpBench
     /// <param name="server">The running server, spoken to through this product's own client.</param>
     /// <param name="workspace">The workspace the answers cite.</param>
     /// <param name="queries">The questions, in the order the file lists them.</param>
+    /// <param name="verbose">Whether to report each query's two durations as it finishes.</param>
     /// <param name="error">Where a query that failed or disagreed is named.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
     /// <returns>One row per query that answered identically on both sides.</returns>
@@ -241,6 +248,7 @@ internal static class McpBench
         McpServerConnection server,
         Workspace workspace,
         IReadOnlyList<string> queries,
+        bool verbose,
         TextWriter error,
         CancellationToken cancellationToken)
     {
@@ -253,6 +261,7 @@ internal static class McpBench
 
             using var payload = JsonDocument.Parse(arguments);
 
+            var beforeInProcess = Stopwatch.GetTimestamp();
             var inProcess = await tool
                 .ExecuteAsync(
                     new ToolCall(
@@ -262,14 +271,27 @@ internal static class McpBench
                     new ToolInvocationContext(workspace),
                     cancellationToken)
                 .ConfigureAwait(false);
+            var inProcessElapsed = Stopwatch.GetElapsedTime(beforeInProcess);
 
-            // Only the stdio call is timed: the question SC-005 asks is what a client waits for, and the in-process
+            // Only the stdio call is reported: the question SC-005 asks is what a client waits for, and the in-process
             // half exists to prove the answer it waits for is the tool's own.
             var started = Stopwatch.GetTimestamp();
             var overStdio = await server
                 .CallAsync(SearchCodeTool.Name, payload.RootElement, TimeSpan.FromMinutes(2), cancellationToken)
                 .ConfigureAwait(false);
             var elapsed = Stopwatch.GetElapsedTime(started);
+
+            if (verbose)
+            {
+                // The two numbers side by side are how a slow run is explained: a call that is slow on both sides is
+                // the index or the tool, and one that is slow on only one side is the hop.
+                await error.WriteLineAsync(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"  '{query}' · in-process {inProcessElapsed.TotalMilliseconds:0} ms · stdio {elapsed.TotalMilliseconds:0} ms")
+                        .AsMemory(),
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             if (inProcess.IsError || overStdio.IsError)
             {

@@ -139,9 +139,11 @@ internal static class HelpText
 
           'mcp bench' asks the twelve questions in specs/013-evidence-mcp-server/bench/queries.txt
           twice — in process and over stdio — and prints, for each answer, the characters it spent
-          against the characters of the whole files it cites, plus the p95 of the call. It needs a
-          built index and says so otherwise. A query whose two answers differ is a failure rather
-          than a row: the bench is where 'the server adds nothing' is a number and not a claim.
+          against the characters of the whole files it cites, plus the p95 of the call. --verbose
+          adds both durations per query, which is how a slow run is attributed to the hop or to
+          the call. It needs a built index and says so otherwise. A query whose two answers differ
+          is a failure rather than a row: the bench is where 'the server adds nothing' is a
+          number and not a claim.
 
         Chat
           /help                    every chat command, including /cost and /usage
