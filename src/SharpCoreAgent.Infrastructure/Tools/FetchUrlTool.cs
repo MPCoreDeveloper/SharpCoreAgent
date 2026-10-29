@@ -17,7 +17,9 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// <para>
 /// Three decisions shape everything below. The first is that the address is judged before the request: a host that
 /// resolves anywhere private is refused, and so is every address a redirect points at, because a public page that
-/// redirects to <c>127.0.0.1</c> would otherwise be an open door into whatever the developer is running. The second is
+/// redirects to <c>127.0.0.1</c> would otherwise be an open door into whatever the developer is running. The judgement
+/// is made a second time inside the handler's connect callback (<see cref="WebFetchHandler"/>), because a name can
+/// answer publicly for the check and privately for the socket. The second is
 /// that the request carries nothing identifying: one user agent, no cookie jar, no referer, no credential — the client
 /// this tool is given is not the model adapters' client, so a provider key cannot be attached to it. The third is that
 /// the answer says exactly what happened: the final URL after redirects, the status, the type, how many bytes were read
@@ -152,8 +154,29 @@ public sealed class FetchUrlTool : ITool
         }
         catch (HttpRequestException ex)
         {
-            return ToolResult.Failure(toolCall.Id, Name, $"{current.AbsoluteUri} could not be reached: {ex.Message}");
+            return ToolResult.Failure(toolCall.Id, Name, $"{current.AbsoluteUri} could not be reached: {Reason(ex)}");
         }
+    }
+
+    /// <summary>
+    /// Finds the message that says what happened.
+    /// </summary>
+    /// <param name="exception">The exception the request ended with.</param>
+    /// <returns>The innermost message, which is the one a connect-time refusal writes.</returns>
+    /// <remarks>
+    /// The handler throws a refusal from inside its connect callback, and the request path adds a layer around it, so
+    /// the outer message can be "an error occurred while sending the request". The address that was judged is in the
+    /// innermost one, and that is the sentence the model needs to read.
+    /// </remarks>
+    private static string Reason(Exception exception)
+    {
+        var current = exception;
+        while (current.InnerException is { } inner && !string.IsNullOrWhiteSpace(inner.Message))
+        {
+            current = inner;
+        }
+
+        return current.Message;
     }
 
     private static readonly string[] TextSuffixes =

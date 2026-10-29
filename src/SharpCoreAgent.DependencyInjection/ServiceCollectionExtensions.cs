@@ -177,21 +177,22 @@ public static class ServiceCollectionExtensions
     /// fetch tool and no <see cref="ITool"/> that could reach anything. That is a stronger guarantee than a tool that
     /// checks a flag at call time: the tool does not exist to be called.
     /// <para>
-    /// The client is deliberately its own. It carries no default header, no cookie container and no automatic redirect,
-    /// because the tool counts and judges each hop itself — and because the model adapters' client carries an
+    /// The client is deliberately its own. It carries no default header, no cookie container, no automatic redirect and
+    /// no proxy, because the tool counts and judges each hop itself — and because the model adapters' client carries an
     /// <c>Authorization</c> header that must never travel to a third-party page.
+    /// </para>
+    /// <para>
+    /// The handler makes the address judgement a second time, at connect time, through
+    /// <see cref="WebFetchHandler.Create"/>: a name that resolved publicly when the hop was checked and privately when
+    /// the socket was opened is refused rather than followed.
     /// </para>
     /// </remarks>
     private static void AddWeb(IServiceCollection services, SharpCoreAgentOptions options)
     {
         services.AddHttpClient(WebFetchOptions.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
-                UseCookies = false,
-                ConnectTimeout = TimeSpan.FromSeconds(10),
-                AutomaticDecompression = DecompressionMethods.All,
-            });
+            .ConfigurePrimaryHttpMessageHandler(provider => WebFetchHandler.Create(
+                provider.GetRequiredService<IWebAddressResolver>(),
+                provider.GetRequiredService<WebFetchOptions>()));
 
         services.TryAddSingleton<IWebAddressResolver>(DnsWebAddressResolver.Instance);
         services.AddSingleton(new WebFetchOptions { AllowedHosts = options.WebAllowedHosts });

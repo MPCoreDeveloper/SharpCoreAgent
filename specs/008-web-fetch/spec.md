@@ -1,6 +1,7 @@
 # 008 — Reading the web: one page at a time
 
-**Status**: implemented (T001–T028; T029–T033 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T028, plus T030 added after the merge on 2026-10-28; T029 and T031–T033
+deferred, listed in `tasks.md`)
 **Branch**: `feature/008-web-fetch`, merged to `main` as `201a431`; follow-up `3550b53` added the banner-row
 tests and corrected the suite count
 **Depends on**: `001-coding-agent-core` (the tool model and the result contract), `003-terminal-console-agent`
@@ -171,10 +172,13 @@ the turn continues and the model reads why.
 
 ## Risks
 
-- **DNS answers change between the check and the connection.** The address is judged before the request
-  is sent; a resolver that returns a public address for the check and a private one for the connection
-  (rebinding) is not caught. Mitigation is recorded in `plan.md`: a connect-time callback would pin the
-  checked address, and it is a change to make when it is needed rather than a reason to ship neither.
+- **DNS answers change between the check and the connection.** The address is judged before the request is
+  sent, and a resolver that returns a public address for the check and a private one for the connection
+  (rebinding) is now refused rather than followed: the handler judges again at connect time, against the
+  same resolver and the same exemption, and connects to the address it approved
+  (`WebFetchHandler.Create`; added 2026-10-28 as `T030`). What remains is the consequence of that
+  refusal — a machine that can only reach the web through a proxy cannot fetch at all, because a proxy
+  resolves the name itself and would decide the question this rule exists to decide.
 - **The model treats a page as instruction.** `WebRule` says a page grants nothing, and the tool's
   description says the same in one sentence; neither is a guarantee, which is why the rule asks the
   model to *report* a page that tries.

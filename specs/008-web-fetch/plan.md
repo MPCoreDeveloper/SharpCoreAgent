@@ -76,10 +76,19 @@ process's implementation and answers an IP literal with itself.
 **The rule is "any address, not the first".** A name with two answers where one is `10.0.0.5` is refused,
 because taking the first answer is a decision a hostile zone controls.
 
-**Rebinding is not caught.** The check happens before the request; a resolver that answers differently
-for the connection is not re-asked. The honest fix is a `SocketsHttpHandler.ConnectCallback` that
-validates at connect time, which needs the resolver to be reachable from the handler rather than the
-tool, and is a change to make when a deployment needs it. Recorded here rather than pretended away.
+**Rebinding is caught at connect time.** The check before the request is necessary and was never enough: a
+resolver can answer publicly for the judgement and privately for the socket. `WebFetchHandler.Create` puts
+a second judgement inside `SocketsHttpHandler.ConnectCallback`, using the same `IWebAddressResolver` and
+the same `WebAddressPolicy.IsExempt`, and then connects to the permitted address explicitly — so the
+address that was judged is the address that is used. A refusal there arrives as an `HttpRequestException`
+whose innermost message names the address, the category and the `--web-allow` that would permit it, which
+is what the tool reports.
+
+The same callback closes a second door the round had left open without naming it: `UseProxy = false`.
+Through a proxy the callback is handed the proxy's endpoint, the proxy resolves the target name itself,
+and every refusal in `WebAddressPolicy` becomes advice. A developer behind a mandatory proxy therefore
+cannot fetch, and is told so by a connection failure; `fetch_url` reading through something the developer
+never named on the command line is the worse outcome.
 
 ## The HTML reduction
 

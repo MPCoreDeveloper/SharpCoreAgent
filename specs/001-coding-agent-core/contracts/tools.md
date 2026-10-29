@@ -69,6 +69,10 @@ Obligations:
 ```json
 {"type":"object","properties":{"url":{"type":"string","description":"Absolute http or https URL to read."},"max_chars":{"type":"integer","minimum":1,"maximum":60000,"description":"Longest text to return; defaults to the tool's ceiling."}},"required":["url"],"additionalProperties":false}
 ```
+Note: the address rule is applied twice — before each request and again inside the connect callback — and
+the fetch client refuses a proxy (`UseProxy = false`), because through a proxy the host is resolved by
+something the developer never named on the command line. A refused address is a tool result naming the
+category and the `--web-allow` that would permit it.
 
 `write_file`
 ```json

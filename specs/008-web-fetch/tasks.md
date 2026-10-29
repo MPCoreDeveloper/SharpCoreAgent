@@ -48,8 +48,8 @@ pass has a real list rather than a memory.
 
 ## Deliberately not in this round
 
-- [ ] T029 JavaScript execution, cookies, logins and screenshots. They are the browser round's business, and a native binary is the constraint this product keeps.
-- [ ] T030 A connect-time address check (`SocketsHttpHandler.ConnectCallback`) that closes the DNS-rebinding gap named in `plan.md`.
+- [ ] T029 JavaScript execution, cookies and logins. Not round 4's either: the browser server the developer names executes the JavaScript and keeps the cookies, and `010-browser` adds only the artefact path a screenshot needs (`specs/000-parity-roadmap.md`, 2026-10-28). A native binary is the constraint this product keeps.
+- [X] T030 A connect-time address check (`SocketsHttpHandler.ConnectCallback`) that closes the DNS-rebinding gap named in `plan.md`. (Done 2026-10-28, after the round merged: `WebFetchHandler.Create` resolves inside the callback, refuses a blocked address naming `--web-allow`, and connects to a permitted one explicitly rather than by name; it also sets `UseProxy = false`, because through a proxy the callback is handed the proxy's endpoint and the proxy then resolves the name itself. `WebFetchHandlerTests` proves the refusal, the named-port-only exemption and a real loopback round trip; `WebToolRegistrationTests` drives the client the container built, with no tool in the way.)
 - [ ] T031 Paging a long page (`start_index`), refused in the spec until transcripts show the character ceiling being hit.
 - [ ] T032 A web search tool. Naming a page is the developer's job in this round.
 - [ ] T033 `robots.txt` handling. Refused in the spec: politeness is the developer's call, not a second request per fetch.

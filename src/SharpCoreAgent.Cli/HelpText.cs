@@ -65,8 +65,10 @@ internal static class HelpText
 
           --web registers one more tool, fetch_url. It reads http and https only, sends no cookie and no
           credential, follows at most five redirects, and refuses loopback, private, link-local and
-          cloud-metadata addresses unless --web-allow names the host. It returns text, never JavaScript,
-          and a result says whether it was cut. Neither flag is a setting: both are gone with the process.
+          cloud-metadata addresses unless --web-allow names the host — before the request and again when
+          the socket is opened, and through no proxy, because a proxy would resolve the host itself. It
+          returns text, never JavaScript, and a result says whether it was cut. Neither flag is a
+          setting: both are gone with the process.
 
           --mcp starts one program per flag, speaks the Model Context Protocol to it over stdin and
           stdout, and offers the tools that program lists as <server>_<tool>, where <server> is the

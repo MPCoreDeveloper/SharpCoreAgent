@@ -450,7 +450,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 939 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 944 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
@@ -495,7 +495,7 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 939 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 944 tests, all green, with no compiler
   warnings.
 - `specs/007-external-roots` — implemented: `Workspace` carries read-only attachments, `read_file`,
   `list_directory` and `search_text` answer from them by absolute path, `list_roots` reports the roots,
@@ -505,7 +505,10 @@ the second duplicates settings that would drift.
   does), `--web-allow <host>` exempts a host from the address rule, the tool reads one page as text with
   a redirect, byte and character ceiling, and the request carries no cookie and no credential. The
   address rule refuses loopback, private, link-local, unique-local, carrier-grade NAT and cloud-metadata
-  addresses on every hop. The suite has no live network: every case replays a stub `HttpMessageHandler`.
+  addresses on every hop, and again inside the handler's connect callback, so a name that resolves
+  publicly for the check and privately for the socket is refused rather than followed; the client also
+  refuses a proxy, because a proxy resolves the host itself. No test leaves the machine — every case
+  replays a stub `HttpMessageHandler`, except the connect-time ones, which open one loopback socket.
 - `specs/009-mcp-client` — implemented: `--mcp "<command>"` (repeatable) starts stdio MCP servers for one
   invocation, the client speaks JSON-RPC 2.0 itself (`initialize`, `notifications/initialized`,
   paginated `tools/list`, `tools/call`), and each server tool becomes an `ITool` named

@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreAgent.Application;
 using SharpCoreAgent.DependencyInjection;
@@ -67,6 +68,33 @@ public sealed class WebToolRegistrationTests
         Assert.Empty(client.DefaultRequestHeaders);
     }
 
+    [Fact]
+    public async Task TheContainersFetchClientJudgesTheAddressAgainAtConnectTime()
+    {
+        // The container is where the guard can quietly disappear: a handler built here without a connect callback would
+        // leave the rebinding window open while every tool-level test still passed. This drives the client the
+        // container built, with no tool in the way, and watches it refuse the address the socket was about to use.
+        var services = new ServiceCollection();
+        services.AddSingleton<IWebAddressResolver>(new LoopbackResolver());
+        using var provider = services.AddSharpCoreAgent(new SharpCoreAgentOptions { IndexEnabled = false, WebAccessEnabled = true })
+            .BuildServiceProvider();
+
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(WebFetchOptions.HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "http://rebind.test/");
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.SendAsync(request, TestContext.Current.CancellationToken));
+
+        Assert.Contains("refused at connect time", exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains("loopback", exception.ToString(), StringComparison.Ordinal);
+    }
+
     private static ServiceProvider Build(SharpCoreAgentOptions options) =>
         new ServiceCollection().AddSharpCoreAgent(options).BuildServiceProvider();
+
+    private sealed class LoopbackResolver : IWebAddressResolver
+    {
+        public ValueTask<IReadOnlyList<IPAddress>> ResolveAsync(string host, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Loopback]);
+    }
 }
