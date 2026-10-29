@@ -147,6 +147,16 @@ internal sealed record CliOptions
     public IReadOnlyList<string> WebAllowedHosts { get; init; } = [];
 
     /// <summary>
+    /// Gets the servers this invocation starts, in the order they were named.
+    /// </summary>
+    /// <remarks>
+    /// Filled by repeated <c>--mcp</c>, each value being a whole command line. It is authority for one
+    /// invocation, like <see cref="AdditionalRoots"/>: starting a program is a decision about this task, and
+    /// <see cref="SettableNames"/> deliberately does not include it.
+    /// </remarks>
+    public IReadOnlyList<string> McpServers { get; init; } = [];
+
+    /// <summary>
     /// Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.
     /// </summary>
     /// <remarks>
@@ -257,6 +267,7 @@ internal sealed record CliOptions
         AdditionalRoots = AdditionalRoots,
         WebAccessEnabled = Web,
         WebAllowedHosts = WebAllowedHosts,
+        McpServers = McpServers,
         Approval = Approval,
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
@@ -633,6 +644,7 @@ internal sealed record CliOptions
             case CliCommand.Index:
                 RejectAttachmentRoots(options);
                 RejectWebFlags(options);
+                RejectMcpFlags(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException(
@@ -656,6 +668,7 @@ internal sealed record CliOptions
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
                 RejectWebFlags(options);
+                RejectMcpFlags(options);
                 if (options.Json)
                 {
                     throw new CliUsageException(
@@ -669,6 +682,7 @@ internal sealed record CliOptions
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
                 RejectWebFlags(options);
+                RejectMcpFlags(options);
                 if (options.Json)
                 {
                     throw new CliUsageException(
@@ -689,6 +703,7 @@ internal sealed record CliOptions
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
                 RejectWebFlags(options);
+                RejectMcpFlags(options);
                 if (positionals.Count > 0)
                 {
                     throw new CliUsageException($"models does not take '{positionals[0]}'.");
@@ -1053,6 +1068,25 @@ internal sealed record CliOptions
     }
 
     /// <summary>
+    /// Rejects <c>--mcp</c> on the commands that never run a turn.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">A server was named on a command that cannot use one.</exception>
+    /// <remarks>
+    /// The same reasoning as <see cref="RejectWebFlags"/>: a developer who typed <c>--mcp</c> and watched the
+    /// command print a model catalogue has been told nothing, and would reasonably conclude the server started.
+    /// </remarks>
+    private static void RejectMcpFlags(CliOptions options)
+    {
+        if (options.McpServers.Count > 0)
+        {
+            throw new CliUsageException(
+                "--mcp applies to run and chat.",
+                "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
+        }
+    }
+
+    /// <summary>
     /// Parses an approval mode name.
     /// </summary>
     /// <param name="value">The text to parse, case-insensitively.</param>
@@ -1209,6 +1243,12 @@ internal sealed record CliOptions
                 return options with
                 {
                     WebAllowedHosts = [.. options.WebAllowedHosts, TakeValue(args, ref index, name)],
+                };
+
+            case "--mcp":
+                return options with
+                {
+                    McpServers = [.. options.McpServers, TakeValue(args, ref index, name)],
                 };
 
             case "--approval":

@@ -42,6 +42,7 @@ internal static class HelpText
           --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
           --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
+          --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow
           --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
@@ -66,6 +67,13 @@ internal static class HelpText
           credential, follows at most five redirects, and refuses loopback, private, link-local and
           cloud-metadata addresses unless --web-allow names the host. It returns text, never JavaScript,
           and a result says whether it was cut. Neither flag is a setting: both are gone with the process.
+
+          --mcp starts one program per flag, speaks the Model Context Protocol to it over stdin and
+          stdout, and offers the tools that program lists as <server>_<tool>, where <server> is the
+          command's own name. The command runs through the platform shell, so npx, uvx and deno work as
+          typed. A tool the server marks read-only runs without asking; everything else is approved like
+          a write. The servers are started before the first turn and killed when the process exits, and
+          none of this is a setting: with no --mcp there is no client in the process at all.
 
         Config
           sharpcoreagent config                     every setting, its value and its source
@@ -129,6 +137,7 @@ internal static class HelpText
           sharpcoreagent index --status --json
           sharpcoreagent index --rebuild --workspace .
           sharpcoreagent run "find the TODO comments" --provider openai-compatible --base-url http://localhost:1234/v1
+          sharpcoreagent chat --mcp "npx -y @modelcontextprotocol/server-filesystem ."
         """;
 
     /// <summary>Gets the commands the interactive loop understands.</summary>

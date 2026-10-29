@@ -11,6 +11,7 @@ using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Indexing;
 using SharpCoreAgent.Infrastructure.Credentials;
+using SharpCoreAgent.Infrastructure.Mcp;
 using SharpCoreAgent.Infrastructure.Providers;
 using SharpCoreAgent.Infrastructure.Sessions;
 using SharpCoreAgent.Infrastructure.Tools;
@@ -106,6 +107,11 @@ public static class ServiceCollectionExtensions
             AddWeb(services, options);
         }
 
+        if (options.McpServers.Count > 0)
+        {
+            AddMcp(services, options);
+        }
+
         if (options.IndexEnabled)
         {
             AddSharpCoreAgentIndex(services, options);
@@ -190,6 +196,37 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IWebAddressResolver>(DnsWebAddressResolver.Instance);
         services.AddSingleton(new WebFetchOptions { AllowedHosts = options.WebAllowedHosts });
         services.AddSingleton<ITool, FetchUrlTool>();
+    }
+
+    /// <summary>
+    /// Registers the MCP client: one host, the ceilings it works within, and the registry that appends the
+    /// tools the servers offer.
+    /// </summary>
+    /// <param name="services">The container to add to.</param>
+    /// <param name="options">The host's settings; <see cref="SharpCoreAgentOptions.McpServers"/> names the command lines.</param>
+    /// <remarks>
+    /// Called only when a server was named, which is the same structural promise <see cref="AddWeb"/> makes: a
+    /// process that asked for no server has no client, no host and no <see cref="ITool"/> that could start one.
+    /// <para>
+    /// The host is a singleton because it owns processes that outlive a tool call, and the container disposes it
+    /// — killing every child — when the process ends. The registry is replaced rather than added to, because
+    /// the tool list is the union of the built-ins and whatever the servers offered at startup, which cannot be
+    /// known before they have answered; that is why this factory starts the host rather than trusting a
+    /// resolution order nobody can see.
+    /// </para>
+    /// </remarks>
+    private static void AddMcp(IServiceCollection services, SharpCoreAgentOptions options)
+    {
+        services.AddSingleton(new McpClientOptions());
+        services.AddSingleton(provider => new McpToolHost(
+            options.McpServers,
+            provider.GetRequiredService<McpClientOptions>()));
+
+        services.AddSingleton<IToolRegistry>(provider =>
+        {
+            var host = provider.GetRequiredService<McpToolHost>();
+            return new ToolRegistry([.. provider.GetServices<ITool>(), .. host.Started().Tools.Cast<ITool>()]);
+        });
     }
 
     /// <summary>

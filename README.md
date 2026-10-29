@@ -173,6 +173,7 @@ keep working on the file that needs repairing.
 | `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
 | `--web` | run, chat | off — `fetch_url` may read http and https pages; the network is off otherwise |
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
+| `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
@@ -199,8 +200,9 @@ keep working on the file that needs repairing.
 Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_WORKSPACE`, and
 `SHARPCOREAGENT_ADD_ROOTS` for the read-only roots `run` and `chat` start with, separated by the
 platform's path separator (`;` on Windows, `:` elsewhere). Command-line roots come first. There is
-deliberately no `SHARPCOREAGENT_WEB`: the network is turned on by typing `--web`, in the process that
-wants it, and nothing a shell or a CI image exports can grant it on the developer's behalf.
+deliberately no `SHARPCOREAGENT_WEB` and no `SHARPCOREAGENT_MCP`: the network is turned on by typing
+`--web` and a program is started by typing `--mcp`, in the process that wants them, and nothing a shell
+or a CI image exports can grant either on the developer's behalf.
 
 In `chat`, the loop understands `/model grok:grok-4` (switch provider and model without losing the
 conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/approval`, `/mode plan|act`,
@@ -295,6 +297,28 @@ redirected   from https://example.com/docs
 
 changelog: 4.2.0 — …
 ```
+
+`--mcp "<command>"` starts one MCP server per flag, speaks JSON-RPC to it over its stdin and stdout, and
+offers the tools it lists as ordinary tools the model already knows how to call. The command runs through
+the platform shell (`cmd /d /s /c` on Windows, `/bin/sh -c` elsewhere), so `npx`, `uvx` and `deno` work
+exactly as they do in the developer's terminal, quoting included:
+
+```text
+sharpcoreagent run "what changed in the last migration?" \
+  --mcp "npx -y @modelcontextprotocol/server-postgres postgresql://localhost/app"
+```
+
+Each tool is named `<server>_<tool>` — the command's own name, folded to lower case, so `npx_run_query`
+says which program answered; a second server started the same way keeps its own prefix (`npx_2_…`), and a
+tool name that repeats inside one server gets `_2` rather than disappearing. The server's `inputSchema` is
+forwarded verbatim, because it is the server's contract with the model. A tool annotated `readOnlyHint:
+true` runs without a prompt; everything else is `Destructive` and approved like a write, so an
+unannotated server tool asks rather than assumes. Results are flattened from `content[]` — text verbatim,
+images, audio, blobs and resource links described by type, size and URI — bounded at 64 000 characters,
+and then by the turn's `MaxToolResultChars` on top. The servers start before the first turn and are a
+failure, not a silent omission, when one will not: `exit 2` naming the command line. Each child is killed
+with its process tree when the session ends, its stderr is kept for `--verbose` and never reaches the
+transcript, and there is no MCP client in a process that did not pass the flag.
 
 `replace_in_file` is the edit the agent is told to prefer: `edits` carries up to twenty fragments that
 are applied in order against each intermediate state, all or nothing, and only the matched text
@@ -426,11 +450,13 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 880 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 939 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
-  reading, `fetch_url` with its HTML reduction and its address rule — and the tests that cover them — so
+  reading, `fetch_url` with its HTML reduction and its address rule, and the MCP client with its
+  hand-built JSON-RPC transport, its scripted server and a real child process — and the tests that cover
+  them — so
   the next scan moves
   both the line count and
   the percentage. **The gate
@@ -469,7 +495,7 @@ the second duplicates settings that would drift.
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus
   `/compact`, model aliases and the Cline-parity pass: `run_shell` streams under a gutter and hands back
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
-  of fragments matched through a four-rung ladder. The suite is 880 tests, all green, with no compiler
+  of fragments matched through a four-rung ladder. The suite is 939 tests, all green, with no compiler
   warnings.
 - `specs/007-external-roots` — implemented: `Workspace` carries read-only attachments, `read_file`,
   `list_directory` and `search_text` answer from them by absolute path, `list_roots` reports the roots,
@@ -480,6 +506,14 @@ the second duplicates settings that would drift.
   a redirect, byte and character ceiling, and the request carries no cookie and no credential. The
   address rule refuses loopback, private, link-local, unique-local, carrier-grade NAT and cloud-metadata
   addresses on every hop. The suite has no live network: every case replays a stub `HttpMessageHandler`.
+- `specs/009-mcp-client` — implemented: `--mcp "<command>"` (repeatable) starts stdio MCP servers for one
+  invocation, the client speaks JSON-RPC 2.0 itself (`initialize`, `notifications/initialized`,
+  paginated `tools/list`, `tools/call`), and each server tool becomes an `ITool` named
+  `<server>_<tool>` in the same registry as the built-ins, with `readOnlyHint` deciding whether it
+  prompts. Startup is atomic — a server that will not answer is `exit 2` naming its command line — and
+  every child is killed with its process tree when the process ends. The suite runs a scripted in-memory
+  server for the protocol and a real one, `tests/SharpCoreAgent.TestMcpServer`, for the launch path, the
+  stderr split and the kill.
 - `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
   reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;
   `--fallback provider:model` replays a 401 or 5xx turn once at a model the developer named, recording

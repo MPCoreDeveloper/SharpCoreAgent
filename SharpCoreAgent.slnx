@@ -11,6 +11,7 @@
 
   <Folder Name="/tests/">
     <Project Path="tests/SharpCoreAgent.Tests/SharpCoreAgent.Tests.csproj" />
+    <Project Path="tests/SharpCoreAgent.TestMcpServer/SharpCoreAgent.TestMcpServer.csproj" />
   </Folder>
 
 </Solution>

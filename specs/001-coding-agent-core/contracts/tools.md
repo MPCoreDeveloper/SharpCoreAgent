@@ -104,3 +104,30 @@ Obligations:
 `search_text` and `list_directory` skip `.git`, `node_modules`, `bin`, `obj`, `.vs`, `.sharpcoreagent`,
 and any file above 1 MiB or detected as binary (NUL byte in the first 8 KiB). These names are a
 single constant so a test can assert the list.
+
+## Server-provided tools (009)
+
+`--mcp "<command>"` starts a stdio MCP server and registers every tool it lists. These are the only tools
+whose schema this build does not write, and the only ones whose names are generated:
+
+- **Name** — `<server>_<tool>`, folded to `[a-z0-9_]` with runs collapsed, ends trimmed and the whole name
+  capped at 64 characters. `<server>` is the command's executable stem (`npx`, `uvx`, `mcp-server-git`);
+  a second server with the same stem gets `_2`, and a tool name that folds onto one already used inside
+  the same server gets `_2` as well. A collision with a built-in is not renamed: `ToolRegistry` refuses
+  the duplicate at construction.
+- **Description** — the server's own, trimmed and capped at 1 024 characters; the command line when the
+  server sent none.
+- **Schema** — the server's `inputSchema`, forwarded verbatim; `{"type":"object","properties":{}}` when it
+  sent none.
+- **Safety** — `ReadOnly` only for an explicit `annotations.readOnlyHint: true`. Everything else is
+  `Destructive`, so it is gated by the approval mode and prompts in `ask`.
+- **Result** — `content[]` flattened with every entry described (text verbatim; `image`, `audio` and
+  `blob` by MIME type and size; resources and resource links by URI), joined with a blank line, bounded
+  at 64 000 characters with `[truncated]`, and bounded again by `MaxToolResultChars` for the turn.
+  `isError: true` becomes a failed `ToolResult`, and a JSON-RPC error or a dead server becomes a failure
+  naming the code or the exit status rather than an exception.
+- **Effects** — a destructive call reports `CommandRun` with `<server>: <tool>`; a read-only call reports
+  none, because there is no workspace path to name.
+- **Lifetime** — one child per flag, started before the first turn and killed with its process tree when
+  the process ends. A server that will not answer its handshake is a startup failure and `exit 2`.
+

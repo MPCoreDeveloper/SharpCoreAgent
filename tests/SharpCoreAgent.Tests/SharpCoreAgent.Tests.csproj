@@ -39,6 +39,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.TestMcpServer\SharpCoreAgent.TestMcpServer.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Target Name="CopyTestMcpServer" AfterTargets="Build">
+    <!--
+      After Build, so the referenced project has already produced its output. The tests launch this server as a
+      child process from their own folder, which is why it is copied rather than referenced as a library.
+    -->
+    <ItemGroup>
+      <_TestMcpServerFiles Include="$(MSBuildThisFileDirectory)..\SharpCoreAgent.TestMcpServer\bin\$(Configuration)\net11.0\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_TestMcpServerFiles)" DestinationFolder="$(OutDir)McpServer\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
     <!--
       xUnit v3 on Microsoft.Testing.Platform, with MTP's coverage extension, so `dotnet test` can write a
       Cobertura report through a platform switch rather than a VSTest data collector. SonarCloud reads it.

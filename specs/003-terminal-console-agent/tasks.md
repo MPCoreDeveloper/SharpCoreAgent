@@ -59,7 +59,7 @@ pass has a real list rather than a memory.
 
 ## Phase 5 — MCP
 
-- [ ] T040 Opt-in MCP client (`--mcp <command>`), tools registered through the same `IToolRegistry`, approval inherited from `ToolSafety`.
+- [X] T040 Opt-in MCP client (`--mcp <command>`), tools registered through the same `IToolRegistry`, approval inherited from `ToolSafety`.
 
 ## Phase 6 — Cline parity: streaming shell and multi-block edits
 

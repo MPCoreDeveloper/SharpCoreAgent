@@ -6,6 +6,7 @@ using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
+using SharpCoreAgent.Infrastructure.Mcp;
 using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.Cli;
@@ -85,6 +86,64 @@ internal static class CliHost
         {
             error.WriteLine($"error: {ex.Message}");
             workspace = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Starts the MCP servers this invocation named, before anything resolves the tool registry.
+    /// </summary>
+    /// <param name="options">The parsed command line; without <c>--mcp</c> this does nothing at all.</param>
+    /// <param name="provider">The container, for the host the composition root registered.</param>
+    /// <param name="error">Where the reason goes when a server will not start.</param>
+    /// <param name="cancellationToken">Cancels startup.</param>
+    /// <returns>
+    /// <see langword="true"/> when no server was named, or when every one of them answered; <see langword="false"/>
+    /// when one of them did not, in which case nothing is left running and the message names the command line.
+    /// </returns>
+    /// <remarks>
+    /// This runs before the agent is resolved because the registry is built from the tools the servers offer: the
+    /// alternative is an exception three frames into the first turn, where the message no longer names the command
+    /// the developer typed. Startup failure is exit 2 with one line, which is what makes a typo in a command line a
+    /// typo rather than a mystery.
+    /// </remarks>
+    public static async Task<bool> TryStartMcpAsync(
+        CliOptions options,
+        ServiceProvider provider,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(error);
+
+        if (options.McpServers.Count == 0)
+        {
+            return true;
+        }
+
+        if (provider.GetService<McpToolHost>() is not { } host)
+        {
+            await error.WriteLineAsync("error: --mcp was given, but this build registered no MCP client.".AsMemory(), cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        // A server's stderr is what a developer chasing a broken one needs and is exactly what a transcript must
+        // never carry, so it goes to the terminal only under --verbose.
+        if (options.Verbose)
+        {
+            var theme = ThemeFor(options);
+            host.Verbose(message => error.WriteLine($"{theme.Dim("mcp:")} {message}"));
+        }
+
+        try
+        {
+            await host.StartAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (McpStartupException ex)
+        {
+            await error.WriteLineAsync($"error: {ex.Message}".AsMemory(), cancellationToken).ConfigureAwait(false);
             return false;
         }
     }

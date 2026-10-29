@@ -196,6 +196,16 @@ public sealed class ToolArgumentReader : IDisposable
     }
 
     /// <summary>
+    /// Gets the argument object exactly as it arrived.
+    /// </summary>
+    /// <remarks>
+    /// For a tool that forwards its arguments rather than reading them — an MCP bridge hands the object to a
+    /// server that owns the schema. The element lives as long as this reader, so a caller that keeps it
+    /// past disposal must clone it.
+    /// </remarks>
+    public JsonElement Root => _root;
+
+    /// <summary>
     /// Determines whether a parameter was supplied with a non-null value.
     /// </summary>
     /// <param name="name">The parameter name.</param>
