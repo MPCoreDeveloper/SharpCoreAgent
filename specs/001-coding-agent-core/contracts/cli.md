@@ -14,6 +14,7 @@ sharpcoreagent index [options]               # build, inspect or repair the inde
 sharpcoreagent config [show|get|set|unset|path]   # settings and their provenance (006)
 sharpcoreagent mcp serve [options]           # this workspace's index as an MCP server on stdio (013)
 sharpcoreagent mcp config --client <name>    # the block that adds it to claude, vscode or codex (013)
+sharpcoreagent mcp bench [options]           # the fixture questions, measured against the source (013)
 sharpcoreagent --help | --version
 ```
 
@@ -103,6 +104,11 @@ Ctrl+C during a turn cancels the turn and returns to the prompt; a second Ctrl+C
 
 `chat` exits 0 on `/exit` regardless of earlier turn outcomes; the exit code reflects the last turn
 only when the process ends because of that turn.
+
+`mcp bench` exits 0 when every fixture query answered identically in process and over stdio, 1 when one
+did not (the query is named on stderr), and 2 when it cannot run: no workspace, no
+`specs/013-evidence-mcp-server/bench/queries.txt`, or no built index. The surface it measures is in
+`specs/013-evidence-mcp-server/contracts/mcp-server.md`.
 
 ## Help text
 

@@ -158,3 +158,26 @@ sharpcoreagent mcp serve: /path/to/workspace · index fresh (<files> files, <pas
 ```
 
 A client may log it. Nothing depends on it, and its text is allowed to change.
+
+## `mcp bench`: the measurement
+
+`sharpcoreagent mcp bench` is the harness the round's numbers come from, and it is a client of the surface above
+rather than a second implementation of it.
+
+- **Questions** come from `specs/013-evidence-mcp-server/bench/queries.txt`, relative to `--workspace`: one per
+  line, `#` for a comment, blank lines ignored. The command takes no operand, so the questions a published number
+  was measured on cannot be edited on the command line.
+- **Two answers per question.** Each query is asked of `search_code` in process (through the container
+  `mcp serve` builds) and over stdio (through this product's own client, against a server started as
+  `<this binary> mcp serve --workspace <root> --no-refresh`). The two texts are compared as strings; a pair that
+  differs is a failure, named on stderr, and the run exits `1`.
+- **The ratio (SC-006)** is `answer characters / characters of the distinct files the answer cites`, where a file
+  is counted once per query and counted whole rather than by the cited range. Below 1 means the answer cost less
+  than reading the files it points at.
+- **The latency (SC-005)** is the p95 of the stdio `tools/call` wall-clock, by nearest rank: with twelve samples
+  that is the slowest call, not an interpolated one.
+- **stdout** carries one summary line, a blank line and one row per query — that is the artefact the numbers in
+  `plan.md` are a paste of. **stderr** carries the header naming the index, and every parity failure.
+- It needs a built index (`sharpcoreagent index` first) and refuses to run without one, because twelve identical
+  "no index" answers would be a measurement of nothing.
+

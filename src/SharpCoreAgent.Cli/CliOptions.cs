@@ -47,6 +47,9 @@ internal enum McpAction
 
     /// <summary>Print the block that adds this server to another agent's configuration.</summary>
     Config,
+
+    /// <summary>Ask the fixture questions twice and print what the answers cost.</summary>
+    Bench,
 }
 
 /// <summary>Whose configuration <c>mcp config</c> prints a block for.</summary>
@@ -969,10 +972,32 @@ internal sealed record CliOptions
                     McpClient = client,
                 };
 
+            case "bench":
+                if (rest.Count > 0)
+                {
+                    throw new CliUsageException(
+                        $"mcp bench does not take '{rest[0]}'.",
+                        $"Its questions come from {McpBench.QueriesRelativePath}; it takes --workspace.");
+                }
+
+                // The bench measures the index; without one there is nothing to measure, and the run would report
+                // twelve identical refusals as though they were results.
+                if (!options.IndexEnabled)
+                {
+                    throw new CliUsageException(
+                        "--no-index leaves mcp bench with nothing to measure.",
+                        "Build the index first: sharpcoreagent index");
+                }
+
+                RejectNoRefresh(options);
+                RejectClientFlag(options);
+
+                return options with { Command = CliCommand.Mcp, McpAction = McpAction.Bench };
+
             default:
                 throw new CliUsageException(
                     $"'{positionals[0]}' is not an mcp action.",
-                    "The actions are serve and config.");
+                    "The actions are serve, config and bench.");
         }
     }
 

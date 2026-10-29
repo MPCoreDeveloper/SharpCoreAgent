@@ -1,0 +1,17 @@
+# The twelve questions `sharpcoreagent mcp bench` measures.
+#
+# One per line; `#` starts a comment and blank lines are ignored. They are questions a developer
+# would ask of this repository, not keywords: the point of the harness is that an answer to a real
+# question costs fewer characters than reading the files it cites.
+where is a tool result trimmed to the character budget
+which wrapper opens the index for one call and releases it again
+where is an MCP tool name folded into letters and underscores
+how is the refresh budget kept between two calls
+which type writes one JSON-RPC frame on a single line
+where is the exit code chosen for a refused flag
+how does the agent know which tools may run without asking
+which file writes the transcript of a turn
+where is a provider's rate limit read from its answer
+how is the line range of an evidence block addressed
+which command prints the settings file in use
+where is the search answer rendered with its heading

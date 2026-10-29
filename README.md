@@ -430,6 +430,21 @@ stdout carries the block and nothing else, so `sharpcoreagent mcp config --clien
 writes the file; the line naming that file goes to stderr. None of it is a setting and none of it needs a
 key, which is the point: an agent that is not this one gets this repository's index for a command line.
 
+### Measuring it
+
+`sharpcoreagent mcp bench` is the number this round is allowed to claim. It asks the twelve questions in
+`specs/013-evidence-mcp-server/bench/queries.txt` twice — once in process and once over stdio through the
+client above — and prints, per query, the characters the answer spent against the characters of the whole
+files it cites, plus the p95 of the call:
+
+```text
+bench · 12 queries · evidence 26 412 chars · sources 61 388 chars · ratio 0.430 · p95 148 ms · parity 12/12
+```
+
+A query whose two answers differ is a failure rather than a row, so the harness is also the parity check
+SC-002 asks for. It needs a built index and will not run without one; the numbers it printed are in
+`specs/013-evidence-mcp-server/plan.md`, including the ratio that came out worse than reading the files.
+
 ## Architecture
 
 | Project | Responsibility |

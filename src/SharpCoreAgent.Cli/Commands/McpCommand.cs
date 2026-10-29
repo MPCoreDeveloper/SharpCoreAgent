@@ -48,9 +48,38 @@ internal static class McpCommand
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
-        return options.McpAction == McpAction.Config
-            ? await WriteSnippetAsync(options, output, error, cancellationToken).ConfigureAwait(false)
-            : await ServeAsync(options, input, output, error, cancellationToken).ConfigureAwait(false);
+        return options.McpAction switch
+        {
+            McpAction.Config => await WriteSnippetAsync(options, output, error, cancellationToken).ConfigureAwait(false),
+            McpAction.Bench => await BenchAsync(options, output, error, cancellationToken).ConfigureAwait(false),
+            _ => await ServeAsync(options, input, output, error, cancellationToken).ConfigureAwait(false),
+        };
+    }
+
+    /// <summary>
+    /// Runs the measurement the round's numbers come from.
+    /// </summary>
+    /// <param name="options">The parsed command line: the workspace.</param>
+    /// <param name="output">Where the table goes.</param>
+    /// <param name="error">Where the header and the parity failures go.</param>
+    /// <param name="cancellationToken">Cancels the run.</param>
+    /// <returns>The exit code the bench chose.</returns>
+    /// <remarks>
+    /// The stream is wrapped without a byte-order mark and left open: a redirect of this table into a file is the
+    /// intended use, and a BOM in front of the first character would be the first thing a reader saw.
+    /// </remarks>
+    private static async Task<int> BenchAsync(
+        CliOptions options,
+        Stream output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        await using var writer = new StreamWriter(output, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true);
+
+        var exitCode = await McpBench.ExecuteAsync(options, writer, error, cancellationToken).ConfigureAwait(false);
+        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+        return exitCode;
     }
 
     /// <summary>

@@ -135,6 +135,7 @@ public sealed class HelpTextTests
             "Serve",
             "  sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served",
             "  sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode or codex",
+            "  sharpcoreagent mcp bench                    the twelve fixture questions, asked twice and measured",
             "  Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only",
             "  evidence tools — search_code, find_symbol, find_references, code_context and index_status —",
             "  and nothing else. No key, no chat model, no network and no tool that writes or starts a",
@@ -157,9 +158,26 @@ public sealed class HelpTextTests
             "  serves the directory it starts the server in; put --workspace in the args to pin another.",
             "  The block is the only thing on stdout, so a redirect writes the file, and the one line",
             "  naming that file goes to stderr.",
+            string.Empty,
+            "  'mcp bench' asks the twelve questions in specs/013-evidence-mcp-server/bench/queries.txt",
+            "  twice — in process and over stdio — and prints, for each answer, the characters it spent",
+            "  against the characters of the whole files it cites, plus the p95 of the call. It needs a",
+            "  built index and says so otherwise. A query whose two answers differ is a failure rather",
+            "  than a row: the bench is where 'the server adds nothing' is a number and not a claim.",
         ];
 
         Assert.Contains(string.Join('\n', section), Normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheUsageBlockDocumentsTheBenchCommand()
+    {
+        // The measurement is only reproducible if a reader can find the command that produces it, and the one thing
+        // it insists on — a built index — is said in the same breath.
+        Assert.Contains("sharpcoreagent mcp bench [options]", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("mcp bench", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("ratio", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("p95", HelpText.Usage, StringComparison.Ordinal);
     }
 
     [Fact]

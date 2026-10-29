@@ -31,6 +31,7 @@ internal static class HelpText
           sharpcoreagent setup                         the preferences, asked for one at a time
           sharpcoreagent mcp serve [options]           this workspace's index as an MCP server on stdio
           sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode or codex
+          sharpcoreagent mcp bench [options]           the twelve fixture questions, measured against the source
           sharpcoreagent --help | --version
 
           With no command and a terminal on both ends, a session starts. When either stream is
@@ -112,6 +113,7 @@ internal static class HelpText
         Serve
           sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served
           sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode or codex
+          sharpcoreagent mcp bench                    the twelve fixture questions, asked twice and measured
           Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only
           evidence tools — search_code, find_symbol, find_references, code_context and index_status —
           and nothing else. No key, no chat model, no network and no tool that writes or starts a
@@ -134,6 +136,12 @@ internal static class HelpText
           serves the directory it starts the server in; put --workspace in the args to pin another.
           The block is the only thing on stdout, so a redirect writes the file, and the one line
           naming that file goes to stderr.
+
+          'mcp bench' asks the twelve questions in specs/013-evidence-mcp-server/bench/queries.txt
+          twice — in process and over stdio — and prints, for each answer, the characters it spent
+          against the characters of the whole files it cites, plus the p95 of the call. It needs a
+          built index and says so otherwise. A query whose two answers differ is a failure rather
+          than a row: the bench is where 'the server adds nothing' is a number and not a claim.
 
         Chat
           /help                    every chat command, including /cost and /usage

@@ -197,21 +197,5 @@ public sealed class McpServerDogfoodTests : IDisposable
         }
     }
 
-    private string CommandLine() => string.Create(
-        CultureInfo.InvariantCulture,
-        $"\"{CliPath()}\" mcp serve --workspace \"{_sandbox.Root}\" --no-refresh");
-
-    /// <summary>Finds the CLI this build produced, which the <c>CopyProductCli</c> target put beside this assembly.</summary>
-    /// <returns>The absolute path of the executable.</returns>
-    private static string CliPath()
-    {
-        var name = OperatingSystem.IsWindows() ? "sharpcoreagent.exe" : "sharpcoreagent";
-        var path = Path.Combine(AppContext.BaseDirectory, "Cli", name);
-
-        Assert.True(
-            File.Exists(path),
-            string.Create(CultureInfo.InvariantCulture, $"the CLI was not copied to {path} (see CopyProductCli)"));
-
-        return path;
-    }
+    private string CommandLine() => CliBinary.Serve(_sandbox.Root);
 }

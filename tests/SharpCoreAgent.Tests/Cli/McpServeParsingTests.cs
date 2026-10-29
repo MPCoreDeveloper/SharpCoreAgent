@@ -44,14 +44,55 @@ public sealed class McpServeParsingTests
     }
 
     [Fact]
-    public void AnUnknownActionIsRefusedAndNamesTheTwoThereAre()
+    public void AnUnknownActionIsRefusedAndNamesTheThreeThereAre()
     {
-        // `bench` is the round-after-next verb: until it exists, asking for it has to name the two that do.
-        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "bench"], NoEnvironment));
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "demo"], NoEnvironment));
 
-        Assert.Equal("'bench' is not an mcp action.", error.Message);
+        Assert.Equal("'demo' is not an mcp action.", error.Message);
         Assert.Contains("serve", error.Hint, StringComparison.Ordinal);
         Assert.Contains("config", error.Hint, StringComparison.Ordinal);
+        Assert.Contains("bench", error.Hint, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BenchIsAnActionAndNeedsNoFlagOfItsOwn()
+    {
+        var options = CliOptions.Parse(["mcp", "bench"], NoEnvironment);
+
+        Assert.Equal(CliCommand.Mcp, options.Command);
+        Assert.Equal(McpAction.Bench, options.McpAction);
+        Assert.True(options.IndexEnabled);
+        Assert.False(options.NoRefresh);
+    }
+
+    [Fact]
+    public void BenchTakesNoOperand()
+    {
+        // The questions are a file rather than an argument: a bench whose questions changed with the command line
+        // would publish a number nobody could reproduce.
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "bench", "extra"], NoEnvironment));
+
+        Assert.Equal("mcp bench does not take 'extra'.", error.Message);
+        Assert.Contains(McpBench.QueriesRelativePath, error.Hint, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BenchRefusesTheFlagsOfTheOtherTwoActions()
+    {
+        Assert.Contains(
+            "--no-index leaves mcp bench",
+            Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "bench", "--no-index"], NoEnvironment)).Message,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "--no-refresh applies to mcp serve",
+            Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "bench", "--no-refresh"], NoEnvironment)).Message,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "--client applies to mcp config",
+            Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "bench", "--client", "claude"], NoEnvironment)).Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]

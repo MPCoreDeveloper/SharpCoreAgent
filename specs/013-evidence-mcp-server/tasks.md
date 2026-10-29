@@ -138,8 +138,25 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   returns that same text, so the hop and the wrapper both add nothing. The index is built by the test and the
   child runs `--no-refresh`, so a broken index fails on the evidence (`src/Thermometer.cs` must be cited) rather
   than hiding behind a build. Suite: 1072 passing.
-- [ ] T022 `mcp bench`: the twelve fixture queries, the evidence-to-source ratio of SC-006 and the latency of
-  SC-005, sharing the tool code path rather than a script that reimplements it (FR-019).
+- [X] T022 `mcp bench`: the twelve fixture queries, the evidence-to-source ratio of SC-006 and the latency of
+  SC-005, sharing the tool code path rather than a script that reimplements it (FR-019). As built: `McpBench`
+  in `Commands/`, reached through `McpAction.Bench`; it refuses an operand, `--no-index`, `--no-refresh` and
+  `--client`, and its questions come from `bench/queries.txt` — twelve questions a developer would ask of this
+  repository, `#` for a comment — read relative to `--workspace`. Each query is asked twice: in process through
+  the `search_code` the container `mcp serve` builds, and over stdio through `McpToolHost` on exactly the command
+  line `mcp config` prints, with `--workspace` pinned and `--no-refresh`. The two texts are compared as strings;
+  a difference is named on stderr and exits 1 rather than becoming a column. The ratio is answer characters over
+  the characters of the distinct files the answer's block headings cite, counted whole and once each; the
+  latency is the p95 of the stdio call by nearest rank, which with twelve samples is the slowest one. stdout is
+  one summary line plus one row per query — the artefact T023 pastes — and stderr carries the header naming the
+  index and every parity failure. A workspace with no built index is refused with the command that builds one,
+  because twelve identical refusals would be a measurement of nothing. The plan's `[--json]` was dropped and
+  plan.md says so: the table is what gets quoted, and the option table has no room to name a fourth command for
+  that flag. Tests: `McpBenchTests` (9 — question parsing, cited-file accounting, the ratio, the percentile, an
+  empty run, the table's shape, a real end-to-end run through the copied CLI, a missing questions file, a missing
+  index), `McpServeParsingTests` (3 more, and the unknown action is now `demo`), `HelpTextTests` (the usage line,
+  the verb in the Serve section, and the golden section extended). A new `CliBinary` helper names the copied CLI,
+  and the dogfood test uses it too. Suite: 1085 passing.
 - [ ] T023 Run it once and paste the numbers into `plan.md`, including a bad result.
 
 ## Phase 6 — the round
