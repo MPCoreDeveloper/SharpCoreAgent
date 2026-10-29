@@ -1,7 +1,7 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: in progress
-**Branch**: `feature/009-mcp-client`
+**Status**: implemented (T001–T033; T034–T037 deferred, listed in `tasks.md`)
+**Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
 `008-web-fetch` (the precedent for a capability that exists only when the developer names it)

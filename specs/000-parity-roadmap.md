@@ -1,6 +1,7 @@
 # Roadmap — the capability rounds
 
-**Status**: round 0 landed (constitution 1.1.0), round 1 landed on `main` (merge `dbc0701`), round 2 landed on `main` (merge `201a431`), rounds 3–5 planned
+**Status**: round 0 landed (constitution 1.1.0), round 1 landed on `main` (merge `dbc0701`), round 2 landed
+on `main` (merge `201a431`), round 3 landed on `main` (merge `be0b265`), rounds 4–5 planned
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
 ## Why rounds rather than one specification
@@ -31,8 +32,8 @@ The four gaps a newcomer hits, in the order they hit them.
 | 0 | `.specify/memory/constitution.md` **1.1.0** | permission for rounds 1–4, and nothing else | — |
 | 1 | [`007-external-roots`](007-external-roots/spec.md) | read another project; never write it | 0 |
 | 2 | [`008-web-fetch`](008-web-fetch/spec.md) | `fetch_url` — a page as bounded, readable text (landed as `201a431`) | 0 |
-| 3 | `009-mcp-client` | `--mcp <command>` — any stdio MCP server's tools | 0 |
-| 4 | `010-browser` | a browser, through an MCP server | 3 |
+| 3 | [`009-mcp-client`](009-mcp-client/spec.md) | `--mcp <command>` — any stdio MCP server's tools (landed as `be0b265`) | 0 |
+| 4 | `010-browser` | a browser you name, and the screenshots it returns | 3 |
 | 5 | `011-subagent-task` | `task` — delegation with an isolated transcript | — |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
@@ -46,6 +47,15 @@ repository has not made. If it is made, it becomes `012` and it does not change 
   or Puppeteer MCP server the developer already has, which is exactly how Cline, Codex CLI and Claude
   Code get browser control. If in-box automation is ever wanted, it is a new amendment and a new
   round, not a change to round 4.
+- **Round 4 does not add a `browser` tool, and does not add a `--browser` flag.** Decided 2026-10-28,
+  with round 3 landed, because `--mcp` already publishes a server's tools under its own names —
+  `playwright_browser_navigate` is the browser tool, complete with the schema its authors maintain. A
+  `browser` tool of ours would shadow that schema with a second and worse protocol client, and a
+  `--browser` flag would bake a third-party command line and its version into a flag, which is the
+  decision the developer is supposed to make when they type `--mcp`. What round 4 has to add is the one
+  thing `--mcp` cannot: `McpContent.Flatten` describes an `image` or a `blob` as a MIME type and a size,
+  so a screenshot is currently a sentence. It would reverse if server authors converge on a rendering our
+  flattening cannot express, or if a first-party browser server appears that we would pin and ship.
 - **The network stays off until asked for.** `--web` and `--mcp` are per-process opt-ins. A build that
   configures nothing makes the same requests it makes today.
 - **Attached roots are read-only and per invocation.** Not persisted, not writable, not indexed.
@@ -128,10 +138,12 @@ skip the address check on every hop after the first — so `AllowAutoRedirect = 
 contract, not a preference. `--web-allow <host>` without `--web` is a usage error rather than an
 accepted no-op. And the shipped prompt's path rule was corrected in the same change: it claimed every
 path outside the workspace root is rejected, which round 1 made untrue for an attachment.
-`tasks.md` keeps T029–T033 open as the record of what the round refused — JavaScript and cookies, a
-connect-time address check for the DNS-rebinding gap, page paging, a search tool and `robots.txt`.
+`tasks.md` keeps T029 and T031–T033 open as the record of what the round refused — JavaScript and
+cookies, page paging, a search tool and `robots.txt` — and T030 closed on 2026-10-28, after the merge, by
+`WebFetchHandler`: the address is judged a second time inside the connect callback, and `UseProxy` is
+`false`, because a proxy would answer the question the address rule exists to answer.
 
-## Round 3 — `009-mcp-client`
+## Round 3 — `009-mcp-client` (landed as `be0b265`)
 
 **Ships**: `--mcp <command>` (repeatable), a stdio JSON-RPC client (`initialize`, `tools/list`,
 `tools/call`, notifications), and an adapter that turns each MCP tool into an `ITool` in the same
@@ -164,12 +176,16 @@ server mode and a declarative server list.
 
 ## Round 4 — `010-browser`
 
-**Ships**: documentation and a thin `browser` tool that speaks to an MCP server the developer already
-installed (Playwright MCP first), plus the transcript rendering for the screenshot and DOM artefacts it
-returns. If the server is absent the tool is absent — there is no fallback that pretends to browse, and
-no first-run that downloads one.
+**Ships**: the page a browser server returns. `--mcp "npx -y @playwright/mcp@latest"` already drives a
+browser today, and the model can already read the DOM it hands back; what it cannot do is see. Round 4
+takes an `image` or a `blob` in `content[]`, decodes it under a byte ceiling, writes it into the session
+directory as `<server>-<tool>-<n>.png` (extension from the MIME type), and answers with the path and the
+size — beside the description `Flatten` already returns, so a run that cannot write still degrades to a
+sentence rather than a failure. Plus the documentation: which servers are known to work, what the command
+line looks like, and that the browser itself is the developer's to install.
 
-**Does not ship**: a bundled browser, a driver manager, a JavaScript engine of our own.
+**Does not ship**: a bundled browser, a driver manager, a JavaScript engine of our own, a `browser` tool
+of ours, a `--browser` flag (`Decision record`, 2026-10-28).
 
 ## Round 5 — `011-subagent-task`
 
@@ -183,6 +199,27 @@ message is the tool result, bounded like any other.
 It moves into `specs/011-subagent-task/` when that spec is written, it does not ship before it, and it
 is not deleted, because the prompt and the child-registry argument in it are the round's starting point
 rather than a guess.
+
+## Open work, and what is still undecided
+
+Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
+is where the argument lives; this section is the index, so nothing has to be found by grepping for an
+empty checkbox.
+
+| Round | Open | Why it is still open |
+|---|---|---|
+| 0 | `002` T034 | the cold build and the index inside their stated budgets |
+| 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
+| 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
+| 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |
+| 2 | `008` T031–T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch — plus a web search tool, which is the one decision below |
+| 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
+| — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
+| — | `006` T016–T018 | a first-run key prompt with restricted permissions, `config edit`, per-provider sections |
+
+The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
+and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `012` and it
+changes no round above it.
 
 ## What stays out of this program
 
