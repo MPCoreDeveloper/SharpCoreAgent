@@ -1,7 +1,8 @@
 # Roadmap — the capability rounds
 
-**Status**: round 0 landed (constitution 1.1.0), round 1 landed on `main` (merge `dbc0701`), round 2 landed
-on `main` (merge `201a431`), round 3 landed on `main` (merge `be0b265`), rounds 4–5 planned
+**Status**: round 0 landed (constitution 1.1.0, amended to 1.2.0 for round 6), round 1 landed on `main` (merge
+`dbc0701`), round 2 landed on `main` (merge `201a431`), round 3 landed on `main` (merge `be0b265`), round 6
+accepted 2026-10-28, rounds 4–5 planned
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
 ## Why rounds rather than one specification
@@ -9,9 +10,10 @@ on `main` (merge `201a431`), round 3 landed on `main` (merge `be0b265`), rounds 
 `001`–`006` each shipped one capability behind one reviewable change. This program adds what a
 developer arriving from Cline, Codex CLI or Claude CLI reaches for on the first day, and each piece
 is independently shippable, independently testable and independently reviewable. As one branch it
-would be a month of work nobody can hold in their head; as six it is six merges, each of which can be
-reverted on its own. The constitution was amended once, at the front (1.0.2 → 1.1.0), so no round has
-to negotiate permission for its own existence.
+would be a month of work nobody can hold in their head; as a round each it is one merge each, and any one of
+them can be reverted on its own. The constitution was amended once, at the front (1.0.2 → 1.1.0), so no round has
+to negotiate permission for its own existence — except round 6, which came later and needs its own amendment,
+and says so where it is proposed.
 
 ## What "parity" means here
 
@@ -35,6 +37,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 3 | [`009-mcp-client`](009-mcp-client/spec.md) | `--mcp <command>` — any stdio MCP server's tools (landed as `be0b265`) | 0 |
 | 4 | `010-browser` | a browser you name, and the screenshots it returns | 3 |
 | 5 | `011-subagent-task` | `task` — delegation with an isolated transcript | — |
+| 6 | [`013-evidence-mcp-server`](013-evidence-mcp-server/spec.md) | `mcp serve` — the index's evidence for Copilot, Codex and Claude Code, over stdio | 0 (amended to 1.2.0), and `002` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `012` and it does not change 007–011.
@@ -63,6 +66,18 @@ repository has not made. If it is made, it becomes `012` and it does not change 
   is context for one task, and a persisted list is authority nobody remembers granting.
 - **Delegation is not a new process.** `task` runs the same orchestrator in-process with an isolated
   transcript, which keeps one budget, one approval mode and one transcript format.
+- **MCP *server* mode is back on the table, and the earlier exclusion was right when it was written.**
+  Proposed 2026-10-28, after round 3 landed. `002` drew the line — "out of scope: an MCP server (the index is
+  in-process)" — when the only consumer of the index was our own loop and no client existed in this product;
+  `009` then made us a *client*, which is the direction that needed building first. What that round taught is
+  where the mistake is: `--mcp "npx -y @playwright/mcp@latest"` is how we get a browser, but nothing on the
+  developer's machine can call *our* index, so Copilot, Codex CLI and Claude Code still start every task blind
+  — the exact cost `002` was built to remove. Round 6 (`013-evidence-mcp-server`) publishes the five read-only
+  evidence tools over stdio and adds nothing else: no write path, no shell, no network, no key, no HTTP
+  transport, no second tool catalogue. It reverses the exclusion, not the reasons behind it: the index is
+  still in-process, and what leaves the process is evidence, which is the one thing `002` already argued is
+  safe to hand over. It would reverse *back* if a served tool ever needed a write, or if a transport beyond
+  stdio became a requirement — either is a new amendment and a new round.
 
 ## Per-round deliverables (the definition of "done")
 
@@ -200,6 +215,33 @@ It moves into `specs/011-subagent-task/` when that spec is written, it does not 
 is not deleted, because the prompt and the child-registry argument in it are the round's starting point
 rather than a guess.
 
+## Round 6 — `013-evidence-mcp-server` (accepted 2026-10-28)
+
+**Status**: accepted. It reverses a sentence in "What stays out of this program", the reversal is argued above,
+and the constitution was amended to 1.2.0 for it. It ships in the six phases its plan lists, and the measurement
+in phase 5 is what decides whether the round was worth its weight — a poor number is published with the round
+rather than left out of it.
+
+**Ships**: `sharpcoreagent mcp serve` — a stdio MCP server for `--workspace` that publishes the five read-only
+evidence tools (`search_code`, `find_symbol`, `find_references`, `code_context`, `index_status`) with the
+schemas they already carry, so any agent that can launch a stdio server can ask this repository's index where
+something is and receive line-addressed, hash-addressed evidence. Plus `mcp config --client`, which prints the
+snippet for Claude Code, VS Code or Codex; a bounded refresh so the answers track the working tree; a
+published-set gate that no flag can widen; and `mcp bench`, which measures the evidence-to-source ratio and
+the answer latency rather than quoting someone else's percentage.
+
+**Does not ship**: HTTP or SSE transports, authentication, resources, prompts, sampling, logging, a
+`--read-tools` flag or any write, shell or network tool, more than one workspace per process, a `browser` or
+`web_search` surface. Round 4 and round 5 are untouched and can land before or after it.
+
+**Depends on**: `002` (landed) for the index and the tools. Not on round 3: this is the server side of the
+protocol, and the client half is only used by a test, which is exactly what makes that test worth having.
+
+**Evidence**: our own `--mcp` client starts the server, lists `sharpcoreagent_search_code`, calls it, and gets
+text byte-identical to the in-process answer; a registry-wide test proves `write_file` and its siblings are
+unreachable; and the ratio `mcp bench` prints is pasted into the round's `plan.md` — including if it is
+unflattering.
+
 ## Open work, and what is still undecided
 
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
@@ -223,7 +265,12 @@ changes no round above it.
 
 ## What stays out of this program
 
-Checkpoints and rewind, rules files (`AGENTS.md`, `.clinerules`), MCP *server* mode, remote or team
-sessions, a plugin marketplace. Each is a real capability and each is a separate program; naming them
-here is what keeps this one finishable.
+Checkpoints and rewind, rules files (`AGENTS.md`, `.clinerules`), remote or team sessions, a plugin
+marketplace. Each is a real capability and each is a separate program; naming them here is what keeps this
+one finishable.
+
+MCP *server* mode used to be on that list. It moved to round 6 (accepted 2026-10-28) for one reason and
+with one limit: what the server publishes is the index's evidence, not the machine. If a later round wants it
+to publish a tool that writes, starts a process or reaches the network, that is not an extension of round 6 —
+it is a different program, and it goes back on this list.
 

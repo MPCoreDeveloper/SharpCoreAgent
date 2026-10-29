@@ -1,6 +1,31 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.1.0 -> 1.2.0 (MINOR: one existing constraint materially expanded in the direction of
+  reading; no principle added, removed or relaxed, no quality gate changed, no existing code path
+  invalidated)
+Amended:
+  - II. Tools Are the Only Door to the Machine — the door gains a documented direction of travel for
+    readers. A process the developer names MAY be served the code index's read-only evidence over stdio
+    (`sharpcoreagent mcp serve`, spec 013). What may be served is `ToolSafety.ReadOnly` intersected with
+    a fixed allow-list compiled into the server, so a read-only tool that arrives later does not join by
+    accident and no flag adds one. A served tool is still a tool — same schema, same bounded result, same
+    record — and a server exposes no capability that is not a registered `ITool`. Nothing that writes,
+    deletes, starts a process or reaches the network is publishable.
+  - VIII. Secrets Stay in the Process — the list of opt-in per-process surfaces is annotated so it is not
+    read as closed: serving is not one of them. `mcp serve` requires no key, reads no key, carries no key
+    and opens no connection, so it adds nothing to that list and nothing to the rules about keys.
+Added sections: none. Removed sections: none.
+Migration: none required. No default changes. A build that configures nothing still answers nothing: no
+  server runs unless the command is typed, the published set is five read-only tools, refresh on by
+  default changes no existing command's behaviour, and `--mcp` (the client, round 3) keeps its meaning
+  because one is a flag and the other is a command.
+Follow-up TODOs: none.
+-->
+
+<!--
+Sync Impact Report
+==================
 Version change: 1.0.2 -> 1.1.0 (MINOR: three constraints materially expanded and one technical
   constraint clarified; no principle removed, no gate relaxed, no existing code path invalidated)
 Amended:
@@ -108,6 +133,13 @@ The agent touches the filesystem, the shell and the network only through a regis
   against the primary root alone.
 - Destructive capabilities (write, delete, shell) are gated by an approval mode whose default is
   the safe one when the option is absent rather than when it is present.
+- The door has one documented direction of travel for readers. A process the developer names MAY be
+  served the code index's read-only evidence over stdio (`sharpcoreagent mcp serve`). What may be
+  served is `ToolSafety.ReadOnly` intersected with a fixed allow-list compiled into the server: a
+  read-only tool that arrives later does not join by accident, and no flag adds one. A served tool is
+  still a tool — same schema, same bounded result, same record — and a server exposes no capability
+  that is not a registered `ITool`. Nothing that writes, deletes, starts a process or reaches the
+  network is publishable, at any setting.
 
 **Rationale**: an agent that can act is an agent that can do damage. A single choke point is
 greppable, auditable, testable and revocable; a hundred convenient call sites are none of those.
@@ -204,7 +236,9 @@ a victim.
 - No telemetry, no phone-home, no update check. Without an explicit instruction, outbound traffic
   goes to the configured model endpoint and nowhere else. Network access beyond it is a capability
   the developer opts into per process (`--web`, `--mcp`) and never a default, and it is reached
-  through a tool that is bounded, approval-gated and recorded like any other.
+  through a tool that is bounded, approval-gated and recorded like any other. Serving the index
+  (`mcp serve`) is not one of those surfaces: it needs no key, carries no key and opens no
+  connection, which is why it appears in this list only to say so.
 
 **Rationale**: the agent runs with the user's credentials on the user's machine. A key in a
 transcript is a key in a screenshot, a paste and a support ticket.
@@ -259,7 +293,7 @@ rationale, the version bump described below, and a migration note for any surfac
 - `docs/` and `README.md` are governed as code: a behaviour change that contradicts them is a bug
   in one of the two, and the pull request fixes both.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-23 | **Last Amended**: 2026-10-28
+**Version**: 1.2.0 | **Ratified**: 2026-10-23 | **Last Amended**: 2026-10-28
 
 
 
