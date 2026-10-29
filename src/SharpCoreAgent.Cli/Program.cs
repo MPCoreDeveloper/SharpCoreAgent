@@ -78,6 +78,15 @@ internal static class Program
                 // process instead of exiting 3.
                 CliCommand.Models => ModelsCommand.Execute(options),
                 CliCommand.Index => await IndexCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+
+                // The raw handles rather than Console.Out: the protocol is bytes on stdout, and a TextWriter
+                // carrying an encoding decision is exactly what FR-003 forbids.
+                CliCommand.Mcp => await McpCommand.ExecuteAsync(
+                    options,
+                    Console.OpenStandardInput(),
+                    Console.OpenStandardOutput(),
+                    Console.Error,
+                    scope.ExitToken).ConfigureAwait(false),
                 CliCommand.Config => ConfigCommand.Execute(
                     options,
                     settingsPath,

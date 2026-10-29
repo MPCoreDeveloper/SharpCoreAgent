@@ -26,7 +26,8 @@ namespace SharpCoreAgent.Infrastructure.McpServer;
 /// What this type serves is a <see cref="McpServerPublishedSet"/>, never a registry: a name that is not published
 /// is an error rather than a lookup, so the set is the only door to a tool. It knows nothing about the index, the
 /// workspace's tools or the CLI — it answers for whatever set it was handed, which is what keeps the protocol
-/// provable without an index and the publishing decision provable without a socket.
+/// provable without an index and the publishing decision provable without a socket. The one thing a host may add
+/// is an <see cref="IMcpCallGate"/>, run before each call and described no further here.
 /// </para>
 /// <para>
 /// The one place the loop is not strictly sequential is a call in flight: while a tool runs, the next line is read
@@ -52,6 +53,7 @@ public sealed class McpServerSession : IAsyncDisposable
     private readonly StdioRpcWriter _output;
     private readonly McpServerPublishedSet _published;
     private readonly Workspace? _workspace;
+    private readonly IMcpCallGate? _gate;
     private readonly Action<string>? _log;
     private readonly Queue<string> _deferred = new();
     private Task<string?>? _pendingRead;
@@ -72,7 +74,7 @@ public sealed class McpServerSession : IAsyncDisposable
     /// nobody gave a catalogue to, and it is what lets the envelope be tested without an index.
     /// </remarks>
     public McpServerSession(Stream input, Stream output, McpServerOptions options, Action<string>? log = null)
-        : this(input, output, McpServerPublishedSet.Empty, workspace: null, options, log)
+        : this(input, output, McpServerPublishedSet.Empty, workspace: null, options, gate: null, log)
     {
     }
 
@@ -85,6 +87,10 @@ public sealed class McpServerSession : IAsyncDisposable
     /// <param name="workspace">The workspace every <c>tools/call</c> answers within.</param>
     /// <param name="options">The versions and budgets this server works within.</param>
     /// <param name="log">Receives diagnostics for stderr, or null to stay quiet.</param>
+    /// <param name="gate">
+    /// Runs before every <c>tools/call</c> and before nothing else; null answers straight from the index that is
+    /// there.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/> is null.</exception>
     /// <exception cref="ArgumentException">The options do not validate, or a published schema is not JSON.</exception>
     public McpServerSession(
@@ -93,8 +99,9 @@ public sealed class McpServerSession : IAsyncDisposable
         IToolRegistry registry,
         Workspace workspace,
         McpServerOptions options,
-        Action<string>? log = null)
-        : this(input, output, new McpServerPublishedSet(registry), workspace, options, log)
+        Action<string>? log = null,
+        IMcpCallGate? gate = null)
+        : this(input, output, new McpServerPublishedSet(registry), workspace, options, gate, log)
     {
     }
 
@@ -104,6 +111,7 @@ public sealed class McpServerSession : IAsyncDisposable
         McpServerPublishedSet published,
         Workspace? workspace,
         McpServerOptions options,
+        IMcpCallGate? gate,
         Action<string>? log)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -122,6 +130,7 @@ public sealed class McpServerSession : IAsyncDisposable
         _output = new StdioRpcWriter(output);
         _published = published;
         _workspace = workspace;
+        _gate = gate;
         _log = log;
     }
 
@@ -390,7 +399,7 @@ public sealed class McpServerSession : IAsyncDisposable
         var context = new ToolInvocationContext(_workspace) { Approval = ApprovalMode.ReadOnly };
 
         using var scope = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var call = InvokeAsync(published.Tool, toolCall, context, scope.Token);
+        var call = InvokeAsync(published.Tool, toolCall, context, _gate, scope.Token);
 
         ToolResult? result;
         try
@@ -503,21 +512,33 @@ public sealed class McpServerSession : IAsyncDisposable
     /// <param name="tool">The published tool.</param>
     /// <param name="call">The call being answered.</param>
     /// <param name="context">The workspace, the approval mode and the output sink.</param>
+    /// <param name="gate">What the host wants done before the tool runs, or null.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The result, which may be a failure.</returns>
     /// <remarks>
+    /// The gate runs inside the call rather than before it so that it shares the call's cancellation: a client
+    /// that cancels while the index is being refreshed stops the refresh, instead of waiting for it and then
+    /// being told the call was abandoned.
+    /// <para>
     /// The catch list is the agent loop's, deliberately: a bad argument is the model's mistake and belongs in the
     /// transcript, a missing file is the workspace's state and belongs there too, and anything else is a bug that
     /// should surface rather than be retried forever as a tool error. Cancellation always escapes.
+    /// </para>
     /// </remarks>
     private static async Task<ToolResult?> InvokeAsync(
         ITool tool,
         ToolCall call,
         ToolInvocationContext context,
+        IMcpCallGate? gate,
         CancellationToken cancellationToken)
     {
         try
         {
+            if (gate is not null)
+            {
+                await gate.PrepareAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return await tool.ExecuteAsync(call, context, cancellationToken).ConfigureAwait(false);
         }
         catch (ToolArgumentException ex)

@@ -29,6 +29,7 @@ internal static class HelpText
           sharpcoreagent config [show|get|set|unset|path]
                                                        settings, and where each value comes from
           sharpcoreagent setup                         the preferences, asked for one at a time
+          sharpcoreagent mcp serve [options]           this workspace's index as an MCP server on stdio
           sharpcoreagent --help | --version
 
           With no command and a terminal on both ends, a session starts. When either stream is
@@ -101,9 +102,27 @@ internal static class HelpText
           --verify                 index       off         report drift against the workspace; never writes
           --prune                  index       off         drop rows for files that no longer exist
           --no-index               run, chat   off         no index read, write or refresh in this process
+          --no-refresh             mcp serve   off         answers describe the index as it is; no walk before a call
           --index-budget <ms>      run, chat   3000        refresh ceiling; 0 keeps reads and stops refresh
           --embedder <mode>        index       hashed-local  hashed-local; provider and off are not in this build
           --tier <name>            index       lean        lean; rich is not in this build
+
+        Serve
+          sharpcoreagent mcp serve [options]        the same shape the --mcp flag speaks, served
+          Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only
+          evidence tools — search_code, find_symbol, find_references, code_context and index_status —
+          and nothing else. No key, no chat model, no network and no tool that writes or starts a
+          process is in the process at all.
+
+          Before a tool call answers, the index is brought up to date at most once every five seconds
+          and never for longer than three. A refresh that cannot run — no index yet, another writer,
+          a read-only checkout — is not an error: the call answers from the index that is there and the
+          tool's own heading says how fresh it is. --no-refresh skips the walk entirely, for a checkout
+          nobody should write to. Nothing here is a setting; both budgets belong to the capability.
+
+          stdout carries the protocol and nothing else. The ready line and every diagnostic go to
+          stderr, and the index is opened per call and released again, so a server held open for a day
+          never stops 'sharpcoreagent index' in another terminal. End of input or Ctrl+C ends it at 0.
 
         Chat
           /help                    every chat command, including /cost and /usage
@@ -123,7 +142,7 @@ internal static class HelpText
           prefix; its keys win over the environment, and a blank value counts as unset.
 
         Exit codes
-          0  the turn completed and the transcript was written
+          0  the turn completed and the transcript was written, or mcp serve reached end of input
           1  the turn failed: provider error, tool crash or unexpected exception
           2  the command line could not be understood
           3  a credential is missing, or the credential file cannot be read

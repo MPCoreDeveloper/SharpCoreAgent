@@ -114,6 +114,28 @@ public sealed class HelpTextTests
     }
 
     [Fact]
+    public void TheUsageBlockDocumentsTheServeCommand()
+    {
+        // The command an editor starts rather than a developer: a reader has to be able to find its shape, and the
+        // one flag of its own, without reading the source.
+        Assert.Contains("sharpcoreagent mcp serve", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("--no-refresh", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("mcp serve   off", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("search_code", HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheExitCodeTableSaysWhatZeroMeansForAServer()
+    {
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.TrimStart().StartsWith("0 ", StringComparison.Ordinal));
+
+        Assert.Contains("mcp serve", row, StringComparison.Ordinal);
+        Assert.Contains("end of input", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheUsageBlockDocumentsTheCredentialFile()
     {
         // The option exists to remove a restart, so both halves are named: the flag a script passes and

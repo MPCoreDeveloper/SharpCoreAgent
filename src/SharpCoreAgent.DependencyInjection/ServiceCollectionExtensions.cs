@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SharpCoreAgent.Application;
+using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Domain.Model;
@@ -12,6 +13,7 @@ using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Indexing;
 using SharpCoreAgent.Infrastructure.Credentials;
 using SharpCoreAgent.Infrastructure.Mcp;
+using SharpCoreAgent.Infrastructure.McpServer;
 using SharpCoreAgent.Infrastructure.Providers;
 using SharpCoreAgent.Infrastructure.Sessions;
 using SharpCoreAgent.Infrastructure.Tools;
@@ -261,6 +263,77 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICodeIndex>(provider => provider.GetRequiredService<SharpCoreAgentIndex>());
         services.AddSingleton<ICodeIndexMaintainer>(provider => provider.GetRequiredService<SharpCoreAgentIndex>());
         services.AddSingleton(workspace);
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the stdio evidence server: the index, the five read-only tools that read it, and the session that
+    /// answers a client for them.
+    /// </summary>
+    /// <param name="services">The container to add to.</param>
+    /// <param name="workspace">The workspace the index describes and every call answers within.</param>
+    /// <param name="options">The versions and the refresh switch, ceiling and interval the server works within.</param>
+    /// <param name="log">Receives one diagnostic per refresh and per protocol oddity, or null to stay quiet.</param>
+    /// <returns>The same container, so calls can be chained.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="services"/>, <paramref name="workspace"/> or <paramref name="options"/> is null.
+    /// </exception>
+    /// <exception cref="ArgumentException">The options do not validate.</exception>
+    /// <remarks>
+    /// What is deliberately absent is the point (FR-001): no <see cref="IChatModel"/>, no credential store, no
+    /// resolver and no <see cref="HttpClient"/>. An agent starts this process dozens of times a day on a machine
+    /// whose owner may never have typed a key for this product, and none is needed to answer "where is this
+    /// declared".
+    /// <para>
+    /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface is
+    /// fifteen workspace tools including the ones that write and start processes, and the server's allow-list is
+    /// the statement that this container holds none of them. The published set filters this registry again, so the
+    /// two gates the contract requires are both present.
+    /// </para>
+    /// <para>
+    /// The index is reached through <see cref="LeasedCodeIndex"/> and the refresh opens its own maintainer per
+    /// attempt, so no database handle outlives a call: a server an editor keeps open must not stop a terminal
+    /// build. The streams come from <see cref="McpServerStreams"/>, which defaults to the process's own stdio and
+    /// is what a test replaces to talk to the session it just built.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddMcpServer(
+        this IServiceCollection services,
+        Workspace workspace,
+        McpServerOptions options,
+        Action<string>? log = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var validated = options.Validate();
+
+        services.AddSingleton(workspace);
+        services.AddSingleton(validated);
+        services.TryAddSingleton(_ => McpServerStreams.Standard());
+
+        // One factory for the whole registration, so a leased read and a refresh cannot end up describing two
+        // different workspaces. Opening is free: the index creates nothing and reads nothing until its first call.
+        Func<SharpCoreAgentIndex> open = () => SharpCoreAgentIndex.Open(workspace);
+
+        services.AddSingleton<ICodeIndex>(_ => new LeasedCodeIndex(() => open()));
+        services.AddSingleton<ITool, SearchCodeTool>();
+        services.AddSingleton<ITool, FindSymbolTool>();
+        services.AddSingleton<ITool, FindReferencesTool>();
+        services.AddSingleton<ITool, CodeContextTool>();
+        services.AddSingleton<ITool, IndexStatusTool>();
+        services.AddSingleton<IToolRegistry>(provider => new ToolRegistry(provider.GetServices<ITool>()));
+
+        services.TryAddSingleton(provider => new McpServerSession(
+            provider.GetRequiredService<McpServerStreams>().Input,
+            provider.GetRequiredService<McpServerStreams>().Output,
+            provider.GetRequiredService<IToolRegistry>(),
+            provider.GetRequiredService<Workspace>(),
+            provider.GetRequiredService<McpServerOptions>(),
+            log,
+            new IndexRefreshGate(() => open(), provider.GetRequiredService<McpServerOptions>(), log)));
 
         return services;
     }

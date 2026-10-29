@@ -55,20 +55,40 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
 
 ## Phase 3 — the process
 
-- [ ] T012 `AddMcpServer` in `ServiceCollectionExtensions`, constructing the server from the workspace alone —
-  no chat model, no key, no HTTP handler (FR-001).
-- [ ] T013 Lease-per-call: the index handle is opened for one `tools/call` and released after it, so a server held
+- [X] T012 `AddMcpServer` in `ServiceCollectionExtensions`, constructing the server from the workspace alone —
+  no chat model, no key, no HTTP handler (FR-001). As built: the five tools are registered here rather than
+  borrowed from `AddSharpCoreAgent`, because that surface includes the ones that write and start processes, and
+  the absence has to be a property of the registration rather than of a code path. `McpServerCompositionTests`
+  asserts the container, not the flag: no `IChatModel`, no `IChatModelResolver`, no `HttpClient`, no `McpToolHost`.
+- [X] T013 Lease-per-call: the index handle is opened for one `tools/call` and released after it, so a server held
   open does not block `sharpcoreagent index` in another process (FR-014). Verified from a second process during
-  the phase, not afterwards.
-- [ ] T014 Refresh gate before `tools/call` only: `EnsureFreshAsync(3 s)`, at most once per 5 s, off under
-  `--no-refresh`, and a failed refresh still answered from the index that is there (FR-012, FR-013).
-- [ ] T015 `mcp` command and `mcp serve` wiring: `CliCommand.Mcp` with a `McpAction`, `--workspace` reused,
+  the phase, not afterwards. As built: `LeasedCodeIndex` opens per operation and disposes in a `finally`, so a
+  failure and a cancellation release the handle too; the refresh opens its own maintainer per attempt for the same
+  reason. Measured: with `mcp serve` running and holding a call in its history, `sharpcoreagent index` in a second
+  process finished in 294 ms (1 file, 1 unchanged) and the next call still answered.
+- [X] T014 Refresh gate before `tools/call` only: `EnsureFreshAsync(3 s)`, at most once per 5 s, off under
+  `--no-refresh`, and a failed refresh still answered from the index that is there (FR-012, FR-013). As built:
+  `IMcpCallGate` is a port the session runs before a call and before nothing else, so `initialize`, `ping` and
+  `tools/list` stay at handshake speed. The interval is stamped before the attempt, so a refresh that fails is
+  not retried by every call that follows it. `IndexRefreshGateTests` moves the clock instead of sleeping.
+- [X] T015 `mcp` command and `mcp serve` wiring: `CliCommand.Mcp` with a `McpAction`, `--workspace` reused,
   `--no-refresh` the only new flag, `--web`/`--web-allow`/`--mcp`/`--provider`/`--model`/`--base-url`/`--fallback`
-  refused with exit 2, and the ready line on stderr rather than stdout (FR-001, FR-003, FR-018).
-- [ ] T016 Ctrl+C and stdin EOF cancel an in-flight call and exit 0; an unexpected failure exits 1, with the
-  stack trace only under `--verbose` (FR-016).
-- [ ] T017 Tests: the refresh budget and its interval, a refresh that cannot run, the cross-process lock check,
-  and the usage errors.
+  refused with exit 2, and the ready line on stderr rather than stdout (FR-001, FR-003, FR-018). As built: the
+  refused list also covers `--session`, `--add-root`, `--json` and `--no-index` — the last one because every
+  published tool reads the index, so accepting it would leave the server with nothing to answer from while the
+  developer believed it had stopped walking the tree. The typed flags are checked, not the merged values: an
+  exported `SHARPCOREAGENT_PROVIDER` belongs to the shell. `McpCommand` takes its two streams as parameters, so
+  `McpServeCommandTests` runs the container, the ready line, the loop and the exit code with no child process.
+- [X] T016 Ctrl+C and stdin EOF cancel an in-flight call and exit 0; an unexpected failure exits 1, with the
+  stack trace only under `--verbose` (FR-016). As built: `McpServerSession.RunAsync` returns 0 for end of input,
+  cancellation and a client that stopped reading; `McpCommand` maps an unusable `--workspace` to 2 before any
+  protocol byte is written, and anything else travels to `Program`, which is where exit 1 and the `--verbose`
+  stack trace already live. Verified in the child process: closing stdin exited 0.
+- [X] T017 Tests: the refresh budget and its interval, a refresh that cannot run, the cross-process lock check,
+  and the usage errors. As built: `IndexRefreshGateTests` (8), `LeasedCodeIndexTests` (5, including one real build
+  against a live lease), `McpServerCompositionTests` (4), `McpServeParsingTests` (23) and `McpServeCommandTests`
+  (6). The cross-process check is the measurement in T013 rather than a test that would need the CLI's own
+  runtimeconfig copied next to the test assembly; the lock it exercises is already covered by `WriterLockTests`.
 
 ## Phase 4 — the snippet
 

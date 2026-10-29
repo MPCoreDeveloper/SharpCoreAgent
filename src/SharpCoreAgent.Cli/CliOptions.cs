@@ -34,6 +34,16 @@ internal enum CliCommand
 
     /// <summary>Ask for the preferences one question at a time and write them down.</summary>
     Setup,
+
+    /// <summary>Serve this workspace's index to another agent over stdio.</summary>
+    Mcp,
+}
+
+/// <summary>What <c>mcp</c> was asked to do.</summary>
+internal enum McpAction
+{
+    /// <summary>Answer a client's JSON-RPC on stdin until it ends.</summary>
+    Serve,
 }
 
 /// <summary>What <c>config</c> was asked to do.</summary>
@@ -81,6 +91,9 @@ internal sealed record CliOptions
 
     /// <summary>Gets which verb <c>config</c> runs. Default <see cref="ConfigAction.Show"/>.</summary>
     public ConfigAction ConfigAction { get; init; } = ConfigAction.Show;
+
+    /// <summary>Gets which verb <c>mcp</c> runs. Default <see cref="McpAction.Serve"/>.</summary>
+    public McpAction McpAction { get; init; } = McpAction.Serve;
 
     /// <summary>Gets the setting <c>config get</c>, <c>set</c> or <c>unset</c> names.</summary>
     public string? ConfigName { get; init; }
@@ -257,6 +270,16 @@ internal sealed record CliOptions
     /// <summary>Gets a value indicating whether <c>index</c> should drop rows for vanished files.</summary>
     public bool IndexPrune { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether <c>mcp serve</c> answers from the index as it is.
+    /// </summary>
+    /// <remarks>
+    /// <c>--no-refresh</c>, and nothing else. It exists for a shared or read-only checkout, where walking the tree
+    /// would either fail or be someone else's job; a server with it on answers from the index that is there and
+    /// the tool's own heading says so.
+    /// </remarks>
+    public bool NoRefresh { get; init; }
+
     /// <summary>Projects the command line onto the container's options.</summary>
     /// <returns>The options <c>AddSharpCoreAgent</c> consumes.</returns>
     public SharpCoreAgentOptions ToSharpCoreAgentOptions() => new()
@@ -366,7 +389,42 @@ internal sealed record CliOptions
             }
         }
 
+        // mcp serve needs no model, no endpoint and no transcript. Refused here rather than in Finish because
+        // only here is it known which of these flags the developer typed: the values on `parsed` may have come
+        // from an export or a settings file, and neither is a decision about this command.
+        if (parsed.Command == CliCommand.Mcp)
+        {
+            RejectModelFlags(parsed);
+        }
+
         return ApplySettings(parsed, loadSettings, environment);
+    }
+
+    /// <summary>
+    /// Rejects the flags that name a model, an endpoint or a transcript on <c>mcp serve</c>.
+    /// </summary>
+    /// <param name="options">The parsed command line.</param>
+    /// <exception cref="CliUsageException">One of those flags was given.</exception>
+    /// <remarks>
+    /// A capability that cannot apply is a mistake in the command line, not a no-op: a developer who typed
+    /// <c>--model</c> and watched the server start would reasonably believe a model was answering. The check reads
+    /// the flags that were typed rather than the merged values, because an exported
+    /// <c>SHARPCOREAGENT_PROVIDER</c> is a property of the shell and not a decision about this command.
+    /// </remarks>
+    private static void RejectModelFlags(CliOptions options)
+    {
+        var named = options.CommandLineSettings;
+
+        if (named.Contains("provider")
+            || named.Contains("model")
+            || named.Contains("base-url")
+            || options.Fallback is not null
+            || options.SessionPath is not null)
+        {
+            throw new CliUsageException(
+                "mcp serve runs no model and keeps no transcript: --provider, --model, --base-url, --fallback and --session do not apply.",
+                "For example: sharpcoreagent mcp serve --workspace .");
+        }
     }
 
     /// <summary>
@@ -596,6 +654,14 @@ internal sealed record CliOptions
         List<string> positionals,
         Func<bool> interactive)
     {
+        // `--no-refresh` belongs to the command that keeps an index open between requests. Everywhere else a
+        // refresh is already bounded by --index-budget, and a flag that was silently ignored would be a promise
+        // nobody kept. Help and the version are exempt because they answer a question about the build.
+        if (command is not (CliCommand.Mcp or CliCommand.Help or CliCommand.Version))
+        {
+            RejectNoRefresh(options);
+        }
+
         switch (command)
         {
             case null:
@@ -699,6 +765,32 @@ internal sealed record CliOptions
 
                 return options with { Command = CliCommand.Setup };
 
+            case CliCommand.Mcp:
+                RejectIndexFlags(options);
+                RejectAttachmentRoots(options);
+                RejectWebFlags(options);
+                RejectMcpFlags(options);
+                if (options.Json)
+                {
+                    // The server's own stdout is the protocol: a JSON object per line is already its shape, and
+                    // --json would promise a second, incompatible one.
+                    throw new CliUsageException(
+                        "--json is only valid with run and index.",
+                        "The server answers JSON-RPC on stdout; diagnostics go to stderr.");
+                }
+
+                if (!options.IndexEnabled)
+                {
+                    // Every tool this command publishes reads the index, so --no-index leaves it with nothing to
+                    // answer from. Accepting it and walking the tree anyway would be the one outcome the developer
+                    // typing it was trying to avoid.
+                    throw new CliUsageException(
+                        "--no-index leaves mcp serve with nothing to answer from.",
+                        "Use --no-refresh to serve the index as it is, without a refresh before each call.");
+                }
+
+                return FinishMcp(options, positionals);
+
             default:
                 RejectIndexFlags(options);
                 RejectAttachmentRoots(options);
@@ -776,6 +868,67 @@ internal sealed record CliOptions
                 throw new CliUsageException(
                     $"'{positionals[0]}' is not a config action.",
                     "Actions are show, get, set, unset and path.");
+        }
+    }
+
+    /// <summary>
+    /// Reads the action and the arguments of <c>mcp</c>.
+    /// </summary>
+    /// <param name="options">The options the flags produced.</param>
+    /// <param name="positionals">The arguments after the command.</param>
+    /// <returns>The options with the action.</returns>
+    /// <exception cref="CliUsageException">The action is unknown, or <c>serve</c> was given an operand.</exception>
+    /// <remarks>
+    /// One action for now, in the shape <c>config</c> already uses: the verb is a word rather than a flag, so a
+    /// second verb (<c>config</c>, the client snippet) can join it without a second command.
+    /// </remarks>
+    private static CliOptions FinishMcp(CliOptions options, List<string> positionals)
+    {
+        if (positionals.Count == 0)
+        {
+            throw new CliUsageException(
+                "mcp needs an action.",
+                "For example: sharpcoreagent mcp serve");
+        }
+
+        var rest = positionals.Skip(1).ToList();
+
+        switch (positionals[0].ToLowerInvariant())
+        {
+            case "serve":
+                if (rest.Count > 0)
+                {
+                    throw new CliUsageException(
+                        $"mcp serve does not take '{rest[0]}'.",
+                        "It takes --workspace, --no-refresh and --verbose.");
+                }
+
+                return options with { Command = CliCommand.Mcp, McpAction = McpAction.Serve };
+
+            default:
+                throw new CliUsageException(
+                    $"'{positionals[0]}' is not an mcp action.",
+                    "The action is serve.");
+        }
+    }
+
+    /// <summary>
+    /// Rejects <c>--no-refresh</c> on the commands that do not hold an index open between requests.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">The flag was given to a command that cannot use it.</exception>
+    /// <remarks>
+    /// The same reasoning as <see cref="RejectWebFlags"/>: <c>run</c> and <c>chat</c> turn the refresh off with
+    /// <c>--index-budget 0</c>, so a second spelling accepted here and ignored there would be a second answer to
+    /// a question that already has one.
+    /// </remarks>
+    private static void RejectNoRefresh(CliOptions options)
+    {
+        if (options.NoRefresh)
+        {
+            throw new CliUsageException(
+                "--no-refresh applies to mcp serve.",
+                "For example: sharpcoreagent mcp serve --no-refresh");
         }
     }
 
@@ -1304,6 +1457,9 @@ internal sealed record CliOptions
             case "--no-index":
                 return options with { IndexEnabled = false };
 
+            case "--no-refresh":
+                return options with { NoRefresh = true };
+
             case "--index-budget":
                 return options with { IndexBudgetMs = ParseBudget(name, TakeValue(args, ref index, name)) };
 
@@ -1382,6 +1538,11 @@ internal sealed record CliOptions
             return CliCommand.Setup;
         }
 
+        if (Is(argument, "mcp"))
+        {
+            return CliCommand.Mcp;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -1394,7 +1555,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models, index, setup and config.");
+            "Commands are run, chat, models, index, setup, config and mcp.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)

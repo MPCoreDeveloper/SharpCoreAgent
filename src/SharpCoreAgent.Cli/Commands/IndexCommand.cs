@@ -547,7 +547,11 @@ internal static class IndexCommand
     /// </summary>
     /// <param name="freshness">The state to render.</param>
     /// <returns>The lowercase name.</returns>
-    private static string State(IndexFreshness freshness) => freshness switch
+    /// <remarks>
+    /// Shared with <c>mcp serve</c>'s ready line rather than copied: two renderings of one enum would drift, and
+    /// the word a developer reads in a terminal and the word a client's log holds must be the same word.
+    /// </remarks>
+    internal static string State(IndexFreshness freshness) => freshness switch
     {
         IndexFreshness.Missing => "missing",
         IndexFreshness.Building => "building",
