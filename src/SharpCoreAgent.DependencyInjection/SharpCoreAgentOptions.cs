@@ -62,6 +62,17 @@ public sealed record SharpCoreAgentOptions
     /// </remarks>
     public IReadOnlyList<string> WebAllowedHosts { get; init; } = [];
 
+    /// <summary>
+    /// Gets the MCP servers this invocation starts, in the order the developer named them.
+    /// </summary>
+    /// <remarks>
+    /// A command line, not a name, so there is nothing to resolve and no list to keep in sync with a
+    /// distribution channel. Empty by default and deliberately absent from the settings file and the
+    /// environment: starting a program is a decision about one task, and a default that outlived it would be
+    /// granted by whoever last ran <c>config set</c>.
+    /// </remarks>
+    public IReadOnlyList<string> McpServers { get; init; } = [];
+
     /// <summary>Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.</summary>
     public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;
 
@@ -165,7 +176,7 @@ public sealed record SharpCoreAgentOptions
             Temperature = Temperature,
             Approval = Approval,
             SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt)
-                ? PromptLibrary.SystemPromptFor(IndexEnabled, WebAccessEnabled)
+                ? PromptLibrary.SystemPromptFor(IndexEnabled, WebAccessEnabled, McpServers.Count > 0)
                 : SystemPrompt,
         }.Validate();
     }

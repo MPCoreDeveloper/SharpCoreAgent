@@ -142,6 +142,26 @@ connect-time address check for the DNS-rebinding gap, page paging, a search tool
 
 This closes `T040` in `specs/003-terminal-console-agent/tasks.md`, which has been open since 003.
 
+**As built.** `--mcp "<command>"` is repeatable and per-invocation; the command runs through the
+platform shell (`cmd /d /s /c` on Windows with the line built by hand, `/bin/sh -c` elsewhere with one
+argv element), because `npx`, `uvx` and `deno` are shims — the first process test found that passing a
+pre-quoted command as an argv element makes `cmd` try to execute `\"C:\…\"`, so the Windows line is
+built as text and the Unix one as argv. The protocol is hand-written in five files under
+`src/SharpCoreAgent.Infrastructure/Mcp/`: `JsonRpcPipe` owns one reader loop, one write gate and one id
+counter, answers a server request with `-32601`, and fails every waiter when the pipe closes;
+`McpServerConnection` owns the child, the handshake and pagination; `McpToolHost` owns one connection per
+flag and the idempotent synchronous `Started()` the registry factory uses. Names are `<server>_<tool>`
+folded to `[a-z0-9_]` and capped at 64 characters, with `_2` for a repeated stem and `_2` again for a
+repeated tool name inside one server. `AddMcp` runs only when a server was named, so a process that asked
+for none has no client, no host and no tool that could start one; the prompt gains `McpRule` under the
+same condition. Budgets: 20 s control, 120 s call, 64 000 characters per result, 10 list pages, 200
+stderr lines. The evidence is `JsonRpcPipeTests`, `McpProtocolTests`, `McpToolNameTests`, `McpToolTests`,
+`McpOptionTests`, `McpRegistrationTests`, `McpLauncherTests` and `McpProcessTests` — the last against a
+real server in `tests/SharpCoreAgent.TestMcpServer`, which proves the launch path, the stderr split and
+the tree kill — and the suite is 939 tests, all green with no compiler warnings. `tasks.md` keeps
+T034–T037 open as the record of what the round refused: resources, prompts, sampling, remote transports,
+server mode and a declarative server list.
+
 ## Round 4 — `010-browser`
 
 **Ships**: documentation and a thin `browser` tool that speaks to an MCP server the developer already

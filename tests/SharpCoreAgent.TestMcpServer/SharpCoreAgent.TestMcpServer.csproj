@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A real MCP server, small enough to read, that the round-3 process tests launch as a child process.
+
+    It exists because three promises can only be proved against a real child: that the launch path works on this
+    platform (a shell, not a bare executable), that a server's stderr never reaches stdout, and that disposing the
+    connection kills the process tree. A scripted in-memory server proves the protocol; this proves the process.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SharpCoreAgent.TestMcpServer</RootNamespace>
+    <AssemblyName>SharpCoreAgent.TestMcpServer</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

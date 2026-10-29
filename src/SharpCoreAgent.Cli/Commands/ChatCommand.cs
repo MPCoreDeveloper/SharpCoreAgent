@@ -6,6 +6,7 @@ using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Infrastructure.Configuration;
+using SharpCoreAgent.Infrastructure.Mcp;
 using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.Cli;
@@ -48,6 +49,12 @@ internal static class ChatCommand
             return ExitCodes.Credentials;
         }
 
+        // Before anything resolves the agent: its registry is built from the tools the servers offer.
+        if (!await CliHost.TryStartMcpAsync(cli, provider, Console.Error, scope.ExitToken).ConfigureAwait(false))
+        {
+            return ExitCodes.Usage;
+        }
+
         var store = provider.GetRequiredService<ISessionStore>();
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
@@ -88,7 +95,7 @@ internal static class ChatCommand
             }
             else
             {
-                await WriteBannerAsync(session, cli, path, theme, scope.ExitToken).ConfigureAwait(false);
+                await WriteBannerAsync(session, cli, path, theme, provider.GetService<McpToolHost>(), scope.ExitToken).ConfigureAwait(false);
             }
         }
 
@@ -102,6 +109,7 @@ internal static class ChatCommand
     /// <param name="cli">The command line, for the approval and agent modes.</param>
     /// <param name="path">The transcript path, already absolute.</param>
     /// <param name="theme">The palette the chrome is rendered with.</param>
+    /// <param name="mcp">The MCP host, when the developer started servers with <c>--mcp</c>.</param>
     /// <param name="cancellationToken">Cancelled when the developer leaves.</param>
     /// <returns>The pending writes.</returns>
     /// <remarks>
@@ -114,6 +122,7 @@ internal static class ChatCommand
         CliOptions cli,
         string path,
         AnsiTheme theme,
+        McpToolHost? mcp,
         CancellationToken cancellationToken)
     {
         var rows = new List<(string Label, string Value)>
@@ -147,6 +156,15 @@ internal static class ChatCommand
                 : string.Create(
                     CultureInfo.InvariantCulture,
                     $"on · +{cli.WebAllowedHosts.Count} named host(s)")));
+        }
+
+        // A server row only when servers were started, and it answers the two questions a prefixed tool raises:
+        // how many programs are answering, and how much of the tool list came from them.
+        if (mcp is not null)
+        {
+            rows.Add(("mcp", string.Create(
+                CultureInfo.InvariantCulture,
+                $"{mcp.Servers.Count} server(s) · {mcp.Tools.Count} tool(s)")));
         }
 
         if (cli.SaveSession)

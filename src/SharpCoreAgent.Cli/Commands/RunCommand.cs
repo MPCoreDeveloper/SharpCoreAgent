@@ -38,6 +38,13 @@ internal static class RunCommand
             return ExitCodes.Credentials;
         }
 
+        // Before the agent: the registry is built from the tools the servers offer, so a server that will not
+        // start has to be a message and exit 2 rather than an exception inside the first turn.
+        if (!await CliHost.TryStartMcpAsync(cli, provider, Console.Error, cancellationToken).ConfigureAwait(false))
+        {
+            return ExitCodes.Usage;
+        }
+
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
 

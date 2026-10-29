@@ -30,6 +30,7 @@ settings file, its precedence and its exit code are in
 | `--add-root <path>` | run, chat | — | A read-only root the read tools may also answer from; repeatable, and `SHARPCOREAGENT_ADD_ROOTS` adds more after these (007) |
 | `--web` | run, chat | — | Register `fetch_url` for this process; refused on `models`, `index`, `config` and `setup` (008) |
 | `--web-allow <host>` | run, chat | — | Exempt a host from `fetch_url`'s address refusal; repeatable, needs `--web`, and has no settings key or environment variable (008) |
+| `--mcp <command>` | run, chat | — | Start one stdio MCP server and register the tools it lists for this process; repeatable, refused on `models`, `index`, `config` and `setup`, and has no settings key or environment variable (009) |
 | `--approval <mode>` | run, chat | `ask` | `readonly`, `ask`, `allow` |
 | `--max-iterations <n>` | run, chat | `400` | Loop bound: one turn is tens of model calls, not a handful |
 | `--max-output-tokens <n>` | run, chat | `8000` | Per-request output cap |
