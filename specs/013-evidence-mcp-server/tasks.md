@@ -190,4 +190,8 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   The round closed with `dotnet build` and `dotnet test` on the solution in Release: 0 warnings, 1085 passing.
   The merge is the one item that is not as written: rounds 007–009 each landed as a `--no-ff` merge commit, but
   this round's phases went to `main` as they were produced, so there is no branch to merge and no merge commit in
-  the history. Recorded here rather than manufactured.
+  the history. Recorded here rather than manufactured. The Release gate also caught a flake that had nothing to do
+  with the bench: `McpServeParsingTests` and `McpConfigParsingTests` use `ConsoleScope`, which redirects the
+  process's console, but neither had joined the `CliConsole` collection that serialises the five other classes doing
+  the same — so a parallel class could capture or steal the output, and one run in three failed on a message that
+  was in a different writer. Both joined the collection; three consecutive Release runs are 1085/1085.

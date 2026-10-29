@@ -9,8 +9,11 @@ namespace SharpCoreAgent.Tests.Cli;
 /// </summary>
 /// <remarks>
 /// <c>McpConfigCommandTests</c> pins the three blocks themselves; these tests are about the words and the flag list,
-/// and about <c>--client</c> being refused on every other command for the same reason <c>--no-refresh</c> is.
+/// and about <c>--client</c> being refused on every other command for the same reason <c>--no-refresh</c> is. The
+/// collection is the one that owns the console: <c>ConsoleScope</c> redirects the process's streams, so a test that
+/// used it beside another one would read the other's output.
 /// </remarks>
+[Collection(CliConsole.Name)]
 public sealed class McpConfigParsingTests
 {
     [Theory]

@@ -804,10 +804,11 @@ internal sealed record CliOptions
                 if (options.Json)
                 {
                     // The server's own stdout is the protocol: a JSON object per line is already its shape, and
-                    // --json would promise a second, incompatible one.
+                    // --json would promise a second, incompatible one. The bench prints one table for the same
+                    // reason, in the other direction: a number is read, not parsed.
                     throw new CliUsageException(
                         "--json is only valid with run and index.",
-                        "The server answers JSON-RPC on stdout; diagnostics go to stderr.");
+                        "mcp serve's stdout is JSON-RPC and mcp bench prints one table; diagnostics go to stderr.");
                 }
 
                 return FinishMcp(options, positionals);

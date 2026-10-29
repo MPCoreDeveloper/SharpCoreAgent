@@ -10,8 +10,11 @@ namespace SharpCoreAgent.Tests.Cli;
 /// </summary>
 /// <remarks>
 /// The exit code of every refusal is <see cref="ExitCodes.Usage"/>; <c>McpServeCommandTests</c> pins the paths a
-/// process actually takes, so these tests are about the words and the flag list.
+/// process actually takes, so these tests are about the words and the flag list. The collection is the one that owns
+/// the console: <c>ConsoleScope</c> redirects the process's streams, so a test that used it beside another one would
+/// read the other's output.
 /// </remarks>
+[Collection(CliConsole.Name)]
 public sealed class McpServeParsingTests
 {
     [Fact]
