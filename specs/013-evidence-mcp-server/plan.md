@@ -217,7 +217,8 @@ repository, and a small workspace would have produced a number that flattered no
 **Observation, not this round's bug:** the incremental `index` run before the measurement crashed once with
 `error: Index was outside the bounds of the array.` after the tree had grown a few hundred files; `index
 --rebuild` (841 s) repaired it. Recorded here because a bench over a corrupt index would have published twelve
-identical failures as a result. It belongs to round 002 and is left there rather than fixed in passing.
+identical failures as a result. It belongs to round 002 and is filed there as **T035** rather than fixed in
+passing.
 
 ## Complexity Tracking
 

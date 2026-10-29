@@ -366,9 +366,23 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Done when: `research.md` D16 carries before/after rows for the same corpora, `spec.md`'s measured notes
     are either removed (met) or re-stated (missed and accepted), and the quickstart's cost paragraph quotes
     the new number instead of 513.5 s.
-  - Note: this is the only unchecked task in the feature. Everything behavioural — build, five tools, refresh,
-    verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing is the
-    throughput and size the criteria promise.
+  - Note: this and T035 are the two unchecked tasks in the feature. Everything behavioural — build, five tools,
+    refresh, verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing here is
+    the throughput and size the criteria promise.
+
+- [ ] **T035** An incremental build must not overflow an array
+  - Files: `src/SharpCoreAgent.Indexing/IndexWriter.cs`, `IndexFileWriter.cs` (and, if the fault is below them,
+    the SharpCoreDB surface the row batches go through)
+  - Do: reproduce what `013`'s phase 5 hit while measuring — an incremental `index` after the working tree had
+    grown a few hundred files exited with `error: Index was outside the bounds of the array.`, and
+    `index --rebuild` (841 s) repaired the index, so the damage was the incremental path rather than the corpus.
+    Reproduce it first from a test, then attribute it: the message is the runtime's, so it may be our row batch or
+    the engine's index maintenance, and "crashed once on someone's machine" is not yet a report.
+  - Done when: a test that fails on the current code, a build over a tree that has doubled lands clean twice in a
+    row, and the sentence above is replaced by the cause.
+  - Note: found and reported by `013` (`specs/013-evidence-mcp-server/plan.md`, "Observation, not this round's
+    bug") rather than fixed in passing, because a bench over a corrupt index would have published twelve identical
+    failures as if they were a measurement.
 
 ## Traceability — requirement to task
 

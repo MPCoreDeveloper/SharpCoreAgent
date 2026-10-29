@@ -166,7 +166,8 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   on a 233 MiB index, which is the price Complexity Tracking item 3 said would be measured); and the ratio on a
   two-file fixture, `3.427`, which says the claim only means something at repository scale. The plan's `[--json]`
   is recorded as dropped, with `--verbose` in its place. One observation is left for round 002: an incremental
-  `index` run crashed with `Index was outside the bounds of the array.` and `--rebuild` (841 s) repaired it.
+  `index` run crashed with `Index was outside the bounds of the array.` and `--rebuild` (841 s) repaired it; it is
+  filed as `002` **T035** so it is a task with an owner rather than a sentence in a closed round's plan.
 
 ## Phase 6 — the round
 
