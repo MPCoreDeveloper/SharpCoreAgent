@@ -26,8 +26,8 @@ are already there (`SearchCodeTool` and four siblings). What is missing is a pro
 |---|---|---|
 | `SharpCoreAgent.Infrastructure` | `McpServer/McpServerOptions.cs`, `McpServerPublishedSet.cs`, `McpServerSession.cs`, `StdioRpcWriter.cs` | An adapter over `ITool`/`IToolRegistry` and the index. Infrastructure already owns `Mcp/`; the client and the server are two adapters over the same wire format, and the layering rule (Infrastructure → Domain + Application) is unchanged. |
 | `SharpCoreAgent.DependencyInjection` | `AddMcpServer(this IServiceCollection, Workspace, McpServerOptions)` | Same shape as `AddWeb`: register the adapter's tools and nothing else. |
-| `SharpCoreAgent.Cli` | `Commands/McpCommand.cs`; `CliCommand.Mcp`, `CliAction { Serve, Config }` in `CliOptions`; rows in `HelpText` | `mcp` is a command with an action, exactly like `config` with `ConfigAction`. |
-| `tests/SharpCoreAgent.Tests` | `McpServer/McpServerSessionTests.cs`, `McpServerPublishedSetTests.cs`, `McpServerStdoutTests.cs`, `McpServerDogfoodTests.cs`, `Cli/McpCommandParsingTests.cs` | Named for the surface they prove. |
+| `SharpCoreAgent.Cli` | `Commands/McpCommand.cs`, `Commands/McpBench.cs`; `McpAction { Serve, Config, Bench }` in `CliOptions`; rows in `HelpText` | `mcp` is a command with an action, exactly like `config` with `ConfigAction`. |
+| `tests/SharpCoreAgent.Tests` | `Infrastructure/McpServer*Tests.cs`, `Infrastructure/McpServerDogfoodTests.cs`, `Cli/McpServeParsingTests.cs`, `Cli/McpConfigParsingTests.cs`, `Cli/McpBenchTests.cs` | Named for the surface they prove; the server's own tests live beside the client's because they share the wire fixtures, and the CLI-facing ones stay under `Cli/`. |
 
 Nothing in `Domain` or `Application` changes. `PublicAPI.Unshipped.txt` is untouched: only `Domain` carries a
 public-API file, and the new types are `internal` except `McpServerSession`/`McpServerOptions`, which live in
@@ -144,9 +144,12 @@ process dozens of times a day on a machine where the developer may never have ty
 | `McpServerSessionTests` | FR-004–FR-008: handshake, list, call, ping, notification silence, cancellation, every error code, and that a malformed line before a good one does not end the loop |
 | `McpServerPublishedSetTests` | FR-009–FR-011 and SC-003: set equals the allow-list, every member is `ReadOnly`, `write_file` and friends are absent, `tools/call` on them is `-32602` |
 | `McpServerStdoutTests` | FR-003 and SC-004: each stdout line parses as one object; diagnostics appear only on stderr |
-| `McpServerRefreshTests` | FR-012/FR-013: stale count drops after a refresh; a second writer's build yields an answer plus `building`; budget exhaustion is not an error |
+| `IndexRefreshGateTests`, `LeasedCodeIndexTests` | FR-012/FR-013 and FR-015: stale count drops after a refresh; a second writer's build yields an answer plus `building`; budget exhaustion is not an error; a lease leaves no lock behind |
 | `McpServerDogfoodTests` | FR-017: our own `--mcp` client against our own server on a fixture workspace, tool names `sharpcoreagent_<tool>`, evidence text identical to the in-process call (SC-002) |
-| `McpCommandParsingTests` | FR-001/FR-002: `mcp serve` accepts `--no-refresh`, refuses the eight flags above, `mcp config --client` requires a known client |
+| `McpServeParsingTests`, `McpConfigParsingTests`, `McpConfigCommandTests` | FR-001/FR-002: `mcp serve` accepts `--no-refresh`, refuses the eight flags above, `mcp config --client` requires a known client, `mcp bench` takes no operand and no flag of another verb |
+| `McpBenchTests` | FR-019: the question file, the ratio's two halves, the percentile, and one end-to-end run over a real server (SC-005, SC-006) |
+
+`dotnet test` at the close of the round, in Release: **1085 passing, 0 failed, 0 skipped**.
 
 Every test runs from streams or a child process with no live endpoint and no key, which is the existing rule.
 

@@ -141,10 +141,17 @@ Two details that are not cosmetic and are why the command exists rather than one
 format says `servers` where the portable format says `mcpServers`, and Codex reads TOML, not JSON. The TOML
 path is a literal string (`'…'`), which is the one form in which a Windows separator stays a separator.
 
-Checked against each agent's documentation on 2026-10-29: Claude Code's MCP page (project scope, `.mcp.json`,
-`mcpServers`), VS Code's MCP configuration reference (`servers`, stdio entries typed), and Codex's config
-reference (`[mcp_servers.<name>]` with `command` and `args`). Where a file is user-scope rather than
-repository-scope, the block is a table to add, not a file to replace — which is what the stderr line says.
+Re-checked on 2026-10-29, because this is the block most likely to drift. VS Code's page still says, verbatim,
+"Portable files use a top-level `mcpServers` object. The VS Code format uses `servers`", and `.vscode/mcp.json`
+is still listed as a workspace destination — with two additions the round records rather than smooths over:
+that destination is now labelled deprecated in VS Code's guided flow, and workspace scope is being offered as
+the repository-root `.mcp.json` (the portable `mcpServers` shape) behind the experimental
+`chat.mcp.workspaceRootConfig.enabled` setting. So both blocks this command prints are current, and
+`--client claude` already prints exactly the portable file VS Code is moving towards; which file to write is
+decided by the table above and by the one line on stderr. Codex's `[mcp_servers.<name>]` table with `command`
+and `args`, and Claude Code's project-scope `.mcp.json`, were checked the same day. Where a file is user-scope
+rather than repository-scope, the block is a table to add, not a file to replace — which is what the stderr line
+says.
 
 The block does not carry `--workspace`: the agent starts the server in the directory it is working in, which is
 the workspace the developer opened. Pinning another one is an `args` edit, and the help says so.

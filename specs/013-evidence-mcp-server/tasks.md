@@ -175,5 +175,19 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   note records that no default changed.
 - [X] T025 Roadmap: round 6 accepted 2026-10-28, the round-6 row and the "What stays out of this program" paragraph
   updated to say the exclusion was reversed and why, and the constitution marked as a dependency met.
-- [ ] T026 README section with the three client snippets and the "run `index` once after cloning" note; suite
-  count in `plan.md`; merge `--no-ff`.
+- [X] T026 README section with the three client snippets and the "run `index` once after cloning" note; suite
+  count in `plan.md`; merge `--no-ff`. As built: the Quickstart gained the step itself ("Build the index once per
+  clone… `dotnet run --project src\SharpCoreAgent.Cli -- index`") rather than a footnote in the serving section,
+  because a cloner who skips it meets four tools that refuse. The three snippets and their files were already in
+  README from T019. The VS Code block was re-checked against `code.visualstudio.com` on 2026-10-29: `servers` in
+  `.vscode/mcp.json` is still what the page says verbatim, and two facts the round now records instead of
+  smoothing over — that destination is labelled deprecated in VS Code's guided flow, and workspace scope is being
+  offered as the repository-root `.mcp.json` with `mcpServers` behind `chat.mcp.workspaceRootConfig.enabled`, which
+  is the block `--client claude` already prints. `plan.md` carries the suite count (1085 passing, 0 failed, in
+  Release) and its Tests table now names the files that exist: `McpServerRefreshTests` was never written — the
+  refresh and lease tests are `IndexRefreshGateTests` and `LeasedCodeIndexTests` — and `McpCommandParsingTests`
+  became `McpServeParsingTests`, `McpConfigParsingTests` and `McpConfigCommandTests`, with `McpBenchTests` added.
+  The round closed with `dotnet build` and `dotnet test` on the solution in Release: 0 warnings, 1085 passing.
+  The merge is the one item that is not as written: rounds 007–009 each landed as a `--no-ff` merge commit, but
+  this round's phases went to `main` as they were produced, so there is no branch to merge and no merge commit in
+  the history. Recorded here rather than manufactured.

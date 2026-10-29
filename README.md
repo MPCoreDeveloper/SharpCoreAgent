@@ -83,6 +83,13 @@ dotnet run --project src\SharpCoreAgent.Cli -- models
 dotnet run --project src\SharpCoreAgent.Cli -- run "list the files in this repository" --provider demo --approval readonly
 ```
 
+Build the index once per clone. Nothing does it for you: `search_code`, `find_symbol`, `find_references`
+and `code_context` answer from the index, and without one they say so instead of guessing:
+
+```powershell
+dotnet run --project src\SharpCoreAgent.Cli -- index
+```
+
 Start a session the way every other agent in a terminal starts one — type the name. With a terminal on
 both ends it opens the interactive loop and says what it is using; with either stream redirected it
 prints the usage block instead, so a script never hangs on a prompt:
