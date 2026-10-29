@@ -36,21 +36,22 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
 
 ## Phase 2 — the published set
 
-- [ ] T006 `McpServerPublishedSet`: the five names in a fixed order, resolved against the registry as
+- [X] T006 `McpServerPublishedSet`: the five names in a fixed order, resolved against the registry as
   `Safety == ToolSafety.ReadOnly` ∩ allow-list. A name on the list that is absent from the registry is skipped,
   not published from a stale schema (FR-009).
-- [ ] T007 `tools/list`: one page, no `nextCursor`, `name` + `Description` + `ParametersSchemaJson` byte for
+- [X] T007 `tools/list`: one page, no `nextCursor`, `name` + `Description` + `ParametersSchemaJson` byte for
   byte + `annotations.readOnlyHint: true`; an explicit `cursor` is ignored rather than refused (FR-005).
-- [ ] T008 `tools/call`: lookup in the published set, `arguments` forwarded verbatim (absent means `{}`), a
+- [X] T008 `tools/call`: lookup in the published set, `arguments` forwarded verbatim (absent means `{}`), a
   `ToolInvocationContext` whose `Approval` is `ReadOnly`, and the answer shaped
   `{"content":[{"type":"text","text":"…"}],"isError":true?}` with the tool's own text unaltered (FR-006, FR-011).
-- [ ] T009 `-32602` for an unpublished name and for `params` that are not an object; the session survives both
+- [X] T009 `-32602` for an unpublished name and for `params` that are not an object; the session survives both
   (FR-007).
-- [ ] T010 `notifications/cancelled` cancels the call whose id it names, and only that call (FR-008).
-- [ ] T011 Tests: a registry-wide assertion that `write_file`, `delete_file`, `replace_in_file`, `run_shell`,
+- [X] T010 `notifications/cancelled` cancels the call whose id it names, and only that call (FR-008).
+- [X] T011 Tests: a registry-wide assertion that `write_file`, `delete_file`, `replace_in_file`, `run_shell`,
   `shell_output`, `shell_stop`, `list_directory`, `read_file`, `search_text`, `list_roots`, `fetch_url` and every
   `McpTool` are absent; schema byte-equality; `isError` present only when true; both `-32602` shapes; and a
-  cancelled call answering nothing (FR-006, FR-007, FR-009, FR-010).
+  cancelled call answering nothing (FR-006, FR-007, FR-009, FR-010). — `McpServerPublishedSetTests` (18) and
+  `McpServerToolsTests` (11).
 
 ## Phase 3 — the process
 

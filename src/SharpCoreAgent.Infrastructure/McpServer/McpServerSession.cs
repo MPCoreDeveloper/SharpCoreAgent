@@ -2,6 +2,12 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using SharpCoreAgent.Application;
+using SharpCoreAgent.Domain;
+using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Conversation;
+using SharpCoreAgent.Domain.Errors;
+using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Mcp;
 
 namespace SharpCoreAgent.Infrastructure.McpServer;
@@ -17,9 +23,15 @@ namespace SharpCoreAgent.Infrastructure.McpServer;
 /// can assert. Nothing here touches <see cref="Console"/>: the streams are handed in, which is what lets every
 /// rule below be tested over two memory streams instead of a child process.
 /// <para>
-/// This type knows nothing about tools yet. It owns the envelope, the handshake, the two methods every server
-/// must answer, and the error codes — <c>tools/list</c> and <c>tools/call</c> arrive with the published set, so
-/// the wire can be proven before anything is published on it.
+/// What this type serves is a <see cref="McpServerPublishedSet"/>, never a registry: a name that is not published
+/// is an error rather than a lookup, so the set is the only door to a tool. It knows nothing about the index, the
+/// workspace's tools or the CLI — it answers for whatever set it was handed, which is what keeps the protocol
+/// provable without an index and the publishing decision provable without a socket.
+/// </para>
+/// <para>
+/// The one place the loop is not strictly sequential is a call in flight: while a tool runs, the next line is read
+/// so that <c>notifications/cancelled</c> can reach the call it names. Any other message read during a call is
+/// answered afterwards, in arrival order, which is the same order a client sees if it waits.
 /// </para>
 /// </remarks>
 public sealed class McpServerSession : IAsyncDisposable
@@ -38,18 +50,61 @@ public sealed class McpServerSession : IAsyncDisposable
 
     private readonly TextReader _input;
     private readonly StdioRpcWriter _output;
+    private readonly McpServerPublishedSet _published;
+    private readonly Workspace? _workspace;
     private readonly Action<string>? _log;
+    private readonly Queue<string> _deferred = new();
+    private Task<string?>? _pendingRead;
+    private bool _endOfInput;
     private bool _disposed;
 
     /// <summary>
-    /// Creates a session over an already-open pair of streams.
+    /// Creates a session over an already-open pair of streams that publishes no tools: the envelope alone.
     /// </summary>
     /// <param name="input">What the client writes; read line by line until it ends.</param>
     /// <param name="output">Where answers are written, one line each.</param>
     /// <param name="options">The versions and budgets this server works within.</param>
     /// <param name="log">Receives diagnostics for stderr, or null to stay quiet.</param>
     /// <exception cref="ArgumentException">The options do not validate.</exception>
+    /// <remarks>
+    /// A server that publishes nothing is still a server: the handshake and <c>ping</c> answer, <c>tools/list</c> is an
+    /// empty page, and every <c>tools/call</c> is refused as an unknown tool. That is the honest reading of a session
+    /// nobody gave a catalogue to, and it is what lets the envelope be tested without an index.
+    /// </remarks>
     public McpServerSession(Stream input, Stream output, McpServerOptions options, Action<string>? log = null)
+        : this(input, output, McpServerPublishedSet.Empty, workspace: null, options, log)
+    {
+    }
+
+    /// <summary>
+    /// Creates a session that publishes the read-only evidence tools of a registry.
+    /// </summary>
+    /// <param name="input">What the client writes; read line by line until it ends.</param>
+    /// <param name="output">Where answers are written, one line each.</param>
+    /// <param name="registry">The host's registry; the published set is a filtered view of it.</param>
+    /// <param name="workspace">The workspace every <c>tools/call</c> answers within.</param>
+    /// <param name="options">The versions and budgets this server works within.</param>
+    /// <param name="log">Receives diagnostics for stderr, or null to stay quiet.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="registry"/> is null.</exception>
+    /// <exception cref="ArgumentException">The options do not validate, or a published schema is not JSON.</exception>
+    public McpServerSession(
+        Stream input,
+        Stream output,
+        IToolRegistry registry,
+        Workspace workspace,
+        McpServerOptions options,
+        Action<string>? log = null)
+        : this(input, output, new McpServerPublishedSet(registry), workspace, options, log)
+    {
+    }
+
+    private McpServerSession(
+        Stream input,
+        Stream output,
+        McpServerPublishedSet published,
+        Workspace? workspace,
+        McpServerOptions options,
+        Action<string>? log)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(output);
@@ -65,12 +120,16 @@ public sealed class McpServerSession : IAsyncDisposable
             detectEncodingFromByteOrderMarks: false,
             leaveOpen: true);
         _output = new StdioRpcWriter(output);
+        _published = published;
+        _workspace = workspace;
         _log = log;
     }
 
     /// <summary>Gets the options this session was created with, after validation.</summary>
     public McpServerOptions Options { get; }
 
+    /// <summary>Gets how many tools this session publishes, which is what the ready line reports.</summary>
+    public int PublishedToolCount => _published.Count;
 
     /// <summary>
     /// Reads requests until stdin ends or the caller cancels, answering each one in arrival order.
@@ -83,14 +142,18 @@ public sealed class McpServerSession : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         _log?.Invoke(string.Create(
             CultureInfo.InvariantCulture,
-            $"serving {Options.ServerName} {Options.ServerVersion} on stdio, protocol {Options.ProtocolVersion}"));
+            $"serving {Options.ServerName} {Options.ServerVersion} on stdio, protocol {Options.ProtocolVersion}, {PublishedToolCount} tools"));
 
-        while (!cancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested && !_endOfInput)
         {
             string? line;
             try
             {
-                line = await _input.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                // A line that arrived while a call was in flight is answered now, before anything further is
+                // read: the order a client wrote is the order it hears back.
+                line = _deferred.Count > 0
+                    ? _deferred.Dequeue()
+                    : await NextLineAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -195,9 +258,18 @@ public sealed class McpServerSession : IAsyncDisposable
             return;
         }
 
+        if (string.Equals(method, "tools/call", StringComparison.Ordinal))
+        {
+            // Answered by the call path, which may be cancelled before it has an answer to give and therefore
+            // writes its own line at the moment it knows the outcome.
+            await CallToolAsync(request, id, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var answer = method switch
         {
             "initialize" => Success(id, Initialize(request)),
+            "tools/list" => Success(id, ListTools(request)),
             "ping" => Success(id, new JsonObject()),
             _ => Failure(
                 id,
@@ -207,6 +279,294 @@ public sealed class McpServerSession : IAsyncDisposable
 
         await AnswerAsync(answer, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Reads the next line, keeping the read that is already in flight when there is one.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the read, which abandons the wait rather than the stream.</param>
+    /// <returns>The line, or <see langword="null"/> at end of input.</returns>
+    /// <remarks>
+    /// The task is cached because the call path races a read against a running tool with
+    /// <see cref="Task.WhenAny(Task, Task)"/>: a second read started while the first is still awaited would be a
+    /// second reader on one stream, which is exactly the bug the cache exists to prevent.
+    /// </remarks>
+    private async Task<string?> NextLineAsync(CancellationToken cancellationToken)
+    {
+        var read = _pendingRead ??= _input.ReadLineAsync(cancellationToken).AsTask();
+        try
+        {
+            return await read.ConfigureAwait(false);
+        }
+        finally
+        {
+            // Cleared even when the read failed or was cancelled: the next caller must start a fresh one rather
+            // than await a finished task and read one line for the rest of the session.
+            if (ReferenceEquals(_pendingRead, read))
+            {
+                _pendingRead = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Answers <c>tools/list</c> with one page holding every published tool.
+    /// </summary>
+    /// <param name="request">The request, read only for a cursor the set is too small to need.</param>
+    /// <returns>The result object: a <c>tools</c> array, and no <c>nextCursor</c> because there is no next page.</returns>
+    private JsonObject ListTools(JsonObject request)
+    {
+        if ((request["params"] as JsonObject)?["cursor"] is not null)
+        {
+            // Refusing would fail a client that paginates by habit, and paging a five-tool list would invent a
+            // second page and a cursor nobody can follow. The cursor is ignored, and said to be ignored.
+            _log?.Invoke("tools/list: a cursor was ignored; one page holds the whole set");
+        }
+
+        return new JsonObject { ["tools"] = new JsonArray([.. _published.Tools.Select(Describe)]) };
+    }
+
+    /// <summary>
+    /// Renders one tool the way the specification's <c>Tool</c> object wants it.
+    /// </summary>
+    /// <param name="published">The published tool.</param>
+    /// <returns>The tool's name, its description, its own schema, and a read-only hint.</returns>
+    /// <remarks>
+    /// The schema is the tool's own text, parsed: not a copy maintained here, not a subset, and not a second
+    /// description of the same arguments. A client therefore validates arguments exactly as the provider does, and a
+    /// change to a tool's schema reaches the client without a change to this server.
+    /// </remarks>
+    private static JsonObject Describe(McpServerPublishedTool published) => new()
+    {
+        ["name"] = published.Tool.Definition.Name,
+        ["description"] = published.Tool.Definition.Description,
+        ["inputSchema"] = published.InputSchema.DeepClone(),
+        ["annotations"] = new JsonObject { ["readOnlyHint"] = true },
+    };
+
+    /// <summary>
+    /// Answers <c>tools/call</c>: runs one published tool and renders what it returned.
+    /// </summary>
+    /// <param name="request">The request, whose params name the tool and carry its arguments.</param>
+    /// <param name="id">The id the answer or the error is written with.</param>
+    /// <param name="cancellationToken">Ends the session; a call cancelled by the client is abandoned, not answered.</param>
+    /// <returns>A task that completes once the answer, the error, or the decision to say nothing has been made.</returns>
+    /// <remarks>
+    /// Only a request that names no published tool is a protocol error, and it is refused before anything runs. A tool
+    /// that fails answers with <c>isError: true</c> and its own text, because the model can read that sentence and act
+    /// on it, whereas a JSON-RPC error belongs to the client library and never reaches the model.
+    /// </remarks>
+    private async Task CallToolAsync(JsonObject request, JsonNode? id, CancellationToken cancellationToken)
+    {
+        if (request["params"] is not JsonObject parameters)
+        {
+            await AnswerAsync(
+                Failure(id, InvalidParameters, "the request's params must be an object naming a tool and its arguments"),
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var name = ReadString(parameters, "name");
+        var published = _published.Find(name);
+
+        if (published is null || _workspace is null)
+        {
+            _log?.Invoke($"tools/call: refused '{name ?? "an unnamed tool"}'");
+            await AnswerAsync(
+                Failure(
+                    id,
+                    InvalidParameters,
+                    $"unknown tool '{name ?? string.Empty}'; this server publishes {_published.Count} evidence tools"),
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        // Absent arguments are an empty object rather than a parse error: `index_status` takes none, and a client
+        // that omits the member asks the same question as one that sends {}.
+        var argumentsJson = parameters["arguments"] is JsonNode arguments ? arguments.ToJsonString() : "{}";
+        var toolCall = new ToolCall(RenderId(id), published.Tool.Definition.Name, argumentsJson);
+
+        // ReadOnly is asserted rather than assumed: every tool here is published because it reads, and a tool that
+        // ever asks about the mode is told what this session is.
+        var context = new ToolInvocationContext(_workspace) { Approval = ApprovalMode.ReadOnly };
+
+        using var scope = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var call = InvokeAsync(published.Tool, toolCall, context, scope.Token);
+
+        ToolResult? result;
+        try
+        {
+            result = await PumpAsync(call, id, scope, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The client cancelled this call and nothing else. The specification says such a request gets no answer,
+            // and the id is already in the client's records as abandoned.
+            _log?.Invoke($"call {toolCall.Id} was cancelled; it will not be answered");
+            return;
+        }
+
+        if (result is null)
+        {
+            return;
+        }
+
+        await AnswerAsync(Success(id, AnswerBody(result)), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Waits for a tool while watching for the two things that can matter before it finishes: a cancellation of this
+    /// call, and the end of input.
+    /// </summary>
+    /// <param name="call">The tool's task, which is the answer when it completes.</param>
+    /// <param name="id">The id a cancellation has to name to reach this call.</param>
+    /// <param name="scope">The call's own token source, cancelled when the client asks for it.</param>
+    /// <param name="cancellationToken">Ends the session; the scope is what cancels the call.</param>
+    /// <returns>The tool's result.</returns>
+    /// <remarks>
+    /// Only a matching <c>notifications/cancelled</c> cancels the call. The notification names a request id, and a
+    /// server that cancelled whatever happened to be running would let one abandoned call stop another, so a
+    /// cancellation for any other id is treated as an ordinary message and logged as one that found nothing.
+    /// <para>
+    /// End of input mid-call cancels the call too: nobody is left to receive the answer, and the process is about to
+    /// exit, so letting a long tool run would be work done for a client that is gone.
+    /// </para>
+    /// </remarks>
+    private async Task<ToolResult?> PumpAsync(
+        Task<ToolResult?> call,
+        JsonNode? id,
+        CancellationTokenSource scope,
+        CancellationToken cancellationToken)
+    {
+        while (!call.IsCompleted)
+        {
+            var reading = NextLineAsync(cancellationToken);
+            if (await Task.WhenAny(call, reading).ConfigureAwait(false) == call)
+            {
+                break;
+            }
+
+            var line = await reading.ConfigureAwait(false);
+            if (line is null)
+            {
+                _endOfInput = true;
+                _log?.Invoke("stdin closed while a call was running; the call is cancelled");
+                await scope.CancelAsync().ConfigureAwait(false);
+                break;
+            }
+
+            if (IsCancellationFor(line, id))
+            {
+                _log?.Invoke("the client cancelled the call in flight");
+                await scope.CancelAsync().ConfigureAwait(false);
+                continue;
+            }
+
+            // Anything else is answered once the call is done, in the order it arrived.
+            _deferred.Enqueue(line);
+        }
+
+        return await call.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Decides whether a line is the notification that cancels one call.
+    /// </summary>
+    /// <param name="line">The raw line, parsed here because the loop must not answer it.</param>
+    /// <param name="id">The id of the call in flight.</param>
+    /// <returns><see langword="true"/> when the line cancels exactly this call.</returns>
+    private static bool IsCancellationFor(string line, JsonNode? id)
+    {
+        JsonNode? parsed;
+        try
+        {
+            parsed = JsonNode.Parse(line);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        // A request that happens to be named notifications/cancelled is a request: it has an id and expects an
+        // answer, so it waits like anything else.
+        if (parsed is not JsonObject note || note.ContainsKey("id") || !TryReadMethod(note, out var method))
+        {
+            return false;
+        }
+
+        return string.Equals(method, "notifications/cancelled", StringComparison.Ordinal)
+            && JsonNode.DeepEquals((note["params"] as JsonObject)?["requestId"], id);
+    }
+
+    /// <summary>
+    /// Runs one tool, turning the failures a model can read into results instead of exceptions.
+    /// </summary>
+    /// <param name="tool">The published tool.</param>
+    /// <param name="call">The call being answered.</param>
+    /// <param name="context">The workspace, the approval mode and the output sink.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result, which may be a failure.</returns>
+    /// <remarks>
+    /// The catch list is the agent loop's, deliberately: a bad argument is the model's mistake and belongs in the
+    /// transcript, a missing file is the workspace's state and belongs there too, and anything else is a bug that
+    /// should surface rather than be retried forever as a tool error. Cancellation always escapes.
+    /// </remarks>
+    private static async Task<ToolResult?> InvokeAsync(
+        ITool tool,
+        ToolCall call,
+        ToolInvocationContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await tool.ExecuteAsync(call, context, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ToolArgumentException ex)
+        {
+            return ToolResult.Failure(call.Id, call.Name, ex.Message);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SharpCoreAgentException)
+        {
+            return ToolResult.Failure(call.Id, call.Name, $"{call.Name} failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Renders a result as the <c>CallToolResult</c> the specification describes.
+    /// </summary>
+    /// <param name="result">What the tool returned.</param>
+    /// <returns>One text content block, plus <c>isError</c> when the tool failed.</returns>
+    /// <remarks>
+    /// One text block holding the tool's content unchanged. A structured result would be a second rendering of text the
+    /// tool already wrote for a model, and the client this server is built for is a model.
+    /// </remarks>
+    private static JsonObject AnswerBody(ToolResult result)
+    {
+        var body = new JsonObject
+        {
+            ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = result.Content }),
+        };
+
+        // Present only when true: the specification's default is false, and a client that reads the absence and a
+        // client that reads false must agree.
+        if (result.IsError)
+        {
+            body["isError"] = true;
+        }
+
+        return body;
+    }
+
+    /// <summary>
+    /// Renders a request id as the call id a tool echoes back into its result.
+    /// </summary>
+    /// <param name="id">The request's id, which may be a string, a number, or absent.</param>
+    /// <returns>The id as text.</returns>
+    private static string RenderId(JsonNode? id) => id switch
+    {
+        null => "0",
+        JsonValue value when value.TryGetValue<string>(out var text) => text,
+        _ => id.ToJsonString(),
+    };
 
     private JsonObject Initialize(JsonObject request)
     {
