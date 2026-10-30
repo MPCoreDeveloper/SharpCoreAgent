@@ -282,7 +282,8 @@ first eight bytes `89 50 4E 47 0D 0A 1A 0A`. Three things the run taught, which 
 is still uncommitted in this tree — `011`'s `TaskTool` registration and prompt, `015`'s `FSharpToolsEnabled` and its
 project reference, `012`'s `VerifyGate` calls and `AgentReport.IsUnverified` — and none to this round: the round's
 diff is `Mcp/` in `Infrastructure`, one paragraph in `HelpText.cs`, the README, this spec's contracts and `009`'s
-two pointers.
+two pointers. The literal zero the task asked for arrived through the commit instead of an edit: rounds 4, 5 and
+7 are one commit, `a447a4d`, and `git diff --stat HEAD` over the same four paths is empty.
 
 **One thing did not survive the plan verbatim: T016's second half.** The plan asked for a payload whose
 *estimated* size passes and whose decoded size does not. With `Convert.FromBase64String` there is no such

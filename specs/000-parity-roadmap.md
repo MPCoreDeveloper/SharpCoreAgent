@@ -7,7 +7,9 @@ of on a branch, and its `tasks.md` records that rather than inventing one — ro
 2026-10-30, whole suite 1167/1167 with zero diff on the index, and round 5 (`011`) landed complete the same day,
 whole suite 1190/1190 and no new line in `Domain`, `CodingAgent`, `Domain/Index` or `SharpCoreAgent.Indexing` —
 round 4 (`010`) landed complete the same day, whole suite 1200/1200 at 0 warnings, with no hunk of this round on
-the four paths it may not touch.
+the four paths it may not touch. Those three rounds and `012` are one commit, `a447a4d`, because their diffs
+cannot be separated: `README.md`, `HelpText.cs`, `CodingAgent.cs` and this roadmap each carry hunks from more
+than one of them, and any split would leave an intermediate commit whose registration tests fail.
 
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
@@ -41,10 +43,10 @@ The four gaps a newcomer hits, in the order they hit them.
 | 1 | [`007-external-roots`](007-external-roots/spec.md) | read another project; never write it | 0 |
 | 2 | [`008-web-fetch`](008-web-fetch/spec.md) | `fetch_url` — a page as bounded, readable text (landed as `201a431`) | 0 |
 | 3 | [`009-mcp-client`](009-mcp-client/spec.md) | `--mcp <command>` — any stdio MCP server's tools (landed as `be0b265`) | 0 |
-| 4 | [`010-browser`](010-browser/spec.md) | a browser you name, and the screenshots it returns (landed 2026-10-30: `McpArtefactSink`, the `Flatten` save delegate, two ceilings, 10 tests) | 3 |
-| 5 | [`011-subagent-task`](011-subagent-task/spec.md) | `task` — delegation with an isolated transcript (landed 2026-10-30: `TaskTool`, `TaskFormat`, `NoPromptApprover`, the registration, prompt rule 8, 23 tests) | — |
+| 4 | [`010-browser`](010-browser/spec.md) | a browser you name, and the screenshots it returns (landed 2026-10-30 as `a447a4d`: `McpArtefactSink`, the `Flatten` save delegate, two ceilings, 10 tests) | 3 |
+| 5 | [`011-subagent-task`](011-subagent-task/spec.md) | `task` — delegation with an isolated transcript (landed 2026-10-30 as `a447a4d`: `TaskTool`, `TaskFormat`, `NoPromptApprover`, the registration, prompt rule 8, 23 tests) | — |
 | 6 | [`013-evidence-mcp-server`](013-evidence-mcp-server/spec.md) | `mcp serve` — the index's evidence for Copilot, Codex and Claude Code, over stdio | 0 (amended to 1.2.0), and `002` (landed) |
-| 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30) | 0, and `012` (landed) |
+| 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30 as `a447a4d`) | 0, and `012` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `016` and it does not change 007–011. (`012` went to
@@ -200,7 +202,7 @@ the tree kill — and the suite is 939 tests, all green with no compiler warning
 T034–T037 open as the record of what the round refused: resources, prompts, sampling, remote transports,
 server mode and a declarative server list.
 
-## Round 4 — `010-browser` (landed 2026-10-30)
+## Round 4 — `010-browser` (landed 2026-10-30 as `a447a4d`)
 
 **Status**: landed, both phases. `McpArtefactSink` sits in `src/SharpCoreAgent.Infrastructure/Mcp/` beside
 `McpContent`, which gained the `save` delegate and a two-argument overload that passes `null`; `McpTool` builds
@@ -235,7 +237,7 @@ line looks like, and that the browser itself is the developer's to install.
 **Does not ship**: a bundled browser, a driver manager, a JavaScript engine of our own, a `browser` tool
 of ours, a `--browser` flag (`Decision record`, 2026-10-28).
 
-## Round 5 — `011-subagent-task` (landed 2026-10-30)
+## Round 5 — `011-subagent-task` (landed 2026-10-30 as `a447a4d`)
 
 **Status**: landed, all four phases. `task` is registered in `AddTools` beside `dotnet_verify`, so a default build
 advertises seventeen tools and `--web` makes eighteen; the shipped prompt carries rule 8; and the contract is

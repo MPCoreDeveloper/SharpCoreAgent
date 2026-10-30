@@ -1,6 +1,6 @@
 # Spec — 015 F# code intelligence
 
-**Status**: complete — all four phases landed 2026-10-30. Phase 4's proof is in `tasks.md`: the `.fs` gate tests
+**Status**: complete — all four phases landed 2026-10-30, committed as `a447a4d`. Phase 4's proof is in `tasks.md`: the `.fs` gate tests
 fail when `".fs"` is removed from `VerifyGate.DotnetExtensions`, and the whole suite passes 1167/1167 with zero
 diff on the index.
 

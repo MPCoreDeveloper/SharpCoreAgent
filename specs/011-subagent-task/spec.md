@@ -1,6 +1,6 @@
 # 011 — `task`: delegation with an isolated transcript
 
-**Status**: complete 2026-10-30 — `T001`–`T020`, all four phases. `task` ships registered in `AddTools`, so a default
+**Status**: complete 2026-10-30 — `T001`–`T020`, all four phases, committed as `a447a4d`. `task` ships registered in `AddTools`, so a default
 build advertises seventeen tools and `--web` makes eighteen, and the shipped prompt carries rule 8. The whole suite is
 1190/1190 in `Debug` and again in `Release`, both builds at 0 warnings and 0 errors; it was 1167, and the 23 tests in
 between are the ones the four phases wrote. SC-005 is recorded in `tasks.md` (`T020`) with the one caveat that makes a

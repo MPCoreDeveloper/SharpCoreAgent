@@ -144,9 +144,10 @@ temp workspace. Each test states the SC it answers.
   `ServiceCollectionExtensions.cs`, `SharpCoreAgent.DependencyInjection.csproj`, `SharpCoreAgentOptions.cs`,
   `Domain/Agents/AgentReport.cs`, `Domain/PublicAPI.Unshipped.txt`), every hunk from a landed-but-uncommitted
   round (`011`'s `TaskTool`, `015`'s `FSharpToolsEnabled`, `012`'s `VerifyGate`) and none this round's.
-  The literal zero stayed impossible for the reason the task gave: `HEAD` is `ad9ab36` with 54 uncommitted
+  The literal zero stayed impossible for the reason the task gave: `HEAD` was `ad9ab36` with 54 uncommitted
   entries when the check ran — 62 once this round's own documentation was written (29 modified, 33 untracked)
-  — from rounds `012`, `015`, `011` and this one.
+  — from rounds `012`, `015`, `011` and this one. It arrived through the commit rather than through an edit:
+  rounds 4, 5 and 7 are one commit, `a447a4d`, and `git diff --stat HEAD` over the same four paths is empty.
 - [X] T030 The live check, **run and recorded as run**: `--mcp "npx -y @playwright/mcp@latest --browser msedge"`,
   `npx_browser_navigate` on `https://example.com`, `npx_browser_take_screenshot` →
   `<workspace>/.sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png`, 44 912 bytes, PNG signature

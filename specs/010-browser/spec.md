@@ -1,6 +1,6 @@
 # 010 — The page a browser returns: a screenshot is a file, not a sentence
 
-**Status**: implemented 2026-10-30 — `T001`–`T030`, both phases (round 4 of
+**Status**: implemented 2026-10-30 — `T001`–`T030`, both phases, committed as `a447a4d` (round 4 of
 [`000-parity-roadmap.md`](../000-parity-roadmap.md)). `McpArtefactSink` writes an `image` entry or an image
 `resource` blob to `<workspace>/.sharpcoreagent/artifacts/`, the answer names the path and the size or one
 `· not saved:` sentence, and a saved entry adds a `Created` effect even for a tool the server annotated
