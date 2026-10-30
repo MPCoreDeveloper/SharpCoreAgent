@@ -19,7 +19,14 @@ namespace SharpCoreAgent.Indexing;
 internal static class IndexSchema
 {
     /// <summary>The schema version stored in <c>meta['schema_version']</c>; a mismatch rebuilds.</summary>
-    internal const int Version = 1;
+    /// <remarks>
+    /// Raised to 2 when the writer started naming every row id itself (<see cref="IndexIdSequence"/>). An index
+    /// written by version 1 let the engine's <c>AUTO</c> column name the ids, and that counter restarts at one on
+    /// each new connection, so every incremental build after the first stored its files and passages under ids
+    /// the earlier rows already held. Those rows cannot be repaired in place — which file a passage belongs to is
+    /// no longer recoverable from them — so the version makes the next open re-derive the whole index.
+    /// </remarks>
+    internal const int Version = 2;
 
     /// <summary>The extractor version stored in <c>meta['parser_version']</c>.</summary>
     internal const int ParserVersion = 1;
@@ -190,8 +197,10 @@ internal static class IndexSchema
     /// empties the tables instead, so "the contract changed" means "derive everything again", in the one place
     /// <c>contracts/index-schema.md</c> describes.
     /// <para>
-    /// <c>schema_version</c> is deliberately not one of the two: a newer one is refused as corrupt rather than
-    /// quietly rebuilt by an older build, and the version the code knows has no migration to run.
+    /// <c>schema_version</c> is one of the three in one direction only: an index written to an older schema has
+    /// to be derived again, because a version that changed the writer changed the rows it wrote. A newer schema
+    /// is not a rebuild — <see cref="SharpCoreDbCodeIndex"/> reports that index as corrupt, since this build
+    /// cannot know what an unknown version stored.
     /// </para>
     /// </remarks>
     internal static bool RowsWereDerivedByAnotherContract(IDatabase database)
@@ -199,11 +208,18 @@ internal static class IndexSchema
         ArgumentNullException.ThrowIfNull(database);
 
         var meta = ReadMeta(database);
-        return Differs(meta, "parser_version", ParserVersion) || Differs(meta, "analyzer_contract", AnalyzerContract);
+        return Differs(meta, "parser_version", ParserVersion)
+            || Differs(meta, "analyzer_contract", AnalyzerContract)
+            || IsOlderSchema(meta);
 
         static bool Differs(Dictionary<string, string> meta, string key, int expected) =>
             !meta.TryGetValue(key, out var stored)
             || !string.Equals(stored, expected.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+
+        static bool IsOlderSchema(Dictionary<string, string> meta) =>
+            !meta.TryGetValue("schema_version", out var stored)
+            || !int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var version)
+            || version < Version;
     }
 
     /// <summary>

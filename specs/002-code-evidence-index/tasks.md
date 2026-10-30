@@ -366,13 +366,13 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Done when: `research.md` D16 carries before/after rows for the same corpora, `spec.md`'s measured notes
     are either removed (met) or re-stated (missed and accepted), and the quickstart's cost paragraph quotes
     the new number instead of 513.5 s.
-  - Note: this and T035 are the two unchecked tasks in the feature. Everything behavioural — build, five tools,
+  - Note: this is the only unchecked task in the feature. Everything behavioural — build, five tools,
     refresh, verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing here is
     the throughput and size the criteria promise.
 
-- [ ] **T035** An incremental build must not overflow an array
-  - Files: `src/SharpCoreAgent.Indexing/IndexWriter.cs`, `IndexFileWriter.cs` (and, if the fault is below them,
-    the SharpCoreDB surface the row batches go through)
+- [x] **T035** An incremental build must not overflow an array
+  - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,
+    `IndexIdSequence.cs` (new), `IncrementalIndexTests.cs`, `IndexSchemaTests.cs`
   - Do: reproduce what `013`'s phase 5 hit while measuring — an incremental `index` after the working tree had
     grown a few hundred files exited with `error: Index was outside the bounds of the array.`, and
     `index --rebuild` (841 s) repaired the index, so the damage was the incremental path rather than the corpus.
@@ -383,6 +383,35 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Note: found and reported by `013` (`specs/013-evidence-mcp-server/plan.md`, "Observation, not this round's
     bug") rather than fixed in passing, because a bench over a corrupt index would have published twelve identical
     failures as if they were a measurement.
+  - As-built (2026-10-29): reproduced in a throwaway tree of 201 files with cross-file relations — index it, add
+    150, index again → `exit 1`, `error: Index was outside the bounds of the array.`, twice in a row. A Debug run
+    (`--verbose` prints the stack) put the throw in `CommunityAssigner.ReadAdjacency`; a temporary trace there
+    reported `symbols=12353 distinct=2603`, and reading the tables in a fresh session showed the same in all six:
+    `files` 951 rows under 201 ids, `chunks` 13 304 under 2 804, `symbols` 12 353 under 2 603, `edges` 9 501 under
+    2 001. **The cause is the engine's `INTEGER PRIMARY KEY AUTO`:** the counter starts at one on every new
+    connection and the column refuses no repeated value, so every build after the first stored its files under
+    ids an earlier build already held, and each `chunks.file_id` named several files. The array in
+    `ReadAdjacency` was sized by `positions.Count` (distinct ids) while positions came from `symbols.Count`
+    (rows) — the crash was the last symptom, not the fault, and the index had been answering from the wrong file
+    for every passage of every build after the first.
+  - Fixed by naming every id in the writer: `IndexIdSequence` reads `MAX(id)` per table when the build opens and
+    `IndexFileWriter` binds the value on all six insert paths (`IndexSql.MaxId` added beside `Count`). The
+    `LastInsertedId` selects that existed to work around the engine's shared counter are gone with it. `schema_version`
+    is now `2`, and `RowsWereDerivedByAnotherContract` treats a lower stored version as "derive everything again"
+    — a version-1 index cannot be repaired in place, so the next open rebuilds it. Regression tests:
+    `IncrementalIndexTests.IdsStayUniqueAcrossBuilds` (two builds, then unique ids in all five tables and a
+    declaration answered from its own file) and `OlderSchemaVersionRewritesEveryFileAndThenReportsFresh`;
+    `IndexSchemaTests.SeedsEveryMetaKey` now expects `2`.
+  - Evidence: `IncrementalIndexTests` and the whole suite are green (1087 tests, 0 warnings). End to end, a fresh
+    tree grew 41 → 81 → 161 files over three separate `index` runs, each exiting 0 with communities computed and
+    `state fresh` — the second session is the one that used to crash. The version-1 index the crash left behind
+    (951 files) reported `state stale` after the fix and the first `index` re-derived 682 of 951 files before the
+    command's one-hour budget stopped it (`state partial · run index to finish`), which is the migration working
+    and the build being slower than its budget on this machine — that machine gave 11 minutes of CPU in 8 hours of
+    wall clock, so the timing says nothing about a normal one and `002` T034 still owns the throughput question.
+  - Left behind, deliberately: `index --verify` checks rows, hashes and orphans rather than the version, so the
+    version-1 index above answered `result fresh` while `--status` said `stale`. Reporting the mismatch in
+    `--verify` as well is a small change and a separate one.
 
 ## Traceability — requirement to task
 

@@ -171,6 +171,25 @@ internal static class IndexSql
     }
 
     /// <summary>
+    /// Reads the highest id one table holds.
+    /// </summary>
+    /// <param name="database">An open index database.</param>
+    /// <param name="table">The table to read.</param>
+    /// <returns>The largest stored id, or zero when the table is empty.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="database"/> is null.</exception>
+    /// <remarks>
+    /// The writer allocates ids from this rather than letting the engine's <c>AUTO</c> column name them, because
+    /// that counter restarts at one on every new connection: see <see cref="IndexIdSequence"/>.
+    /// </remarks>
+    public static long MaxId(IDatabase database, IndexTable table)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+
+        var rows = Query(database, "SELECT MAX(id) FROM " + TableName(table));
+        return rows.Count == 0 || rows[0].Count == 0 ? 0 : AsLong(rows[0].Values.First());
+    }
+
+    /// <summary>
     /// Reads a value as a number.
     /// </summary>
     /// <param name="value">The raw column value, possibly <see langword="null"/> or <see cref="DBNull"/>.</param>

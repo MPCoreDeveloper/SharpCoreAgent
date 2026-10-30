@@ -167,7 +167,11 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   two-file fixture, `3.427`, which says the claim only means something at repository scale. The plan's `[--json]`
   is recorded as dropped, with `--verbose` in its place. One observation is left for round 002: an incremental
   `index` run crashed with `Index was outside the bounds of the array.` and `--rebuild` (841 s) repaired it; it is
-  filed as `002` **T035** so it is a task with an owner rather than a sentence in a closed round's plan.
+  filed as `002` **T035** so it is a task with an owner rather than a sentence in a closed round's plan. T035 has
+  since landed: the cause was the engine naming row ids from a counter that restarts per connection, so every
+  build after the first wrote its files under ids an earlier build already held. SC-005 was restated in `spec.md`
+  on 2026-10-29 with these numbers beside it, because the alternative — a cheaper per-call lease — is index work
+  with a measurement of its own and belongs in `002`, where the roadmap carries it.
 
 ## Phase 6 — the round
 

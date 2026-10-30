@@ -49,7 +49,7 @@ public sealed class IndexSchemaTests
         var meta = IndexSchema.ReadMeta(database.Database);
 
         Assert.Equal(15, meta.Count);
-        Assert.Equal("1", meta["schema_version"]);
+        Assert.Equal("2", meta["schema_version"]);
         Assert.Equal("1", meta["parser_version"]);
         Assert.Equal("3", meta["analyzer_contract"]);
         Assert.Equal("lean", meta["tier"]);

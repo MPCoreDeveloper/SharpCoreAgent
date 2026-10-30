@@ -224,7 +224,8 @@ phase 5 is what decided whether the round was worth its weight: `mcp bench` put 
 against 8 134 414 characters of cited source — a ratio of 0.017, or about 1/59th — and the same run put the p95 of
 a `search_code` call at 4.4 s against SC-005's 300 ms. One criterion met beyond argument, one missed by an order of
 magnitude and published anyway, which is the bargain this section made: a poor number is published with the round
-rather than left out of it.
+rather than left out of it. SC-005 has since been restated in `spec.md` with that number beside it, and the work
+the restatement does not do — a cheaper per-call lease — sits in the open-work index below.
 
 **Ships**: `sharpcoreagent mcp serve` — a stdio MCP server for `--workspace` that publishes the five read-only
 evidence tools (`search_code`, `find_symbol`, `find_references`, `code_context`, `index_status`) with the
@@ -255,13 +256,12 @@ empty checkbox.
 | Round | Open | Why it is still open |
 |---|---|---|
 | 0 | `002` T034 | the cold build and the index inside their stated budgets |
-| 0 | `002` T035 | an incremental `index` crashed once with `Index was outside the bounds of the array.`, found while round 6 measured and reported there rather than fixed in passing |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |
 | 2 | `008` T031–T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch — plus a web search tool, which is the one decision below |
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
-| 6 | `013` SC-005 | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest, so either the criterion is restated with the measurement beside it or the lease is made cheaper — the same shape as `002` T034 |
+| 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T016–T018 | a first-run key prompt with restricted permissions, `config edit`, per-provider sections |
 

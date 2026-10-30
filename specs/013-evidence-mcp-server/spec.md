@@ -4,7 +4,8 @@
 
 **Created**: 2026-10-28
 
-**Status**: Accepted 2026-10-28 (constitution 1.2.0). Round 6 of `specs/000-parity-roadmap.md`.
+**Status**: Accepted 2026-10-28 (constitution 1.2.0). Round 6 of `specs/000-parity-roadmap.md`. SC-005 is
+restated 2026-10-29 with the measured latency beside it (`plan.md`); the other criteria stand as written.
 
 **Input**: User description: "… do we cover this? … a small MCP utility that makes a project's knowledge
 and repeatable operations available to GitHub Copilot, Codex, or Claude Code … if not make a plan to do so."
@@ -259,6 +260,14 @@ TOML-shaped for the third) and names the running binary.
 - **SC-005**: A warm `search_code` over stdio answers in under 300 ms at p95 on this repository's index,
   measured by the harness FR-019 requires, so the server is usable as an agent's first move rather than a
   step it learns to avoid.
+  **Restated 2026-10-29, after the measurement** (`plan.md`, "What it printed"): the harness ran and the
+  criterion was **missed** — p95 **4 425 ms** over stdio on the 606-file, 12 420-passage, 233.4 MiB index, about
+  15× the budget. `--verbose` printed both halves of every query and they agree (in-process 2.6–4.6 s, stdio
+  2.7–4.4 s), so the hop costs nothing measurable; the per-call index lease costs the rest, which is the risk
+  Complexity Tracking item 3 named and chose to measure rather than assume. The criterion this round accepts is
+  therefore: **a served call costs no more than the same call in-process** (parity, measured 12/12), and the
+  300 ms budget is recorded as missed, with 4 425 ms published as the latency. Cheapening the lease is left
+  open rather than claimed; the roadmap carries it as open work.
 - **SC-006**: The evidence-to-source ratio is published as a measured number, not a projection: for a
   checked-in set of fixture queries, the characters an answer spends are compared with the characters of
   the files it cites, and the ratio is recorded in `plan.md`. There is no vendor percentage in this

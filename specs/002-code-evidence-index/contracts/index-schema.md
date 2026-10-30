@@ -127,6 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_docs_symbol ON docs (symbol_key);
 in one transaction, and the scanner visits each real path once. A `UNIQUE` index is not assumed because
 `UNIQUE INDEX` support is not part of the verified subset; `VerifyAsync` reports duplicates instead.
 
+**Row ids are named by the writer**, not by the `AUTO` in the column definitions. The engine's counter
+restarts at one on every new connection and does not refuse a value that a stored row already holds, so a
+second build that let the engine name its ids stored file 1 again above the first build's file 1 — and then
+every `chunks.file_id`, `symbols.file_id` and `edges.file_id` named two files at once. The writer therefore
+allocates each id from `MAX(id)` when the build opens (`IndexIdSequence`) and binds it explicitly.
+`schema_version` `2` is that change: an index written by version 1 holds ids that cannot be repaired in
+place, because which file a passage belonged to is not recoverable from the rows, so the open re-derives it.
+
 **`edges.source`/`edges.target`/`edges.weight`** are those exact names because
 `GraphLoader.LoadFromTableAsync` and `GraphTraversalEngine.EdgeTable` read them by name. Renaming one of
 them silently turns the graph leg off, so the schema test asserts the three column names.
@@ -149,7 +157,7 @@ transaction, so a crash leaves the previous values and `VerifyAsync` can detect 
 
 | Key | Example | Meaning |
 |---|---|---|
-| `schema_version` | `1` | this document's version; a mismatch ⇒ rebuild, never a migration in v1 |
+| `schema_version` | `2` | this document's version; lower ⇒ rebuild, higher ⇒ refuse to open, never a migration |
 | `parser_version` | `1` | heuristic extractor version; a mismatch ⇒ re-derive every file's symbols |
 | `analyzer_contract` | `3` | chunking + tokenisation + stored-vector shape; a mismatch ⇒ re-chunk every file |
 | `tier` | `lean` | `lean` \| `rich` |
@@ -178,6 +186,8 @@ transaction, so a crash leaves the previous values and `VerifyAsync` can detect 
 10. `meta['dimensions']` equals the dimension in the `VECTOR(n)` declarations, and every stored vector
     has exactly that length.
 11. No row contains the workspace root as an absolute path prefix.
+12. Every `id` in `files`, `chunks`, `symbols`, `edges`, `docs` and `node_embeddings` is unique within its
+    table, and every build after the first continues above the highest id stored rather than from one.
 
 ## Query shapes (the only statements the adapter runs)
 

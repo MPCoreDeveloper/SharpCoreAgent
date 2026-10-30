@@ -218,7 +218,15 @@ repository, and a small workspace would have produced a number that flattered no
 `error: Index was outside the bounds of the array.` after the tree had grown a few hundred files; `index
 --rebuild` (841 s) repaired it. Recorded here because a bench over a corrupt index would have published twelve
 identical failures as a result. It belongs to round 002 and is filed there as **T035** rather than fixed in
-passing.
+passing — and it was worse than a crash: the engine's `AUTO` counter restarted at one on every new connection,
+so each build after the first stored its files under ids an earlier build already held. T035 names the cause
+and fixes it (the writer allocates every id itself, `schema_version` 2).
+
+**The numbers above survive T035, and it is worth saying why.** They were taken *after* `index --rebuild`, and a
+rebuild empties every table and re-derives the corpus in one session, so the rows it wrote carry ids 1…N once
+each. The duplicate ids T035 describes belong to the incremental runs before it and were cleared by exactly that
+rebuild. A bench taken without the rebuild would have measured a file with repeated rows and counted passages
+twice.
 
 ## Complexity Tracking
 

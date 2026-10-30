@@ -44,18 +44,17 @@ internal sealed class IndexFileWriter
     /// </remarks>
     private const string FileParameter = "@file";
 
-    /// <summary>The bound parameter that identifies a file by its workspace-relative path.</summary>
-    private const string PathParameter = "@path";
-
     private readonly IDatabase _database;
     private readonly ISyntaxFactsExtractor _extractor;
     private readonly ICodeTextEmbedder _embedder;
+    private readonly IndexIdSequence _ids;
 
     private IndexFileWriter(IDatabase database, ISyntaxFactsExtractor extractor, ICodeTextEmbedder embedder)
     {
         _database = database;
         _extractor = extractor;
         _embedder = embedder;
+        _ids = IndexIdSequence.Load(database);
     }
 
     /// <summary>
@@ -146,6 +145,7 @@ internal sealed class IndexFileWriter
                 _database,
                 IndexTable.Files,
                 IndexSql.Row(
+                    ("id", _ids.Next(IndexTable.Files)),
                     ("path", file.Path),
                     ("language", file.Language),
                     ("size_bytes", file.SizeBytes),
@@ -192,6 +192,7 @@ internal sealed class IndexFileWriter
                     _database,
                     IndexTable.Edges,
                     IndexSql.Row(
+                        ("id", _ids.Next(IndexTable.Edges)),
                         ("source", edge.Source),
                         ("target", edge.Target),
                         ("rel", edge.Relation),
@@ -293,10 +294,13 @@ internal sealed class IndexFileWriter
     /// <returns>The new row id.</returns>
     private long InsertFile(ScannedFile file, IndexFileContent content, int chunks, int symbols, string indexedUtc)
     {
+        var fileId = _ids.Next(IndexTable.Files);
+
         IndexSql.Insert(
             _database,
             IndexTable.Files,
             IndexSql.Row(
+                ("id", fileId),
                 ("path", file.Path),
                 ("language", file.Language),
                 ("size_bytes", file.SizeBytes),
@@ -307,7 +311,7 @@ internal sealed class IndexFileWriter
                 ("symbol_count", (long)symbols),
                 ("indexed_utc", indexedUtc)));
 
-        return LastInsertedId("SELECT id FROM files WHERE path = @path", IndexSql.Parameters((PathParameter, file.Path)));
+        return fileId;
     }
 
     /// <summary>
@@ -322,10 +326,13 @@ internal sealed class IndexFileWriter
 
         foreach (var symbol in symbols)
         {
+            var symbolId = _ids.Next(IndexTable.Symbols);
+
             IndexSql.Insert(
                 _database,
                 IndexTable.Symbols,
                 IndexSql.Row(
+                    ("id", symbolId),
                     ("file_id", fileId),
                     ("key", symbol.Key),
                     ("name", symbol.Name),
@@ -338,9 +345,7 @@ internal sealed class IndexFileWriter
                     ("signature", symbol.Signature),
                     ("doc", symbol.Doc)));
 
-            ids.Add(LastInsertedId(
-                "SELECT id FROM symbols WHERE file_id = @file AND key = @key",
-                IndexSql.Parameters((FileParameter, fileId), ("@key", symbol.Key))));
+            ids.Add(symbolId);
         }
 
         return ids;
@@ -367,6 +372,7 @@ internal sealed class IndexFileWriter
                 _database,
                 IndexTable.Chunks,
                 IndexSql.Row(
+                    ("id", _ids.Next(IndexTable.Chunks)),
                     ("file_id", fileId),
                     ("start_line", (long)passage.StartLine),
                     ("end_line", (long)passage.EndLine),
@@ -408,6 +414,7 @@ internal sealed class IndexFileWriter
                 _database,
                 IndexTable.Docs,
                 IndexSql.Row(
+                    ("id", _ids.Next(IndexTable.Docs)),
                     ("file_id", fileId),
                     ("heading", doc.Heading),
                     ("symbol_key", symbolKey),
@@ -434,27 +441,11 @@ internal sealed class IndexFileWriter
                 _database,
                 IndexTable.NodeEmbeddings,
                 IndexSql.Row(
+                    ("id", _ids.Next(IndexTable.NodeEmbeddings)),
                     ("node_id", symbolIds[index]),
                     ("label", symbol.Key),
                     ("embedding", vector)));
         }
-    }
-
-    /// <summary>
-    /// Reads the id of a row that was just inserted.
-    /// </summary>
-    /// <param name="sql">A statement that selects exactly that row's id.</param>
-    /// <param name="parameters">The values that identify it.</param>
-    /// <returns>The id, or zero when the row is not there.</returns>
-    /// <remarks>
-    /// A select by the row's own identity rather than <c>GetLastInsertRowId</c>: the engine's counter is shared
-    /// by every table on the connection, and one insert that does not update it would silently attach a file's
-    /// passages to the previous file.
-    /// </remarks>
-    private long LastInsertedId(string sql, Dictionary<string, object?> parameters)
-    {
-        var rows = IndexSql.Query(_database, sql, parameters);
-        return rows.Count == 0 ? 0 : IndexSql.AsLong(rows[0].GetValueOrDefault("id"));
     }
 
     /// <summary>

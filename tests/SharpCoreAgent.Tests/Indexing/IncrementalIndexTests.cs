@@ -1,5 +1,6 @@
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Indexing;
+using SharpCoreAgent.Indexing.Ranking;
 using SharpCoreAgent.Tests.Tools;
 using Xunit;
 
@@ -56,6 +57,28 @@ public sealed class IncrementalIndexTests
           "name": "demo"
         }
         """;
+
+    private const string SquareSource = """
+        namespace Demo.Geometry;
+
+        /// <summary>A square: four equal sides.</summary>
+        public sealed class Square
+        {
+            public double Side { get; init; }
+
+            public double Perimeter() => Side * 4;
+        }
+        """;
+
+    /// <summary>The tables whose ids a build names, and the read that lists them.</summary>
+    private static readonly (string Table, string Sql)[] IdQueries =
+    [
+        ("files", "SELECT id FROM files"),
+        ("chunks", "SELECT id FROM chunks"),
+        ("symbols", "SELECT id FROM symbols"),
+        ("edges", "SELECT id FROM edges"),
+        ("node_embeddings", "SELECT id FROM node_embeddings"),
+    ];
 
     [Fact]
     public async Task IndexesEveryFileAndCountsThem()
@@ -127,6 +150,71 @@ public sealed class IncrementalIndexTests
         Assert.Equal(0, report.Unchanged);
         Assert.Equal(IndexFreshness.Fresh, report.Status.Freshness);
         Assert.Equal("3", ReadMeta(sandbox.Workspace)["analyzer_contract"]);
+    }
+
+    [Fact]
+    public async Task OlderSchemaVersionRewritesEveryFileAndThenReportsFresh()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        await using (var first = SharpCoreDbIndexMaintainer.For(sandbox.Workspace))
+        {
+            await first.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        }
+
+        // An index built before the writer named its own ids. Every file row still matches its file, so an
+        // incremental pass would keep it — but the ids in those rows are the ones the next build reuses, and
+        // which file a passage belongs to is already gone. Nothing but re-deriving the rows repairs that.
+        IndexTestDatabase.SetMeta(IndexPaths.For(sandbox.Workspace), "schema_version", "1");
+
+        await using var second = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
+        var report = await second.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        Assert.Equal(5, report.Added);
+        Assert.Equal(0, report.Unchanged);
+        Assert.Equal(IndexFreshness.Fresh, report.Status.Freshness);
+        Assert.Equal("2", ReadMeta(sandbox.Workspace)["schema_version"]);
+    }
+
+    [Fact]
+    public async Task IdsStayUniqueAcrossBuilds()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        await using (var first = SharpCoreDbIndexMaintainer.For(sandbox.Workspace))
+        {
+            await first.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        }
+
+        // A second session on the same index. The engine's AUTO column starts counting at one again here and does
+        // not refuse a repeated value, so a writer that let it name the ids would store this file as id one —
+        // the id src/Geometry/Circle.cs already holds — and every passage then belongs to two files at once.
+        sandbox.Write("src/Geometry/Square.cs", SquareSource);
+
+        await using (var second = SharpCoreDbIndexMaintainer.For(sandbox.Workspace))
+        {
+            var report = await second.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal(1, report.Added);
+            Assert.Equal(6, report.Status.Files);
+        }
+
+        foreach (var (table, sql) in IdQueries)
+        {
+            var ids = ReadIds(sandbox.Workspace, sql);
+            Assert.True(
+                ids.Count == ids.Distinct().Count(),
+                $"{table} holds {ids.Count} rows under {ids.Distinct().Count()} ids");
+        }
+
+        // The same property, read the way a developer reads it: a declaration the second build wrote is answered
+        // from its own file rather than from whichever file shares its id.
+        using var index = SharpCoreDbCodeIndex.For(sandbox.Workspace);
+        var blocks = index.Search(CodeQuery.Create("Square"), DateTimeOffset.UnixEpoch, EvidenceBudget.DefaultMaxChars);
+
+        Assert.NotEmpty(blocks);
+        Assert.Equal("src/Geometry/Square.cs", blocks[0].Path);
     }
 
     [Fact]
@@ -260,5 +348,19 @@ public sealed class IncrementalIndexTests
         }
 
         return values;
+    }
+
+    private static List<long> ReadIds(SharpCoreAgent.Domain.Workspace workspace, string sql)
+    {
+        var paths = IndexPaths.For(workspace);
+        using var lease = IndexHandleCache.Acquire(paths, encryptionPassword: null, createIfMissing: false);
+
+        var ids = new List<long>();
+        foreach (var row in IndexSql.Query(lease.Database.Database, sql))
+        {
+            ids.Add(IndexSql.AsLong(row.GetValueOrDefault("id")));
+        }
+
+        return ids;
     }
 }
