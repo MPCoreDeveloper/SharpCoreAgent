@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\SharpCoreAgent.DependencyInjection\SharpCoreAgent.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreAgent.Cli\SharpCoreAgent.Cli.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreAgent.Indexing\SharpCoreAgent.Indexing.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Languages.FSharp\SharpCoreAgent.Languages.FSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

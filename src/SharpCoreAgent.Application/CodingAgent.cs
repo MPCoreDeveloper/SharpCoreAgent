@@ -62,6 +62,18 @@ public sealed class CodingAgent
     public AgentOptions Options => _options;
 
     /// <summary>
+    /// Gets how often the loop asks the model to verify a .NET edit before it accepts the answer.
+    /// </summary>
+    /// <remarks>
+    /// Two, and then the truth: a model that obeys needs one, a model that ignores the first usually obeys the
+    /// second, and a tree that genuinely does not build would otherwise spend the whole iteration budget being
+    /// told to build again. After the last nudge the turn completes with
+    /// <see cref="AgentReport.IsUnverified"/> set, because a turn that can never end is worse than one that ends
+    /// honestly.
+    /// </remarks>
+    public const int MaxVerificationNudges = 2;
+
+    /// <summary>
     /// Runs one turn: append the prompt, then loop until the model answers or a budget runs out.
     /// </summary>
     /// <param name="session">The conversation to run in; it is mutated in place so partial work survives a failure.</param>
@@ -259,6 +271,29 @@ public sealed class CodingAgent
 
         if (!response.Message.HasToolCalls)
         {
+            // A turn that edited .NET source cannot end on the model's word: the harness has to have run, and
+            // passed, since the last such edit. Plan mode writes nothing and a host without the verifier is
+            // not gated at all, so both of those keep the behaviour they had before this rule existed.
+            if (VerifyGate.IsRequired(session, _tools, state.LastDotnetEdit, state.LastVerification))
+            {
+                if (state.VerificationNudges < MaxVerificationNudges)
+                {
+                    state.VerificationNudges++;
+                    session.Add(ChatMessage.User(PromptLibrary.VerifyNudge));
+                    Log.VerificationRequired(_logger, state.Model.QualifiedName, state.VerificationNudges, null);
+                    return null;
+                }
+
+                // Out of nudges. The answer is accepted, and the report says what it is worth rather than
+                // pretending the build ran: a turn that can never end is worse than one that ends honestly.
+                Log.TurnCompletedUnverified(_logger, state.Model.QualifiedName, state.Iterations, null);
+                return state.Report(
+                    AgentOutcome.Completed,
+                    VerifyGate.UnverifiedDetail,
+                    response.Message.Content,
+                    unverified: true);
+            }
+
             Log.TurnCompleted(_logger, state.Model.QualifiedName, state.Iterations, state.ResultCount, null);
             return state.Report(AgentOutcome.Completed, null, response.Message.Content);
         }
@@ -351,7 +386,8 @@ public sealed class CodingAgent
     {
         private readonly List<ToolResult> _results = [];
         private readonly List<FallbackUsed> _fallbacks = [];
-
+        private int _lastDotnetEdit = -1;
+        private int _lastVerification = -1;
         /// <summary>Gets the model the turn runs on.</summary>
         public ModelDescriptor Model { get; } = model;
 
@@ -371,9 +407,37 @@ public sealed class CodingAgent
         /// <summary>Gets how many tool results the turn has collected.</summary>
         public int ResultCount => _results.Count;
 
+        /// <summary>Gets the index of the last result that changed .NET source, or -1 when nothing did.</summary>
+        public int LastDotnetEdit => _lastDotnetEdit;
+
+        /// <summary>Gets the index of the last passing verification, or -1 when none ran.</summary>
+        public int LastVerification => _lastVerification;
+
+        /// <summary>Gets or sets how often the loop has asked the model to verify this turn.</summary>
+        public int VerificationNudges { get; set; }
+
         /// <summary>Records one tool result.</summary>
         /// <param name="result">The result to keep.</param>
-        public void Add(ToolResult result) => _results.Add(result);
+        /// <remarks>
+        /// The two indices are the whole memory the verify gate needs: what the turn last touched, and what it
+        /// last proved. Recording them here rather than re-scanning the list keeps a long turn linear and, more
+        /// importantly, makes the order explicit — a verify that arrives before an edit is remembered as such.
+        /// </remarks>
+        public void Add(ToolResult result)
+        {
+            _results.Add(result);
+            var index = _results.Count - 1;
+
+            if (VerifyGate.Verifies(result))
+            {
+                _lastVerification = index;
+            }
+
+            if (VerifyGate.EditsDotnetSource(result))
+            {
+                _lastDotnetEdit = index;
+            }
+        }
 
         /// <summary>
         /// Records one fallback and the model that now serves the turn.
@@ -395,8 +459,13 @@ public sealed class CodingAgent
         /// <param name="outcome">How the turn ended.</param>
         /// <param name="detail">Why, when the outcome needs explaining.</param>
         /// <param name="finalText">The answer, when there is one.</param>
+        /// <param name="unverified">Whether a .NET edit went without a passing verification.</param>
         /// <returns>The report.</returns>
-        public AgentReport Report(AgentOutcome outcome, string? detail = null, string? finalText = null) => new()
+        public AgentReport Report(
+            AgentOutcome outcome,
+            string? detail = null,
+            string? finalText = null,
+            bool unverified = false) => new()
         {
             Outcome = outcome,
             ModelId = ServingModelId,
@@ -406,6 +475,7 @@ public sealed class CodingAgent
             ToolResults = [.. _results],
             Fallbacks = [.. _fallbacks],
             Detail = detail,
+            IsUnverified = unverified,
         };
     }
 
@@ -773,5 +843,17 @@ public sealed class CodingAgent
                 LogLevel.Information,
                 new EventId(1005, nameof(TurnCompleted)),
                 "Turn on {Model} completed in {Iterations} iteration(s) with {ToolCalls} tool call(s).");
+
+        internal static readonly Action<ILogger, string, int, Exception?> VerificationRequired =
+            LoggerMessage.Define<string, int>(
+                LogLevel.Information,
+                new EventId(1006, nameof(VerificationRequired)),
+                "Turn on {Model} edited .NET source without a passing dotnet_verify; asking again (nudge {Nudge}).");
+
+        internal static readonly Action<ILogger, string, int, Exception?> TurnCompletedUnverified =
+            LoggerMessage.Define<string, int>(
+                LogLevel.Warning,
+                new EventId(1007, nameof(TurnCompletedUnverified)),
+                "Turn on {Model} completed in {Iterations} iteration(s) with a .NET edit that dotnet_verify never confirmed.");
     }
 }

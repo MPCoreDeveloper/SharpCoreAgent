@@ -871,3 +871,136 @@ override SharpCoreAgent.Domain.Agents.ContextCompacted.ToString() -> string!
 override sealed SharpCoreAgent.Domain.Agents.ContextCompacted.Equals(SharpCoreAgent.Domain.Agents.AgentEvent? other) -> bool
 static SharpCoreAgent.Domain.Agents.ContextCompacted.operator !=(SharpCoreAgent.Domain.Agents.ContextCompacted? left, SharpCoreAgent.Domain.Agents.ContextCompacted? right) -> bool
 static SharpCoreAgent.Domain.Agents.ContextCompacted.operator ==(SharpCoreAgent.Domain.Agents.ContextCompacted? left, SharpCoreAgent.Domain.Agents.ContextCompacted? right) -> bool
+SharpCoreAgent.Domain.Agents.AgentReport.IsUnverified.get -> bool
+SharpCoreAgent.Domain.Tools.ToolNames
+const SharpCoreAgent.Domain.Tools.ToolNames.DotnetVerify = "dotnet_verify" -> string!
+SharpCoreAgent.Domain.Agents.AgentReport.IsUnverified.init -> void
+override SharpCoreAgent.Domain.Code.CodeDiagnostic.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.CodeDiagnostic.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.CodeDiagnostic.ToString() -> string!
+override SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.ToString() -> string!
+override SharpCoreAgent.Domain.Code.CodeFailure.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.CodeFailure.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.CodeFailure.ToString() -> string!
+override SharpCoreAgent.Domain.Code.SignatureHelpResult.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.SignatureHelpResult.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.SignatureHelpResult.ToString() -> string!
+override SharpCoreAgent.Domain.Code.SignatureInfo.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.SignatureInfo.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.SignatureInfo.ToString() -> string!
+override SharpCoreAgent.Domain.Code.SymbolUse.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.SymbolUse.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.SymbolUse.ToString() -> string!
+override SharpCoreAgent.Domain.Code.SymbolUsesResult.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Code.SymbolUsesResult.GetHashCode() -> int
+override SharpCoreAgent.Domain.Code.SymbolUsesResult.ToString() -> string!
+SharpCoreAgent.Domain.Code.CodeDiagnostic
+SharpCoreAgent.Domain.Code.CodeDiagnostic.<Clone>$() -> SharpCoreAgent.Domain.Code.CodeDiagnostic!
+SharpCoreAgent.Domain.Code.CodeDiagnostic.CodeDiagnostic() -> void
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Column.get -> int
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Column.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Equals(SharpCoreAgent.Domain.Code.CodeDiagnostic? other) -> bool
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Id.get -> string!
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Id.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Line.get -> int
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Line.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Message.get -> string!
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Message.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Path.get -> string!
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Path.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Severity.get -> SharpCoreAgent.Domain.Code.CodeSeverity
+SharpCoreAgent.Domain.Code.CodeDiagnostic.Severity.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.<Clone>$() -> SharpCoreAgent.Domain.Code.CodeDiagnosticsResult!
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.CodeDiagnosticsResult() -> void
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Code.CodeDiagnostic!>!
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Diagnostics.init -> void
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Equals(SharpCoreAgent.Domain.Code.CodeDiagnosticsResult? other) -> bool
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Failure.get -> SharpCoreAgent.Domain.Code.CodeFailure?
+SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Failure.init -> void
+SharpCoreAgent.Domain.Code.CodeFailure
+SharpCoreAgent.Domain.Code.CodeFailure.<Clone>$() -> SharpCoreAgent.Domain.Code.CodeFailure!
+SharpCoreAgent.Domain.Code.CodeFailure.Code.get -> string!
+SharpCoreAgent.Domain.Code.CodeFailure.Code.init -> void
+SharpCoreAgent.Domain.Code.CodeFailure.CodeFailure() -> void
+SharpCoreAgent.Domain.Code.CodeFailure.Equals(SharpCoreAgent.Domain.Code.CodeFailure? other) -> bool
+SharpCoreAgent.Domain.Code.CodeFailure.Hint.get -> string?
+SharpCoreAgent.Domain.Code.CodeFailure.Hint.init -> void
+SharpCoreAgent.Domain.Code.CodeFailure.Message.get -> string!
+SharpCoreAgent.Domain.Code.CodeFailure.Message.init -> void
+SharpCoreAgent.Domain.Code.CodeSeverity
+SharpCoreAgent.Domain.Code.CodeSeverity.Error = 0 -> SharpCoreAgent.Domain.Code.CodeSeverity
+SharpCoreAgent.Domain.Code.CodeSeverity.Info = 2 -> SharpCoreAgent.Domain.Code.CodeSeverity
+SharpCoreAgent.Domain.Code.CodeSeverity.Warning = 1 -> SharpCoreAgent.Domain.Code.CodeSeverity
+SharpCoreAgent.Domain.Code.ICodeDiagnostics
+SharpCoreAgent.Domain.Code.ICodeDiagnostics.GetDiagnosticsAsync(string! path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Code.CodeDiagnosticsResult!>
+SharpCoreAgent.Domain.Code.ILanguageAdapter
+SharpCoreAgent.Domain.Code.ILanguageAdapter.Supports(string! path) -> bool
+SharpCoreAgent.Domain.Code.ISignatureHelp
+SharpCoreAgent.Domain.Code.ISignatureHelp.GetSignatureAsync(string! path, int line, int column, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Code.SignatureHelpResult!>
+SharpCoreAgent.Domain.Code.ISymbolUses
+SharpCoreAgent.Domain.Code.ISymbolUses.FindUsesAsync(string! path, int line, int column, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Code.SymbolUsesResult!>
+SharpCoreAgent.Domain.Code.SignatureHelpResult
+SharpCoreAgent.Domain.Code.SignatureHelpResult.<Clone>$() -> SharpCoreAgent.Domain.Code.SignatureHelpResult!
+SharpCoreAgent.Domain.Code.SignatureHelpResult.ActiveSignature.get -> int
+SharpCoreAgent.Domain.Code.SignatureHelpResult.ActiveSignature.init -> void
+SharpCoreAgent.Domain.Code.SignatureHelpResult.Equals(SharpCoreAgent.Domain.Code.SignatureHelpResult? other) -> bool
+SharpCoreAgent.Domain.Code.SignatureHelpResult.Failure.get -> SharpCoreAgent.Domain.Code.CodeFailure?
+SharpCoreAgent.Domain.Code.SignatureHelpResult.Failure.init -> void
+SharpCoreAgent.Domain.Code.SignatureHelpResult.SignatureHelpResult() -> void
+SharpCoreAgent.Domain.Code.SignatureHelpResult.Signatures.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Code.SignatureInfo!>!
+SharpCoreAgent.Domain.Code.SignatureHelpResult.Signatures.init -> void
+SharpCoreAgent.Domain.Code.SignatureInfo
+SharpCoreAgent.Domain.Code.SignatureInfo.<Clone>$() -> SharpCoreAgent.Domain.Code.SignatureInfo!
+SharpCoreAgent.Domain.Code.SignatureInfo.ActiveParameter.get -> int
+SharpCoreAgent.Domain.Code.SignatureInfo.ActiveParameter.init -> void
+SharpCoreAgent.Domain.Code.SignatureInfo.Display.get -> string!
+SharpCoreAgent.Domain.Code.SignatureInfo.Display.init -> void
+SharpCoreAgent.Domain.Code.SignatureInfo.Equals(SharpCoreAgent.Domain.Code.SignatureInfo? other) -> bool
+SharpCoreAgent.Domain.Code.SignatureInfo.Parameters.get -> System.Collections.Generic.IReadOnlyList<string!>!
+SharpCoreAgent.Domain.Code.SignatureInfo.Parameters.init -> void
+SharpCoreAgent.Domain.Code.SignatureInfo.SignatureInfo() -> void
+SharpCoreAgent.Domain.Code.SymbolUse
+SharpCoreAgent.Domain.Code.SymbolUse.<Clone>$() -> SharpCoreAgent.Domain.Code.SymbolUse!
+SharpCoreAgent.Domain.Code.SymbolUse.Column.get -> int
+SharpCoreAgent.Domain.Code.SymbolUse.Column.init -> void
+SharpCoreAgent.Domain.Code.SymbolUse.Display.get -> string!
+SharpCoreAgent.Domain.Code.SymbolUse.Display.init -> void
+SharpCoreAgent.Domain.Code.SymbolUse.Equals(SharpCoreAgent.Domain.Code.SymbolUse? other) -> bool
+SharpCoreAgent.Domain.Code.SymbolUse.IsDefinition.get -> bool
+SharpCoreAgent.Domain.Code.SymbolUse.IsDefinition.init -> void
+SharpCoreAgent.Domain.Code.SymbolUse.Line.get -> int
+SharpCoreAgent.Domain.Code.SymbolUse.Line.init -> void
+SharpCoreAgent.Domain.Code.SymbolUse.Path.get -> string!
+SharpCoreAgent.Domain.Code.SymbolUse.Path.init -> void
+SharpCoreAgent.Domain.Code.SymbolUse.SymbolUse() -> void
+SharpCoreAgent.Domain.Code.SymbolUsesResult
+SharpCoreAgent.Domain.Code.SymbolUsesResult.<Clone>$() -> SharpCoreAgent.Domain.Code.SymbolUsesResult!
+SharpCoreAgent.Domain.Code.SymbolUsesResult.Equals(SharpCoreAgent.Domain.Code.SymbolUsesResult? other) -> bool
+SharpCoreAgent.Domain.Code.SymbolUsesResult.Failure.get -> SharpCoreAgent.Domain.Code.CodeFailure?
+SharpCoreAgent.Domain.Code.SymbolUsesResult.Failure.init -> void
+SharpCoreAgent.Domain.Code.SymbolUsesResult.SymbolUsesResult() -> void
+SharpCoreAgent.Domain.Code.SymbolUsesResult.Uses.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Code.SymbolUse!>!
+SharpCoreAgent.Domain.Code.SymbolUsesResult.Uses.init -> void
+static SharpCoreAgent.Domain.Code.CodeDiagnostic.operator !=(SharpCoreAgent.Domain.Code.CodeDiagnostic? left, SharpCoreAgent.Domain.Code.CodeDiagnostic? right) -> bool
+static SharpCoreAgent.Domain.Code.CodeDiagnostic.operator ==(SharpCoreAgent.Domain.Code.CodeDiagnostic? left, SharpCoreAgent.Domain.Code.CodeDiagnostic? right) -> bool
+static SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Failed(SharpCoreAgent.Domain.Code.CodeFailure! failure) -> SharpCoreAgent.Domain.Code.CodeDiagnosticsResult!
+static SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.Ok(System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Code.CodeDiagnostic!>! diagnostics) -> SharpCoreAgent.Domain.Code.CodeDiagnosticsResult!
+static SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.operator !=(SharpCoreAgent.Domain.Code.CodeDiagnosticsResult? left, SharpCoreAgent.Domain.Code.CodeDiagnosticsResult? right) -> bool
+static SharpCoreAgent.Domain.Code.CodeDiagnosticsResult.operator ==(SharpCoreAgent.Domain.Code.CodeDiagnosticsResult? left, SharpCoreAgent.Domain.Code.CodeDiagnosticsResult? right) -> bool
+static SharpCoreAgent.Domain.Code.CodeFailure.operator !=(SharpCoreAgent.Domain.Code.CodeFailure? left, SharpCoreAgent.Domain.Code.CodeFailure? right) -> bool
+static SharpCoreAgent.Domain.Code.CodeFailure.operator ==(SharpCoreAgent.Domain.Code.CodeFailure? left, SharpCoreAgent.Domain.Code.CodeFailure? right) -> bool
+static SharpCoreAgent.Domain.Code.SignatureHelpResult.Failed(SharpCoreAgent.Domain.Code.CodeFailure! failure) -> SharpCoreAgent.Domain.Code.SignatureHelpResult!
+static SharpCoreAgent.Domain.Code.SignatureHelpResult.Ok(System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Code.SignatureInfo!>! signatures, int activeSignature) -> SharpCoreAgent.Domain.Code.SignatureHelpResult!
+static SharpCoreAgent.Domain.Code.SignatureHelpResult.operator !=(SharpCoreAgent.Domain.Code.SignatureHelpResult? left, SharpCoreAgent.Domain.Code.SignatureHelpResult? right) -> bool
+static SharpCoreAgent.Domain.Code.SignatureHelpResult.operator ==(SharpCoreAgent.Domain.Code.SignatureHelpResult? left, SharpCoreAgent.Domain.Code.SignatureHelpResult? right) -> bool
+static SharpCoreAgent.Domain.Code.SignatureInfo.operator !=(SharpCoreAgent.Domain.Code.SignatureInfo? left, SharpCoreAgent.Domain.Code.SignatureInfo? right) -> bool
+static SharpCoreAgent.Domain.Code.SignatureInfo.operator ==(SharpCoreAgent.Domain.Code.SignatureInfo? left, SharpCoreAgent.Domain.Code.SignatureInfo? right) -> bool
+static SharpCoreAgent.Domain.Code.SymbolUse.operator !=(SharpCoreAgent.Domain.Code.SymbolUse? left, SharpCoreAgent.Domain.Code.SymbolUse? right) -> bool
+static SharpCoreAgent.Domain.Code.SymbolUse.operator ==(SharpCoreAgent.Domain.Code.SymbolUse? left, SharpCoreAgent.Domain.Code.SymbolUse? right) -> bool
+static SharpCoreAgent.Domain.Code.SymbolUsesResult.Failed(SharpCoreAgent.Domain.Code.CodeFailure! failure) -> SharpCoreAgent.Domain.Code.SymbolUsesResult!
+static SharpCoreAgent.Domain.Code.SymbolUsesResult.Ok(System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Code.SymbolUse!>! uses) -> SharpCoreAgent.Domain.Code.SymbolUsesResult!
+static SharpCoreAgent.Domain.Code.SymbolUsesResult.operator !=(SharpCoreAgent.Domain.Code.SymbolUsesResult? left, SharpCoreAgent.Domain.Code.SymbolUsesResult? right) -> bool
+static SharpCoreAgent.Domain.Code.SymbolUsesResult.operator ==(SharpCoreAgent.Domain.Code.SymbolUsesResult? left, SharpCoreAgent.Domain.Code.SymbolUsesResult? right) -> bool

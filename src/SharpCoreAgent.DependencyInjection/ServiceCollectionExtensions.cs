@@ -6,11 +6,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Code;
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Indexing;
+using SharpCoreAgent.Infrastructure.Code;
 using SharpCoreAgent.Infrastructure.Credentials;
 using SharpCoreAgent.Infrastructure.Mcp;
 using SharpCoreAgent.Infrastructure.McpServer;
@@ -18,6 +20,7 @@ using SharpCoreAgent.Infrastructure.Providers;
 using SharpCoreAgent.Infrastructure.Sessions;
 using SharpCoreAgent.Infrastructure.Tools;
 using SharpCoreAgent.Infrastructure.Web;
+using SharpCoreAgent.Languages.FSharp;
 
 namespace SharpCoreAgent.DependencyInjection;
 
@@ -119,6 +122,11 @@ public static class ServiceCollectionExtensions
             AddSharpCoreAgentIndex(services, options);
         }
 
+        if (options.FSharpToolsEnabled)
+        {
+            AddFSharpCodeIntelligence(services, options);
+        }
+
         // TryAdd, so a host that registered its own approver first is not overruled; a host that
         // registers one afterwards wins because the last registration is the one that resolves.
         services.TryAddSingleton<IToolApprover>(DenyAllApprover.Instance);
@@ -128,12 +136,15 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the fifteen workspace tools and the registry that advertises them.
+    /// Registers the seventeen workspace tools and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
     /// <c>fetch_url</c> is not one of them: it is registered by <see cref="AddWeb"/> only when the developer asked for the
-    /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off.
+    /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off. The number is the
+    /// surface a default build advertises — fifteen tools from rounds 1–3, <c>dotnet_verify</c> from <c>012</c>, and
+    /// <c>task</c> from <c>011</c> — and <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added
+    /// or dropped without a failing test.
     ///
     /// The tools are singletons because they are stateless: each call resolves every path through the
     /// workspace it is handed, so one instance serves every session in the process. The five index-backed
@@ -158,6 +169,21 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool>(provider => new RunShellCommandTool(provider.GetRequiredService<ShellProcessRegistry>()));
         services.AddSingleton<ITool>(provider => new ShellOutputTool(provider.GetRequiredService<ShellProcessRegistry>()));
         services.AddSingleton<ITool>(provider => new ShellStopTool(provider.GetRequiredService<ShellProcessRegistry>()));
+
+        // Beside run_shell rather than behind a flag: the prompt tells the model to verify a .NET edit with
+        // this tool, and a rule whose tool can be absent teaches the model that instructions are approximate.
+        services.AddSingleton<ITool>(provider => new DotnetVerifyTool(provider.GetRequiredService<ShellProcessRegistry>()));
+
+        // Delegation is unconditional, beside the tools it hands on: the prompt tells the model when to call it, and a
+        // rule whose tool can be absent is a rule the model learns to ignore. The registry arrives as a factory because
+        // a tool cannot be handed the set that contains it while that set is being built — the container reports a
+        // circular dependency and every host fails at startup (F-1) — and because --mcp replaces the registry after
+        // startup, so a child sees the servers' tools too (F-2).
+        services.AddSingleton<ITool>(provider => new TaskTool(
+            provider.GetRequiredService<IChatModelResolver>(),
+            () => provider.GetRequiredService<IToolRegistry>(),
+            provider.GetRequiredService<AgentOptions>()));
+
         services.AddSingleton<ITool, SearchCodeTool>();
         services.AddSingleton<ITool, FindSymbolTool>();
         services.AddSingleton<ITool, FindReferencesTool>();
@@ -167,6 +193,46 @@ public static class ServiceCollectionExtensions
         // Built once from the registered tools; ToolRegistry rejects duplicate names, which turns a
         // copy-pasted registration into a startup failure instead of a model-visible ambiguity.
         services.AddSingleton<IToolRegistry>(provider => new ToolRegistry(provider.GetServices<ITool>()));
+    }
+
+    /// <summary>
+    /// Registers the F# code-intelligence adapter, the router that chooses between adapters, and the three tools.
+    /// </summary>
+    /// <param name="services">The container to add to.</param>
+    /// <param name="options">The host's settings; the workspace comes from <see cref="SharpCoreAgentOptions.CreateWorkspace"/>.</param>
+    /// <remarks>
+    /// Called only when the developer asked for it, so a process that did not ask has no checker, no router and no
+    /// <see cref="ITool"/> that could load a project. That is the same guarantee <see cref="AddWeb"/> makes: the
+    /// capability does not exist to be called.
+    /// <para>
+    /// The adapter is a singleton because its first answer loads a project's references and every later answer reuses
+    /// them; a per-call instance would pay seconds per question and throw its cache away.
+    /// </para>
+    /// <para>
+    /// Only the router is registered under the three ports. A second language is a second <see cref="ILanguageAdapter"/>
+    /// line here, and the three tools never learn that it arrived — which is what keeps the tool surface from growing
+    /// with the number of languages.
+    /// </para>
+    /// <para>
+    /// The workspace is registered with <c>TryAdd</c> so that an index or MCP registration that already created one
+    /// wins: two workspaces in one container would let a turn read from one root and be checked against another.
+    /// </para>
+    /// </remarks>
+    private static void AddFSharpCodeIntelligence(IServiceCollection services, SharpCoreAgentOptions options)
+    {
+        services.TryAddSingleton(options.CreateWorkspace());
+
+        services.TryAddSingleton<FsCodeIntelligence>();
+        services.TryAddSingleton<ILanguageAdapter>(provider => provider.GetRequiredService<FsCodeIntelligence>());
+
+        services.TryAddSingleton<LanguageRouter>();
+        services.TryAddSingleton<ICodeDiagnostics>(provider => provider.GetRequiredService<LanguageRouter>());
+        services.TryAddSingleton<ISymbolUses>(provider => provider.GetRequiredService<LanguageRouter>());
+        services.TryAddSingleton<ISignatureHelp>(provider => provider.GetRequiredService<LanguageRouter>());
+
+        services.AddSingleton<ITool, FileDiagnosticsTool>();
+        services.AddSingleton<ITool, UsesAtTool>();
+        services.AddSingleton<ITool, SignatureAtTool>();
     }
 
     /// <summary>
@@ -287,9 +353,9 @@ public static class ServiceCollectionExtensions
     /// declared".
     /// <para>
     /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface is
-    /// fifteen workspace tools including the ones that write and start processes, and the server's allow-list is
-    /// the statement that this container holds none of them. The published set filters this registry again, so the
-    /// two gates the contract requires are both present.
+    /// seventeen workspace tools including the ones that write, start processes and delegate, and the server's
+    /// allow-list is the statement that this container holds none of them. The published set filters this registry
+    /// again, so the two gates the contract requires are both present.
     /// </para>
     /// <para>
     /// The index is reached through <see cref="LeasedCodeIndex"/> and the refresh opens its own maintainer per

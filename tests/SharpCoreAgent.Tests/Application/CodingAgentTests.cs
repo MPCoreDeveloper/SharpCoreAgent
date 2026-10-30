@@ -7,6 +7,7 @@ using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Chat;
+using SharpCoreAgent.Infrastructure.Tools;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Application;
@@ -514,6 +515,201 @@ public sealed class CodingAgentTests
         Assert.Equal(503, fallback.StatusCode);
     }
 
+    [Fact]
+    public async Task ATurnThatEditsSourceAndVerifiesCompletesVerified()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file")],
+            [ToolCallTurn(ToolNames.DotnetVerify)],
+            [Completed("fixed and built")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool(), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "fix it", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.Equal(3, report.Iterations);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+    }
+
+    [Fact]
+    public async Task ATurnThatEditsSourceAndNeverVerifiesIsCompletedButUnverified()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("write_file")], [Completed("all done")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool(), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "fix it", null, TestContext.Current.CancellationToken);
+
+        // Asked twice, then told the truth: the answer is accepted, and the report says what it is worth.
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("unverified", report.Detail!, StringComparison.Ordinal);
+        Assert.Equal(
+            CodingAgent.MaxVerificationNudges,
+            session.Messages.Count(message => message.Role == ChatRole.User && message.Content == PromptLibrary.VerifyNudge));
+        Assert.Equal(4, report.Iterations);
+    }
+
+    [Fact]
+    public async Task ATurnThatEditsNoDotnetSourceIsNotGated()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("write_file")], [Completed("noted")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool("docs/notes.md"), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "write it down", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.Equal(2, report.Iterations);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+    }
+
+    [Fact]
+    public async Task AVerificationThatRanBeforeTheEditDoesNotCloseTheGate()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(ToolNames.DotnetVerify)],
+            [ToolCallTurn("write_file")],
+            [Completed("done")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool(), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "build then fix", null, TestContext.Current.CancellationToken);
+
+        // The verify is in the turn and it passed; it is simply the wrong side of the edit, which is the mistake a
+        // gate written against "was there a verify?" rather than "was there one after?" would make.
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("unverified", report.Detail!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVerificationThatFailedDoesNotCloseTheGate()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file")],
+            [ToolCallTurn(ToolNames.DotnetVerify)],
+            [Completed("it is fine")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool(), VerifyingTool(passed: false)])
+            .RunTurnAsync(session, "fix it", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+    }
+
+    [Fact]
+    public async Task AnFSharpEditIsGatedLikeAnyOtherDotnetSource()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("write_file")], [Completed("all done")]);
+        var session = Session(directory.Path);
+
+        // The F# round added a checker and three tools; it must not have added a way out of the gate.
+        var report = await Agent(model, [EditingTool("src/Cart.fs"), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "add a cart", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("unverified", report.Detail!, StringComparison.Ordinal);
+        Assert.Equal(
+            CodingAgent.MaxVerificationNudges,
+            session.Messages.Count(message => message.Role == ChatRole.User && message.Content == PromptLibrary.VerifyNudge));
+    }
+
+    [Fact]
+    public async Task AnFSharpEditIsClosedByAVerificationThatPassesAfterIt()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file")],
+            [ToolCallTurn(ToolNames.DotnetVerify)],
+            [Completed("cart builds")]);
+        var session = Session(directory.Path);
+
+        // The other half of the proof: a `.fs` edit the verifier confirmed is verified, not merely tolerated.
+        var report = await Agent(model, [EditingTool("src/Cart.fs"), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "add a cart", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+    }
+
+    [Fact]
+    public async Task AnUnverifiedSubAgentEditIsGatedLikeTheParentsOwnEdit()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(TaskTool.Name, """{"prompt":"fix the total in src/Thing.cs","description":"fix the total"}""")],
+            [ToolCallTurn("write_file")],
+            [Completed("changed the total")],
+            [Completed("delegated, all done")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [DelegatingTool(model), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "delegate the fix", null, TestContext.Current.CancellationToken);
+
+        // The parent's own edit, arriving through a `task` result, is gated exactly as it would be if the parent had
+        // called write_file itself: asked twice, then told the truth.
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("unverified", report.Detail!, StringComparison.Ordinal);
+        Assert.Equal(
+            CodingAgent.MaxVerificationNudges,
+            session.Messages.Count(message => message.Role == ChatRole.User && message.Content == PromptLibrary.VerifyNudge));
+
+        // The gate could only see it because the `task` result carried the child's effect, which is the laundering this
+        // test rules out.
+        var result = Assert.Single(report.ToolResults);
+        Assert.Equal(TaskTool.Name, result.ToolName);
+        Assert.Contains(
+            result.Effects,
+            effect => effect.Kind == ToolEffectKind.Modified && effect.Target == "src/Thing.cs");
+    }
+
+    [Fact]
+    public async Task ASubAgentEditIsClosedByAVerificationThatPassesAfterIt()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(TaskTool.Name, """{"prompt":"fix the total in src/Thing.cs","description":"fix the total"}""")],
+            [ToolCallTurn("write_file")],
+            [Completed("changed the total")],
+            [ToolCallTurn(ToolNames.DotnetVerify)],
+            [Completed("delegated and built")]);
+        var session = Session(directory.Path);
+
+        // The other half: a verify that runs after the delegated edit closes the gate, because the edit is a result of
+        // this turn like any other.
+        var report = await Agent(model, [DelegatingTool(model), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "delegate the fix", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+        Assert.Equal(2, report.ToolResults.Count);
+    }
+
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
         AgentWithOptions(new AgentOptions(), model, tools);
 
@@ -539,6 +735,39 @@ public sealed class CodingAgentTests
         ChatMessage.Assistant(string.Empty, [new ToolCall("call-1", name, """{"path":"a.txt"}""")]),
         FinishReason.ToolCalls,
         new TokenUsage(10, 5)));
+
+    /// <summary>Plays one round that calls <paramref name="name"/> with the arguments the test needs.</summary>
+    private static StreamCompleted ToolCallTurn(string name, string argumentsJson) => new(new ChatResponse(
+        ChatMessage.Assistant(string.Empty, [new ToolCall("call-1", name, argumentsJson)]),
+        FinishReason.ToolCalls,
+        new TokenUsage(10, 5)));
+
+    /// <summary>Gets a tool that reports a write to <paramref name="path"/>, as every writing tool does.</summary>
+    private static ITool EditingTool(string path = "src/Thing.cs") =>
+        new StubTool("write_file", ToolSafety.Destructive, call => ToolResult.Success(call.Id, call.Name, "wrote") with
+        {
+            Effects = [new ToolEffect(ToolEffectKind.Modified, path)],
+        });
+
+    /// <summary>Gets a verifier that passes or fails without starting a compiler.</summary>
+    private static ITool VerifyingTool(bool passed) =>
+        new StubTool(ToolNames.DotnetVerify, ToolSafety.Destructive, call => passed
+            ? ToolResult.Success(call.Id, call.Name, "result       passed")
+            : ToolResult.Failure(call.Id, call.Name, "result       failed"));
+
+    /// <summary>
+    /// Gets the real <see cref="TaskTool"/>, whose child runs on the same scripted provider with one stubbed edit, so the
+    /// effect the gate reads is produced by the shipping tool rather than described by the test.
+    /// </summary>
+    /// <remarks>
+    /// The child gets no verifier: its own gate would otherwise spend turns on a decision this test is not about. The
+    /// container hands the child this registry minus <c>task</c>; here the test states the child's set outright.
+    /// </remarks>
+    private static ITool DelegatingTool(IStreamingChatModel model) =>
+        new TaskTool(
+            new StubResolver(_ => model),
+            () => new ToolRegistry([EditingTool()]),
+            new AgentOptions());
 
     /// <summary>Plays a fixed script, one script entry per request, repeating the last one.</summary>
     private sealed class ScriptedModel(ModelDescriptor model, params ChatStreamEvent[][] turns)

@@ -110,7 +110,7 @@ public sealed class McpTool : ITool
 | Entry | Becomes |
 |---|---|
 | `text` | its `text` |
-| `image` / `audio` | `[image: <mimeType> · <n> base64 characters]` |
+| `image` / `audio` | `[image: <mimeType> · <n> base64 characters]` — an image is saved as well since round 4; see `specs/010-browser/contracts/mcp-content.md` |
 | `resource` with `text` | an `[resource: <uri>]` heading, then the text |
 | `resource` with `blob` | `[resource: <uri> · <mimeType> · <n> base64 characters]` |
 | `resource_link` | `[link: <name> · <uri>]` |

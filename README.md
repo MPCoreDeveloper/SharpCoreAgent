@@ -50,6 +50,9 @@ OpenAI-compatible endpoint is reachable through configuration — no rebuild, no
   the approval prompt shows a unified diff of the change before the answer is read.
 - **Plan before act.** `--mode plan` (or `/mode plan`) hides every destructive tool and asks for a plan,
   so a risky change can be reviewed in the same transcript that then carries it out.
+- **A sub-agent keeps the investigation out of your transcript.** `task` runs one instruction in a child
+  agent with its own context and hands back only the answer, while the child's edits and commands are
+  still reported as this turn's effects and still wait on `dotnet_verify`.
 
 ## Requirements
 
@@ -283,12 +286,42 @@ session: a standing approval belongs to the conversation that earned it.
 ## Tools
 
 `list_directory`, `read_file`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
-`delete_file`, `run_shell`, `shell_output`, `shell_stop`.
+`delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `task`.
+
+`dotnet_verify` builds or tests the workspace and answers with a report rather than a log: exit code,
+`passed`/`failed`, warnings, the diagnostics themselves, test counts, duration and the summary MSBuild
+printed, followed by the SDK's own output. It is the one tool with authority over a turn's ending — a turn
+that created, modified or deleted a `.cs`, `.vb`, `.fs`, `.csproj`, `.vbproj`, `.fsproj`, `.props`,
+`.targets`, `.sln` or `.slnx` file cannot complete until `dotnet_verify` has passed *after* that edit. The
+loop asks twice, then accepts the answer and says so: `⚠ no passing dotnet_verify ran after the last .NET
+edit.` beside the outcome, and `"unverified": true` in `--json`. A failed build is an error result carrying
+every diagnostic, so the model fixes the compiler's complaint instead of repeating it:
+
+```text
+✻ completed · 4 iteration(s) · 6.2s · 12,345 in / 678 out
+  ⚠ no passing dotnet_verify ran after the last .NET edit.
+```
+
+`run_shell` is still the tool for everything else — it is not the tool for proving a .NET edit, and the
+system prompt now says so.
 
 `list_roots` reports the primary root and every read-only attached root, and it is the one tool result
 that prints an absolute path: naming the legal ones is its whole job.
 
-`fetch_url` is the sixteenth tool and the only one that is not registered by default: `--web` adds it
+`task` delegates one self-contained investigation to a sub-agent. The child starts with an empty transcript and
+sees only the prompt it was given, works with the session's tools minus `task` so it cannot delegate again, and
+answers with one message that comes back as the tool result — with its created, modified, deleted and command
+effects attached, so a delegated `.cs` edit still waits on `dotnet_verify` before your turn may end. It inherits
+`allow` only from an `allow` session and is `readonly` otherwise, `ask` included, and it never prompts: a refusal
+arrives as text it has to work around instead of a question in the middle of your turn. The child narrates two lines —
+one when it starts and one when it finishes — and its token spend is in the second, not in `/cost`, because there is
+no channel from a tool result back into session usage:
+
+```text
+task · find every caller of PriceCalculator · 6 model calls · 18,940 tokens
+```
+
+`fetch_url` is the eighteenth tool and the only one that is not registered by default: `--web` adds it
 for one invocation, and without the flag it is absent from the registry, from the definitions the model
 sees and from the system prompt. It reads one absolute `http`/`https` URL, follows at most five
 redirects, and answers with the final URL, the status, the content type, the byte count and whether the
@@ -310,6 +343,33 @@ redirected   from https://example.com/docs
 changelog: 4.2.0 — …
 ```
 
+`--fsharp` registers three tools that ask a type checker rather than read bytes: `file_diagnostics` (what
+the compiler says about one file), `uses_at` (every site the compiler bound to one declaration, given the
+line and column of one occurrence) and `signature_at` (what a callable takes, and which argument the
+position is inside). `FSharp.Compiler.Service` is linked into the process, so there is no build, no restore
+and no second process: `file_diagnostics` is the fast half of the verification loop, and `dotnet_verify` is
+still the authority that closes a turn.
+
+```text
+src/Program.fs · 1 error, 0 warnings, 0 info
+  src/Program.fs:8:18 · error FS0039 · The value or constructor 'Subtotal' is not defined.
+
+total at src/Program.fs:8:18 · 2 uses · 2 files
+  definition src/Cart.fs:5:4 · total
+  use src/Program.fs:8:18 · total
+
+src/Program.fs:8:20 · 1 signature · active 1 of 1
+  1) val total: items: Item list -> decimal
+     items: Item list ← active
+```
+
+`uses_at` is the answer a text search cannot give: the checker resolved the token, so a same-named member
+on another type, a string that spells the name and a comment are all excluded. Without the flag the three
+tools are absent from the registry, from the definitions the model sees and from the system prompt; with
+it, the first question about a project costs a few seconds while its references are loaded and every later
+one costs milliseconds. A file no registered language claims is refused with `LANG001` rather than guessed
+at, and `FSH002` says the project has not been restored yet — `dotnet_verify` kind=build is the fix.
+
 `--mcp "<command>"` starts one MCP server per flag, speaks JSON-RPC to it over its stdin and stdout, and
 offers the tools it lists as ordinary tools the model already knows how to call. The command runs through
 the platform shell (`cmd /d /s /c` on Windows, `/bin/sh -c` elsewhere), so `npx`, `uvx` and `deno` work
@@ -326,11 +386,35 @@ tool name that repeats inside one server gets `_2` rather than disappearing. The
 forwarded verbatim, because it is the server's contract with the model. A tool annotated `readOnlyHint:
 true` runs without a prompt; everything else is `Destructive` and approved like a write, so an
 unannotated server tool asks rather than assumes. Results are flattened from `content[]` — text verbatim,
-images, audio, blobs and resource links described by type, size and URI — bounded at 64 000 characters,
-and then by the turn's `MaxToolResultChars` on top. The servers start before the first turn and are a
-failure, not a silent omission, when one will not: `exit 2` naming the command line. Each child is killed
-with its process tree when the session ends, its stderr is kept for `--verbose` and never reaches the
-transcript, and there is no MCP client in a process that did not pass the flag.
+audio, non-image blobs and resource links described by type, size and URI, and an image described *and
+saved* (below) — bounded at 64 000 characters, and then by the turn's `MaxToolResultChars` on top. The
+servers start before the first turn and are a failure, not a silent omission, when one will not: `exit 2`
+naming the command line. Each child is killed with its process tree when the session ends, its stderr is
+kept for `--verbose` and never reaches the transcript, and there is no MCP client in a process that did
+not pass the flag.
+
+A browser is the one server where describing is not enough. A screenshot the model cannot see and the
+developer cannot open is a fact about a page nobody has, so the bytes are written once, under the
+workspace, and the model reads a path instead of 48 000 characters of base64:
+
+```text
+sharpcoreagent chat --mcp "npx -y @playwright/mcp@latest"
+```
+
+An image entry (`image/png`, `image/jpeg` or `image/jpg`, `image/gif`, `image/webp`, `image/bmp` — up to
+8 MiB each and eight per call) becomes `<workspace>/.sharpcoreagent/artifacts/<server>-<tool>-<n>.<ext>`,
+and the entry reads
+`[image: image/png · 48213 base64 characters → .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (36.4 KiB)]`.
+The turn reports a `Created` effect for each file even though the server annotated its screenshot tool
+read-only, so `/files` and `--json` name what was written. Nothing is overwritten — a second capture is
+`-2` — nothing is indexed, listed or searched, and a session that may not write (`--approval readonly`, or
+a sub-agent under it) keeps the sentence it writes today and adds
+`· not saved: this session may not write`. The browser stays the developer's: no bundled driver, no
+`--browser` flag. `npx -y @playwright/mcp@latest` was measured working with this client on 2026-10-30, with the
+server's own `--browser msedge` passed because its default channel wants a browser Playwright downloads itself;
+the server's `--output-dir` copy is its business — ours is the one the transcript names. The full rule,
+including the six ways an image is not saved, is
+[`specs/010-browser/contracts/mcp-content.md`](specs/010-browser/contracts/mcp-content.md).
 
 `replace_in_file` is the edit the agent is told to prefer: `edits` carries up to twenty fragments that
 are applied in order against each intermediate state, all or nothing, and only the matched text
@@ -514,13 +598,13 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 944 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 1,200 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
-  reading, `fetch_url` with its HTML reduction and its address rule, and the MCP client with its
-  hand-built JSON-RPC transport, its scripted server and a real child process — and the tests that cover
-  them — so
+  reading, `fetch_url` with its HTML reduction and its address rule, the MCP client with its hand-built
+  JSON-RPC transport, its scripted server and a real child process, and now `dotnet_verify` with its
+  log parser, its real compiler run and the turn that is not allowed to end without it — so
   the next scan moves
   both the line count and
   the percentage. **The gate
@@ -581,6 +665,19 @@ the second duplicates settings that would drift.
   every child is killed with its process tree when the process ends. The suite runs a scripted in-memory
   server for the protocol and a real one, `tests/SharpCoreAgent.TestMcpServer`, for the launch path, the
   stderr split and the kill.
+- `specs/010-browser` — complete, both phases. A browser MCP server's screenshots become files: an `image`
+  entry (or a `resource` carrying an image `blob`) is decoded under a ceiling and written to
+  `<workspace>/.sharpcoreagent/artifacts/<server>-<tool>-<n>.<ext>`, and the tool result names the path and
+  the size — or, when the session may not write, the type is not one the client saves, the payload is larger
+  than `MaxArtefactBytes` (8 MiB) or past `MaxArtefactsPerCall` (8), or the base64 does not decode, one
+  sentence beginning `· not saved:` and no file at all. A saved entry adds a `Created` effect even when the
+  server annotated the tool `readOnly`, which is what `browser_take_screenshot` is, so a turn that left a PNG
+  no longer reports that it changed nothing. Ten new tests cover it, and the rule is written down in
+  [`specs/010-browser/contracts/mcp-content.md`](specs/010-browser/contracts/mcp-content.md). Proven live on
+  2026-10-30 with `--mcp "npx -y @playwright/mcp@latest"`: `npx_browser_navigate` and
+  `npx_browser_take_screenshot` on `https://example.com` left 44 912 bytes at
+  `.sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png`, PNG signature intact. The whole suite is 1,200
+  green in `Release` at 0 warnings.
 - `specs/004-spend-and-fallback` — all three phases are complete: `/cost` prices the tokens the session
   reported from a dated table that prints `no price known` (and `total unknown`) rather than `$0.00`;
   `--fallback provider:model` replays a 401 or 5xx turn once at a model the developer named, recording
@@ -597,6 +694,27 @@ the second duplicates settings that would drift.
   mode, workspace and transcript it is using before the first prompt, and `config show|get|set|unset|path`
   keeps this developer's defaults in one JSON document with the layer each value came from. A file the
   build cannot apply exits 7 and is still repairable from the tool.
+- `specs/015-fsharp-peer` — complete, all four phases: twelve ports and records in `Domain/Code`, the
+  `SharpCoreAgent.Languages.FSharp` adapter over `FSharp.Compiler.Service` (in-process diagnostics,
+  compiler-bound symbol uses and signature help, with `FSH001`–`FSH006` as values rather than exceptions),
+  the `LanguageRouter` that chooses an adapter from the path alone, and the three tools `--fsharp`
+  registers — `file_diagnostics`, `uses_at`, `signature_at`. Thirty-one new tests cover the adapter, the
+  router, the three tools, the registration, the `--fsharp` mapping, the prompt rule and the `.fs` gate.
+  A `.fs` edit is gated exactly like a `.cs` one — proven by deleting `".fs"` from
+  `VerifyGate.DotnetExtensions` and watching the new test fail — and the whole suite is 1167 green with no
+  diff on the index.
+- `specs/011-subagent-task` — complete, all four phases. `task` is round 5 of the parity roadmap: a sub-agent
+  with its own transcript and the session's tools minus `task`, and the parent's approval mode only when that mode
+  is `allow` — otherwise `readonly` — whose final message comes back as the tool result with the child's created,
+  modified, deleted and command effects attached, so a delegated `.cs` edit still waits on `dotnet_verify`.
+  `TaskTool`, `TaskFormat` and `NoPromptApprover` are in `src/SharpCoreAgent.Infrastructure/Tools/`, the tool is
+  registered in `AddTools` beside `dotnet_verify`, and rule 8 of the shipped prompt says when to call it. Twenty-
+  three new tests cover it: the arguments and their refusals, the four failure sentences, the approval matrix,
+  effect forwarding, the parent's verification gate closing on a delegated edit, the registration and the prompt.
+  The probe found the one thing the draft got wrong: a tool that takes `IEnumerable<ITool>` cannot itself be an
+  `ITool` in the container, so the constructor takes a deferred registry source instead. The whole suite is 1190
+  green in `Debug` and in `Release`, both builds at 0 warnings, with no diff this round wrote on `Domain/Index`
+  or `SharpCoreAgent.Indexing`.
 
 ## Spec-driven development
 

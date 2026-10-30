@@ -73,8 +73,12 @@ public sealed class McpTool : ITool
         var argumentsJson = string.IsNullOrWhiteSpace(toolCall.ArgumentsJson) ? "{}" : toolCall.ArgumentsJson;
         using var arguments = ToolArgumentReader.Parse(Definition.Name, argumentsJson);
 
+        // One sink per call: it holds the artefacts written so far, so the per-call ceiling counts this
+        // answer and only this answer.
+        var sink = new McpArtefactSink(context.Workspace, context.Approval, _connection.Name, _info.Name, _options);
+
         var answer = await _connection
-            .CallAsync(_info.Name, arguments.Root, _options.CallTimeout, cancellationToken)
+            .CallAsync(_info.Name, arguments.Root, _options.CallTimeout, sink.Save, cancellationToken)
             .ConfigureAwait(false);
 
         // Two ceilings, and this is the first: the tool's own. The loop's MaxToolResultChars still applies
@@ -86,11 +90,22 @@ public sealed class McpTool : ITool
             return ToolResult.Failure(toolCall.Id, Definition.Name, text) with { IsTruncated = truncated };
         }
 
-        var effects = Safety == ToolSafety.Destructive
-            ? new[] { new ToolEffect(ToolEffectKind.CommandRun, string.Create(CultureInfo.InvariantCulture, $"{_connection.Name}: {_info.Name}")) }
-            : [];
+        var effects = new List<ToolEffect>();
+        if (Safety == ToolSafety.Destructive)
+        {
+            effects.Add(new ToolEffect(
+                ToolEffectKind.CommandRun,
+                string.Create(CultureInfo.InvariantCulture, $"{_connection.Name}: {_info.Name}")));
+        }
 
-        return ToolResult.Success(toolCall.Id, Definition.Name, text, effects) with { IsTruncated = truncated };
+        // A screenshot is annotated read-only by every server that offers one, and it still writes a file.
+        // The effects say so, because a turn that reports what it touched must not hide the one write it made.
+        foreach (var relative in sink.Written)
+        {
+            effects.Add(new ToolEffect(ToolEffectKind.Created, relative));
+        }
+
+        return ToolResult.Success(toolCall.Id, Definition.Name, text, [.. effects]) with { IsTruncated = truncated };
     }
 
     private static string Describe(McpToolInfo info, McpServerConnection connection) =>

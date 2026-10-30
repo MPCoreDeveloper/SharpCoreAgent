@@ -42,6 +42,15 @@ Obligations:
 | `write_file` | Destructive | `Created`/`Modified` | `path` (required), `content` (required), `overwrite?` (default `true`) | `wrote N bytes to <path> (<created|overwritten>)` |
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |
 | `run_shell` | Destructive | `CommandRun` | `command` (required), `timeout_seconds?` (default 120, max 600), `working_directory?` | `$ <command>` + exit code + captured output |
+| `dotnet_verify` | Destructive | `CommandRun` | `kind` (required: `build` or `test`), `project?`, `timeout_seconds?` (default 300, max 900) | Labelled header (exit code, passed/failed, warnings, errors, test counts, duration) + the SDK's log (012) |
+| `task` | Destructive | the child's `Created`/`Modified`/`Deleted`/`CommandRun` | `prompt` (required), `description?` (≤ 120, defaults to the prompt's first line), `max_iterations?` (1–24, default 12) | `task · <description> · <N> model calls · <T> tokens` + the child's final message, verbatim (011) |
+
+The catalogue above is round `001`'s six tools and the three that round `003` added around `run_shell`. Later
+rounds keep their own contracts and are the reference for the tools they add: `replace_in_file`,
+`shell_output` and `shell_stop` in `specs/003-terminal-console-agent`, the five index tools in
+`specs/002-code-evidence-index`, `fetch_url` in [`specs/008-web-fetch`](../../008-web-fetch/contracts/web-fetch.md),
+and `dotnet_verify` in [`specs/012-compiler-oracle`](../../012-compiler-oracle/contracts/dotnet-verify.md), and
+`task` in [`specs/011-subagent-task`](../../011-subagent-task/contracts/task-tool.md).
 
 ### JSON Schemas (exact strings returned to the model)
 
@@ -134,4 +143,56 @@ whose schema this build does not write, and the only ones whose names are genera
   none, because there is no workspace path to name.
 - **Lifetime** — one child per flag, started before the first turn and killed with its process tree when
   the process ends. A server that will not answer its handshake is a startup failure and `exit 2`.
+
+## Language-provided tools (015)
+
+`--fsharp` registers three read-only tools that answer from a type checker linked into the process rather
+than from the index. They are language-neutral: each takes a Domain port (`ICodeDiagnostics`,
+`ISymbolUses`, `ISignatureHelp`), and `LanguageRouter` picks the adapter whose `ILanguageAdapter.Supports`
+claims the path. The full contract is `specs/015-fsharp-peer/contracts/code-intelligence.md`; the three
+names and their arguments are:
+
+- **`file_diagnostics`** — `path`. Answers `path:line:column · severity id · message` per diagnostic, or
+  `path · no diagnostics` for a clean file. Success and failure are different sentences.
+- **`uses_at`** — `path`, `line` (≥ 1), `column` (≥ 0). Answers `<display> at path:line:column · n uses ·
+  n files`, then one `definition …` or `use …` line per site.
+- **`signature_at`** — `path`, `line`, `column`. Answers the overloads at a call site, numbers them, and
+  marks the argument the position sits inside with `← active`.
+
+Every failure carries a stable code — `FSH001`–`FSH006` from the adapter, `LANG001` for an extension no
+adapter claims, `LANG002` for an adapter that claims a file without implementing the port — and a hint that
+names a registered tool. None of them closes the turn's verification gate: only `dotnet_verify` does.
+
+## Delegation (011)
+
+`task` runs one self-contained instruction in a sub-agent that starts with an empty transcript and answers with
+one message. The full contract, including the schema as the model sees it and the failure sentences, is
+[`specs/011-subagent-task/contracts/task-tool.md`](../../011-subagent-task/contracts/task-tool.md). What a reader
+of this catalogue needs is where the tool sits among the others:
+
+- **Safety** — `Destructive` in every build, even though the default child cannot write. The child's powers are
+  decided at call time, so a plan turn and a `readonly` session must refuse the delegation itself rather than rely
+  on what the child would have been allowed to do. In `ask` the prompt shows the label, the iteration ceiling and
+  the delegated prompt verbatim — the developer is approving an instruction, not a JSON line.
+- **Registry** — the child is handed the registry this build serves, minus `task`, read at call time. `--mcp`
+  tools are in it, because `AddMcp` replaces the registry after startup; delegation is not, so the depth of any
+  call tree is one. A host that somehow registered the tool twice still cannot delegate from inside a child.
+- **Prompt** — the child runs `PromptLibrary.SubAgentPrompt` in an `AgentSession` of its own, and the tool holds a
+  refusing `IToolApprover`, so no code path inside a `task` call can raise a question while the developer is
+  watching the parent turn and cannot tell which of two nested turns is asking.
+- **Approval** — the child is `AllowAll` only when the parent is, and `ReadOnly` otherwise, `ask` included: a
+  child that can write silently is a parent that can write silently. A refused child write is reported to the
+  child, which is what lets it answer rather than stall.
+- **Result** — one header and the child's final message, bounded by `MaxToolResultChars` and marked
+  `IsTruncated` when it was cut. A child that finished without a word, ran out of its model calls, could not run,
+  or was cancelled is a failed result with the same header and one sentence naming the outcome.
+- **Effects** — every `Created`, `Modified`, `Deleted` and `CommandRun` the child reported, in order, on success
+  and on failure alike. `Read` effects are dropped: the parent did not read those files, and forwarding them would
+  inflate its `FilesTouched` with a claim it never made. The forwarded edit is what puts a delegated `.cs` change
+  behind the parent's `VerifyGate`.
+- **Not forwarded** — the child's messages, tool results and reasoning appear nowhere in the parent's transcript,
+  which is the point of the tool. Its model calls and tokens appear only in the header, and `/cost` does not count
+  them: there is no channel from a tool result back into session usage, and the round says so rather than
+  pretending to a budget it cannot enforce.
+
 

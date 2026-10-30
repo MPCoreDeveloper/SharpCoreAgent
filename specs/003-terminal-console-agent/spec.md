@@ -1,6 +1,6 @@
 # 003 — Terminal console agent: colour, fragment edits, plan mode
 
-**Status**: implemented (P0–P2, P3-lite, P4-aliases)
+**Status**: implemented (P0–P2, P3-lite, P4-aliases; P5 is the MCP client, which `009` built and `010` extended)
 **Branch**: `feature/sharpcoredb-2-1-2`
 **Depends on**: `001-coding-agent-core`, `002-code-evidence-index`
 

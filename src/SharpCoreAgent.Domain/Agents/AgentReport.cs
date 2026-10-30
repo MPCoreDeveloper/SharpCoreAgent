@@ -72,6 +72,18 @@ public sealed record AgentReport
     /// <summary>Gets a one-line explanation for a non-completed outcome.</summary>
     public string? Detail { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the turn ended <see cref="AgentOutcome.Completed"/> without a passing
+    /// verification of the .NET source it edited.
+    /// </summary>
+    /// <remarks>
+    /// False for every turn that edited no .NET file, and false as soon as a verify tool has passed after the
+    /// last such edit. A true value is not a failure: the work may be right and the harness may be wrong. It is
+    /// the difference between "the model said so" and "a build said so", which is the whole reason the loop
+    /// asks again before it accepts an answer.
+    /// </remarks>
+    public bool IsUnverified { get; init; }
+
     /// <summary>Gets a value indicating whether the turn completed.</summary>
     public bool Succeeded => Outcome == AgentOutcome.Completed;
 

@@ -39,6 +39,13 @@ public static class TextLimits
     /// <summary>Gets how many leading bytes are inspected when deciding whether a file is binary.</summary>
     public const int BinarySniffBytes = 8 * 1024;
 
+    /// <summary>Gets the largest number of characters one code-intelligence answer returns.</summary>
+    /// <remarks>
+    /// One file's diagnostics, or one symbol's uses, are bounded by the code itself rather than by this number; it
+    /// exists so a generated file with ten thousand diagnostics cannot fill a turn's context in one call.
+    /// </remarks>
+    public const int MaxCodeIntelligenceChars = 24 * 1024;
+
     /// <summary>Gets the marker appended to a result that was shortened.</summary>
     public const string TruncatedMarker = "[truncated]";
 

@@ -5,6 +5,7 @@
     <Project Path="src/SharpCoreAgent.Application/SharpCoreAgent.Application.csproj" />
     <Project Path="src/SharpCoreAgent.Infrastructure/SharpCoreAgent.Infrastructure.csproj" />
     <Project Path="src/SharpCoreAgent.Indexing/SharpCoreAgent.Indexing.csproj" />
+    <Project Path="src/SharpCoreAgent.Languages.FSharp/SharpCoreAgent.Languages.FSharp.csproj" />
     <Project Path="src/SharpCoreAgent.DependencyInjection/SharpCoreAgent.DependencyInjection.csproj" />
     <Project Path="src/SharpCoreAgent.Cli/SharpCoreAgent.Cli.csproj" />
   </Folder>

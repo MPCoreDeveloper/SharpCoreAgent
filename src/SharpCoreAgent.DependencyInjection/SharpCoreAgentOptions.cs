@@ -142,6 +142,19 @@ public sealed record SharpCoreAgentOptions
     /// </remarks>
     public TimeSpan IndexBudget { get; init; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// Gets a value indicating whether this process may ask a language service about the source it reads.
+    /// Default <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// The switch that registers <c>file_diagnostics</c>, <c>uses_at</c> and <c>signature_at</c> and the F# adapter behind
+    /// them. Off by default for two reasons that both point the same way: the adapter is the largest dependency this
+    /// product carries, and the first question about a project spends seconds loading references before it can answer.
+    /// A host that works in F# turns it on for the invocation; like <see cref="WebAccessEnabled"/> it is deliberately
+    /// not a settings key, because an F# tool set is a decision about one workspace.
+    /// </remarks>
+    public bool FSharpToolsEnabled { get; init; }
+
     /// <summary>Gets the descriptor for <see cref="Provider"/> and <see cref="ModelId"/>.</summary>
     /// <exception cref="ArgumentException">The provider is not one this build serves.</exception>
     public ModelDescriptor Descriptor => ModelCatalog.DescriptorFor(Provider, ModelId);
@@ -176,7 +189,7 @@ public sealed record SharpCoreAgentOptions
             Temperature = Temperature,
             Approval = Approval,
             SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt)
-                ? PromptLibrary.SystemPromptFor(IndexEnabled, WebAccessEnabled, McpServers.Count > 0)
+                ? PromptLibrary.SystemPromptFor(IndexEnabled, WebAccessEnabled, McpServers.Count > 0, FSharpToolsEnabled)
                 : SystemPrompt,
         }.Validate();
     }

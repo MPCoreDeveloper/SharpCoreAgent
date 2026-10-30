@@ -263,10 +263,34 @@ public sealed class McpServerConnection : IAsyncDisposable
     /// <returns>The server's answer, or a failure phrased for the model.</returns>
     /// <exception cref="InvalidOperationException">The connection was never started.</exception>
     /// <exception cref="OperationCanceledException">The caller cancelled.</exception>
-    public async Task<McpCallResult> CallAsync(
+    public Task<McpCallResult> CallAsync(
         string tool,
         JsonElement arguments,
         TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        CallAsync(tool, arguments, timeout, save: null, cancellationToken);
+
+    /// <summary>
+    /// Calls one of the server's tools, offering its binary content to a sink.
+    /// </summary>
+    /// <param name="tool">The tool name the server knows, without the client's prefix.</param>
+    /// <param name="arguments">The argument object, forwarded unchanged.</param>
+    /// <param name="timeout">The wall-clock ceiling for this call.</param>
+    /// <param name="save">Turns a binary entry of the answer into the sentence describing what became of it.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The server's answer, or a failure phrased for the model.</returns>
+    /// <remarks>
+    /// The overload exists so the connection stays the only place the protocol is spoken while the sink — which
+    /// needs a workspace, an approval mode and a tool name — is built by <see cref="McpTool"/>. The public
+    /// signature is deliberately unchanged: a connection on its own has no workspace to write into.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The connection was never started.</exception>
+    /// <exception cref="OperationCanceledException">The caller cancelled.</exception>
+    internal async Task<McpCallResult> CallAsync(
+        string tool,
+        JsonElement arguments,
+        TimeSpan timeout,
+        Func<McpArtefact, string>? save,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tool);
@@ -288,7 +312,11 @@ public sealed class McpServerConnection : IAsyncDisposable
                           result.TryGetProperty("isError", out var flag) &&
                           flag.ValueKind == JsonValueKind.True;
 
-            return new McpCallResult(isError, McpContent.Flatten(result, Name));
+            // The answer is already in hand, so a cancellation that arrives now would land mid-save: the
+            // remaining artefacts are not written and the caller, who cancelled, sees the cancellation.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return new McpCallResult(isError, McpContent.Flatten(result, Name, save));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -3,7 +3,12 @@
 **Status**: round 0 landed (constitution 1.1.0, amended to 1.2.0 for round 6), round 1 landed on `main` (merge
 `dbc0701`), round 2 landed on `main` (merge `201a431`), round 3 landed on `main` (merge `be0b265`), round 6 landed
 on `main` 2026-10-29 in eight commits (`aabf2ae`…`a9d4b13`) with no merge commit — it landed phase by phase instead
-of on a branch, and its `tasks.md` records that rather than inventing one — rounds 4–5 planned
+of on a branch, and its `tasks.md` records that rather than inventing one — round 7 (`015`) landed complete on
+2026-10-30, whole suite 1167/1167 with zero diff on the index, and round 5 (`011`) landed complete the same day,
+whole suite 1190/1190 and no new line in `Domain`, `CodingAgent`, `Domain/Index` or `SharpCoreAgent.Indexing` —
+round 4 (`010`) landed complete the same day, whole suite 1200/1200 at 0 warnings, with no hunk of this round on
+the four paths it may not touch.
+
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
 ## Why rounds rather than one specification
@@ -26,7 +31,7 @@ The four gaps a newcomer hits, in the order they hit them.
 3. *"Use the browser, GitHub, Postgres."* — there is no extension mechanism, so every integration is a
    new project in this repository.
 4. *"Do this in a sub-agent, keep my context clean."* — `task` was drafted
-   (`TaskTool.cs.pending`) and never finished.
+   (`specs/011-subagent-task/TaskTool.cs.pending`) and never finished; round 5 finished it on 2026-10-30.
 
 ## The rounds
 
@@ -36,12 +41,17 @@ The four gaps a newcomer hits, in the order they hit them.
 | 1 | [`007-external-roots`](007-external-roots/spec.md) | read another project; never write it | 0 |
 | 2 | [`008-web-fetch`](008-web-fetch/spec.md) | `fetch_url` — a page as bounded, readable text (landed as `201a431`) | 0 |
 | 3 | [`009-mcp-client`](009-mcp-client/spec.md) | `--mcp <command>` — any stdio MCP server's tools (landed as `be0b265`) | 0 |
-| 4 | `010-browser` | a browser you name, and the screenshots it returns | 3 |
-| 5 | `011-subagent-task` | `task` — delegation with an isolated transcript | — |
+| 4 | [`010-browser`](010-browser/spec.md) | a browser you name, and the screenshots it returns (landed 2026-10-30: `McpArtefactSink`, the `Flatten` save delegate, two ceilings, 10 tests) | 3 |
+| 5 | [`011-subagent-task`](011-subagent-task/spec.md) | `task` — delegation with an isolated transcript (landed 2026-10-30: `TaskTool`, `TaskFormat`, `NoPromptApprover`, the registration, prompt rule 8, 23 tests) | — |
 | 6 | [`013-evidence-mcp-server`](013-evidence-mcp-server/spec.md) | `mcp serve` — the index's evidence for Copilot, Codex and Claude Code, over stdio | 0 (amended to 1.2.0), and `002` (landed) |
+| 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30) | 0, and `012` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
-repository has not made. If it is made, it becomes `012` and it does not change 007–011.
+repository has not made. If it is made, it becomes `016` and it does not change 007–011. (`012` went to
+the compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider
+nor a key, `013` is the evidence server, and `015` is F# code intelligence —
+[`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
+server.)
 
 ## Decision record
 
@@ -190,20 +200,50 @@ the tree kill — and the suite is 939 tests, all green with no compiler warning
 T034–T037 open as the record of what the round refused: resources, prompts, sampling, remote transports,
 server mode and a declarative server list.
 
-## Round 4 — `010-browser`
+## Round 4 — `010-browser` (landed 2026-10-30)
+
+**Status**: landed, both phases. `McpArtefactSink` sits in `src/SharpCoreAgent.Infrastructure/Mcp/` beside
+`McpContent`, which gained the `save` delegate and a two-argument overload that passes `null`; `McpTool` builds
+one sink per call and reports a `Created` effect per file after any `CommandRun`; `McpClientOptions` carries
+`MaxArtefactBytes` (8 MiB) and `MaxArtefactsPerCall` (8). The contract is
+[`010-browser/contracts/mcp-content.md`](010-browser/contracts/mcp-content.md) and `009`'s FR-009 and plan table
+point at it. Ten tests in `McpArtefactTests`, whole suite 1200/1200 in `Release` at 0 warnings, and the round's
+diff reaches none of the four paths it may not touch. Proven live against `npx -y @playwright/mcp@latest`
+(`--browser msedge`): a screenshot of `https://example.com` landed as
+`<workspace>/.sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png`, 44 912 bytes, PNG signature intact.
+Measurements and the three things the live run taught are in the plan's `## As built`.
+
+**Spec**: [`010-browser/spec.md`](010-browser/spec.md). The paragraph below is the round's promise; the
+spec is the contract that refines it, and it is the one to read before the plan. The plan is
+[`010-browser/plan.md`](010-browser/plan.md) (2026-10-30): one sink, one directory, no new flag — a `save`
+delegate threaded into `McpContent.Flatten`, an `McpArtefactSink` that owns approval, ceilings, MIME and IO,
+and two ceilings on `McpClientOptions`. It lands as `tasks.md`, `contracts/mcp-content.md` and the tests,
+in that order.
 
 **Ships**: the page a browser server returns. `--mcp "npx -y @playwright/mcp@latest"` already drives a
 browser today, and the model can already read the DOM it hands back; what it cannot do is see. Round 4
-takes an `image` or a `blob` in `content[]`, decodes it under a byte ceiling, writes it into the session
-directory as `<server>-<tool>-<n>.png` (extension from the MIME type), and answers with the path and the
-size — beside the description `Flatten` already returns, so a run that cannot write still degrades to a
-sentence rather than a failure. Plus the documentation: which servers are known to work, what the command
+takes an `image` or a `blob` in `content[]`, decodes it under a byte ceiling, writes it under
+`<workspace>/.sharpcoreagent/artifacts/` — the spec's reading of "the session directory", because
+`--session` may point outside the workspace and a report can only name a relative path — as
+`<server>-<tool>-<n>.<ext>` (extension from the MIME type), and answers with the path and the size —
+beside the description `Flatten` already returns, so a run that cannot write still degrades to a
+sentence rather than a failure. It also reports what it wrote: `browser_take_screenshot` is annotated
+`readOnly`, so `McpTool` reports no effect for it today, and a turn that left a PNG in the workspace
+says it changed nothing (spec FR-008). Plus the documentation: which servers are known to work, what the command
 line looks like, and that the browser itself is the developer's to install.
 
 **Does not ship**: a bundled browser, a driver manager, a JavaScript engine of our own, a `browser` tool
 of ours, a `--browser` flag (`Decision record`, 2026-10-28).
 
-## Round 5 — `011-subagent-task`
+## Round 5 — `011-subagent-task` (landed 2026-10-30)
+
+**Status**: landed, all four phases. `task` is registered in `AddTools` beside `dotnet_verify`, so a default build
+advertises seventeen tools and `--web` makes eighteen; the shipped prompt carries rule 8; and the contract is
+`specs/011-subagent-task/contracts/task-tool.md`, which the tool catalogue in `001` now points at. The whole suite is
+1190/1190 in `Debug` and again in `Release`, both builds at 0 warnings and 0 errors — it was 1167 — and this round added
+no line to `Domain`, `CodingAgent`, `Domain/Index` or `SharpCoreAgent.Indexing`: the four-path diff is traced line for
+line in `tasks.md` (`T020`), which is also where the one caveat lives, that `HEAD` predates `012` and `015` and both are
+still uncommitted.
 
 **Ships**: `task` promoted from `TaskTool.cs.pending` to a registered tool. A sub-agent gets the same
 model, a child registry without `task` (no recursion), `SubAgentPrompt` as its system prompt, and an
@@ -211,10 +251,26 @@ approval mode that is `AllowAll` only when the parent is — otherwise `ReadOnly
 can silently write is a parent that can silently write. The child's transcript is discarded; its final
 message is the tool result, bounded like any other.
 
-**Decision recorded now**: the draft is kept as this round's design and is deliberately not compiled.
-It moves into `specs/011-subagent-task/` when that spec is written, it does not ship before it, and it
-is not deleted, because the prompt and the child-registry argument in it are the round's starting point
-rather than a guess.
+**The draft**: `TaskTool.cs.pending` moved into `specs/011-subagent-task/` unchanged in phase 1 and stayed
+uncompiled while the landed tool was written beside it, which is the decision recorded when this round was planned. The
+landed `TaskTool.cs` implements that design with the one correction a probe forced: the constructor takes
+`(IChatModelResolver, Func<IToolRegistry>, AgentOptions)`, because a tool that took `IEnumerable<ITool>` cannot be part
+of the set it is handed — the container reports a circular dependency and every host fails at startup (`F-1`). Reading
+`IToolRegistry` through the factory is also what lets a child see `--mcp` tools, since `AddMcp` replaces the registry
+after startup (`F-2`). The draft stays in that folder now that the round has closed: it is this round's design of
+record, nothing compiles or loads it, and `tasks.md` `T001`–`T003` keep the measurements that corrected it. A future
+round that wants the file gone is deleting a document, not a dependency.
+
+**Evidence**: `TaskToolTests` 15/15 — arguments and their refusals, the header, the four failure sentences, the
+approval matrix (a child of an asking parent is refused a write, a child of an allowing parent is not), and effect
+forwarding (`Created`, `Modified`, `CommandRun`, `Deleted` in order, `Read` absent) — plus two `CodingAgentTests`
+proving a delegated `.cs` edit is gated by the parent's verifier and closed by a `dotnet_verify` that passes after it;
+the gate test fails at `Assert.True(report.IsUnverified)` when the forwarded `Modified` effect is filtered out. Then
+three `TaskToolRegistrationTests` (the tool is in the registry, the seventeen names are the documented set, every tool
+resolves without the circular dependency `F-1` was) and three `PromptLibraryTests` for rule 8 and the child's prompt.
+One test moved for an honest reason: `ChatLoopTests.NearingTheCeilingSaysSoBeforeTheSessionStops` raised its ceiling
+from 1 400 to 1 700 tokens, because the demo adapter bills characters and the prompt grew a rule.
+
 
 ## Round 6 — `013-evidence-mcp-server` (landed 2026-10-29)
 
@@ -261,13 +317,15 @@ empty checkbox.
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |
 | 2 | `008` T031–T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch — plus a web search tool, which is the one decision below |
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
+| 4 | `010` T031–T035 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured, and showing the screenshot to the model as an image — the last is the one that matters, and it is a `ToolResult` content change in `Domain.Conversation`, not an artefact sink |
 | 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T016–T018 | a first-run key prompt with restricted permissions, `config edit`, per-provider sections |
 
 The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
-and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `012` and it
-changes no round above it.
+and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `016` and it
+changes no round above it. `012` is no longer spare: it is the compiler oracle, which needs neither a
+provider nor a key, and `015` is F# code intelligence.
 
 ## What stays out of this program
 

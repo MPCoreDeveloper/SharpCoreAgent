@@ -17,6 +17,25 @@ public sealed record McpCallResult(bool IsError, string Text)
 }
 
 /// <summary>
+/// One binary entry a server returned, offered to a sink that can make it durable.
+/// </summary>
+/// <param name="Kind">The entry's <c>type</c>: <c>image</c> or <c>resource</c>.</param>
+/// <param name="MimeType">The entry's MIME type, which is what decides whether it can be saved at all.</param>
+/// <param name="Base64">The undecoded payload, exactly as the server sent it.</param>
+/// <param name="Ordinal">The entry's position among the saveable artefacts of this call, counting from one.</param>
+/// <param name="Description">The sentence this entry would have been flattened to without a sink.</param>
+/// <remarks>
+/// The description travels with the artefact so a refusal can keep it verbatim and still be one sentence:
+/// the sink replaces, extends or returns it, and <see cref="McpContent"/> never has to guess the wording.
+/// </remarks>
+internal sealed record McpArtefact(
+    string Kind,
+    string MimeType,
+    string Base64,
+    int Ordinal,
+    string Description);
+
+/// <summary>
 /// Turns a server's <c>content[]</c> into text a model can read.
 /// </summary>
 /// <remarks>
@@ -24,6 +43,11 @@ public sealed record McpCallResult(bool IsError, string Text)
 /// knowing about, and a base64 blob pasted into the transcript is neither readable nor affordable. The
 /// descriptions name the type, the size and the location, which is what a developer needs to fetch the
 /// artefact by another route.
+/// <para>
+/// A caller that can make binaries durable passes a <c>save</c> delegate: an image entry then becomes
+/// whatever the sink says it became — a path and a size, or the description with the reason it was not
+/// saved. Nothing is ever dropped either way.
+/// </para>
 /// </remarks>
 internal static class McpContent
 {
@@ -33,7 +57,19 @@ internal static class McpContent
     /// <param name="result">The whole <c>result</c> object.</param>
     /// <param name="serverName">The server's prefix, used in the empty-case sentence.</param>
     /// <returns>The entries joined by a blank line, or a sentence saying the server sent nothing.</returns>
-    public static string Flatten(JsonElement result, string serverName)
+    public static string Flatten(JsonElement result, string serverName) => Flatten(result, serverName, save: null);
+
+    /// <summary>
+    /// Flattens the <c>content</c> member, letting a sink make the binary entries durable.
+    /// </summary>
+    /// <param name="result">The whole <c>result</c> object.</param>
+    /// <param name="serverName">The server's prefix, used in the empty-case sentence.</param>
+    /// <param name="save">
+    /// Turns a binary entry into the sentence that replaces its description, or <see langword="null"/> to
+    /// describe binaries exactly as <see cref="Flatten(JsonElement, string)"/> does.
+    /// </param>
+    /// <returns>The entries joined by a blank line, or a sentence saying the server sent nothing.</returns>
+    public static string Flatten(JsonElement result, string serverName, Func<McpArtefact, string>? save)
     {
         if (result.ValueKind != JsonValueKind.Object ||
             !result.TryGetProperty("content", out var content) ||
@@ -45,9 +81,10 @@ internal static class McpContent
         }
 
         var parts = new List<string>();
+        var ordinal = 0;
         foreach (var entry in content.EnumerateArray())
         {
-            var part = Describe(entry);
+            var part = Describe(entry, save, ref ordinal);
             if (!string.IsNullOrWhiteSpace(part))
             {
                 parts.Add(part);
@@ -59,7 +96,7 @@ internal static class McpContent
             : string.Join("\n\n", parts);
     }
 
-    private static string Describe(JsonElement entry)
+    private static string Describe(JsonElement entry, Func<McpArtefact, string>? save, ref int ordinal)
     {
         if (entry.ValueKind != JsonValueKind.Object)
         {
@@ -71,12 +108,37 @@ internal static class McpContent
         return type switch
         {
             "text" => String(entry, "text") ?? "[empty text]",
-            "image" or "audio" => Binary(type, entry),
-            "resource" => Resource(entry),
+            "image" => Saveable(type, entry, save, ref ordinal),
+            "audio" => Binary(type, entry),
+            "resource" => Resource(entry, save, ref ordinal),
             "resource_link" => Link(entry),
             null => "[an entry with no type]",
             _ => Unknown(type, entry),
         };
+    }
+
+    /// <summary>
+    /// Describes a <c>data</c>-carrying entry, offering an image to the sink when there is one.
+    /// </summary>
+    /// <param name="type">The entry type, which is the first word of the description.</param>
+    /// <param name="entry">The entry.</param>
+    /// <param name="save">The sink, or null when nothing can be written.</param>
+    /// <param name="ordinal">Counts the saveable entries of the call.</param>
+    /// <returns>The sink's sentence, or the description unchanged.</returns>
+    /// <remarks>
+    /// Only an <c>image/*</c> entry with data is offered: a screenshot is the reason this seam exists, and
+    /// audio is described because saving it would be a claim the client cannot keep. The ordinal advances
+    /// for every offered entry, saved or not, so the same answer names the same files on every call.
+    /// </remarks>
+    private static string Saveable(string type, JsonElement entry, Func<McpArtefact, string>? save, ref int ordinal)
+    {
+        if (save is null || !IsImage(String(entry, "mimeType")) || String(entry, "data") is not { } data)
+        {
+            return Binary(type, entry);
+        }
+
+        ordinal++;
+        return save(new McpArtefact(type, String(entry, "mimeType")!, data, ordinal, Binary(type, entry)));
     }
 
     private static string Binary(string type, JsonElement entry)
@@ -86,7 +148,7 @@ internal static class McpContent
         return string.Create(CultureInfo.InvariantCulture, $"[{type}: {mime} · {size}]");
     }
 
-    private static string Resource(JsonElement entry)
+    private static string Resource(JsonElement entry, Func<McpArtefact, string>? save, ref int ordinal)
     {
         if (!entry.TryGetProperty("resource", out var resource) || resource.ValueKind != JsonValueKind.Object)
         {
@@ -101,9 +163,19 @@ internal static class McpContent
             return string.Create(CultureInfo.InvariantCulture, $"[resource: {uri}]\n{text}");
         }
 
-        return String(resource, "blob") is { } blob
-            ? string.Create(CultureInfo.InvariantCulture, $"[resource: {uri} · {mime} · {DataSize(blob)}]")
-            : string.Create(CultureInfo.InvariantCulture, $"[resource: {uri} · {mime} · no content]");
+        if (String(resource, "blob") is not { } blob)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"[resource: {uri} · {mime} · no content]");
+        }
+
+        var description = string.Create(CultureInfo.InvariantCulture, $"[resource: {uri} · {mime} · {DataSize(blob)}]");
+        if (save is null || !IsImage(String(resource, "mimeType")))
+        {
+            return description;
+        }
+
+        ordinal++;
+        return save(new McpArtefact("resource", String(resource, "mimeType")!, blob, ordinal, description));
     }
 
     private static string Link(JsonElement entry)
@@ -124,6 +196,9 @@ internal static class McpContent
 
     private static string DataSize(string base64) =>
         string.Create(CultureInfo.InvariantCulture, $"{base64.Length} base64 characters");
+
+    private static bool IsImage(string? mimeType) =>
+        mimeType is not null && mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
     private static string? String(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SharpCoreAgent.Languages.FSharp</RootNamespace>
+    <AssemblyName>SharpCoreAgent.Languages.FSharp</AssemblyName>
+    <Description>F# code intelligence behind the Domain's language-neutral ports: diagnostics, compiler-bound symbol uses and signature help, answered by FSharp.Compiler.Service in-process. The only assembly in this repository that names a language server.</Description>
+  </PropertyGroup>
+
+  <!--
+    Domain only. Nothing here knows about tools, the agent loop or the workspace's option object: the adapter is
+    handed a Workspace and answers questions about it, which is what keeps a second language from having to learn
+    about the first.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The version is in Directory.Packages.props, like every other package in the repository. This is not a build
+      tool: it is the compiler's front end, linked in, so asking a question starts no process and reads no output.
+    -->
+    <PackageReference Include="FSharp.Compiler.Service" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

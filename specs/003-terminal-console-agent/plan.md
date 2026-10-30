@@ -106,7 +106,7 @@ says how many messages were dropped, so a later answer that references them is e
 | P4-lite | model aliases | done |
 | P4-full | catalogue refresh against live provider docs, `/cost`, 401/5xx fallback | `/cost` and the fallback are done in `004`; the catalogue refresh (and whether the defaults move) is `004` T015/T016/T017 |
 | P3-full | `--resume`, git checkpoints, `/undo` | not started |
-| P5 | MCP client (opt-in) | not started |
+| P5 | MCP client (opt-in) | done in `009` (`--mcp <command>`, tools registered through the same `IToolRegistry`, approval inherited from `ToolSafety` — `tasks.md` T040), and `010` made the screenshots such a server returns into workspace files |
 
 ## Rollout
 

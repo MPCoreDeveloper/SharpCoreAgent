@@ -297,18 +297,11 @@ public sealed class RunShellCommandTool : ITool
         startInfo.ArgumentList.Add(_shellCommandFlag);
         startInfo.ArgumentList.Add(command);
 
-        foreach (var name in startInfo.Environment.Keys.Where(IsSecretName).ToArray())
-        {
-            startInfo.Environment.Remove(name);
-        }
+        // The filter lives beside the tool rather than inside it: the verifier starts a process too, and a
+        // credential rule that exists twice is a credential rule that will be fixed once.
+        ChildEnvironment.RemoveSecrets(startInfo);
 
         return startInfo;
     }
-
-    private static bool IsSecretName(string name) =>
-        name.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase) ||
-        name.EndsWith("_TOKEN", StringComparison.OrdinalIgnoreCase) ||
-        name.EndsWith("_SECRET", StringComparison.OrdinalIgnoreCase) ||
-        name.EndsWith("_PASSWORD", StringComparison.OrdinalIgnoreCase);
 }
 

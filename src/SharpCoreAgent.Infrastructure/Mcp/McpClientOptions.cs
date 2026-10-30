@@ -52,6 +52,21 @@ public sealed record McpClientOptions
     /// <summary>Gets how many stderr lines are remembered for the verbose log. Default 200.</summary>
     public int MaxStderrLines { get; init; } = 200;
 
+    /// <summary>Gets the largest decoded artefact one server answer may save. Default 8 MiB.</summary>
+    /// <remarks>
+    /// Binary content is the one part of a <c>content[]</c> that can be arbitrarily large, so the ceiling is
+    /// measured on the bytes rather than on the base64: an answer is refused before it is decoded, which is
+    /// the only place the memory can still be saved. A full-page screenshot of a dense page is a few MiB.
+    /// </remarks>
+    public long MaxArtefactBytes { get; init; } = 8L * 1024 * 1024;
+
+    /// <summary>Gets how many artefacts one call may save. Default eight.</summary>
+    /// <remarks>
+    /// A screenshot, a snapshot and a handful of images is a normal answer; a hundred is a server that
+    /// misunderstood the tool. The remainder is described rather than dropped, so nothing is silent.
+    /// </remarks>
+    public int MaxArtefactsPerCall { get; init; } = 8;
+
     /// <summary>
     /// Checks every ceiling and returns this instance so it can be used inline.
     /// </summary>
@@ -74,6 +89,8 @@ public sealed record McpClientOptions
         Require(MaxToolPages, 1, 100, nameof(MaxToolPages));
         Require(MaxResultChars, 1_000, 1_000_000, nameof(MaxResultChars));
         Require(MaxStderrLines, 1, 10_000, nameof(MaxStderrLines));
+        Require(MaxArtefactBytes, 1024, 64L * 1024 * 1024, nameof(MaxArtefactBytes));
+        Require(MaxArtefactsPerCall, 1, 64, nameof(MaxArtefactsPerCall));
         return this;
     }
 
@@ -101,6 +118,14 @@ public sealed record McpClientOptions
     }
 
     private static void Require(int value, int minimum, int maximum, string name)
+    {
+        if (value < minimum || value > maximum)
+        {
+            throw new ArgumentOutOfRangeException(name, value, $"must be between {minimum} and {maximum}");
+        }
+    }
+
+    private static void Require(long value, long minimum, long maximum, string name)
     {
         if (value < minimum || value > maximum)
         {

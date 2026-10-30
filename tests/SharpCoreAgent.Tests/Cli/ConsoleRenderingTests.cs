@@ -602,11 +602,52 @@ public sealed class ConsoleRenderingTests
         Assert.Equal("hello", output.ToString());
     }
 
+    [Fact]
+    public async Task AnUnverifiedCompletionSaysSoUnderTheOutcome()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false);
+
+        await observer.OnEventAsync(new TurnFinished(Report(unverified: true)), TestContext.Current.CancellationToken);
+
+        // The developer reads "✻ completed" and the sentence that says what the completion is worth, in that order.
+        var text = error.ToString();
+        Assert.Contains("✻ completed", text, StringComparison.Ordinal);
+        Assert.Contains("no passing dotnet_verify ran", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVerifiedCompletionDoesNotCarryTheWarning()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: false, quiet: false);
+
+        await observer.OnEventAsync(new TurnFinished(Report()), TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain("unverified", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheJsonReportCarriesTheUnverifiedFlag()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var observer = new ConsoleObserver(output, error, json: true, quiet: false);
+
+        await observer.OnEventAsync(new TurnFinished(Report(unverified: true)), TestContext.Current.CancellationToken);
+
+        using var report = JsonDocument.Parse(output.ToString().Trim());
+        Assert.True(report.RootElement.GetProperty("unverified").GetBoolean());
+    }
+
     private static AgentReport Report(
         AgentOutcome outcome = AgentOutcome.Completed,
         string? finalText = null,
         string? detail = null,
-        TokenUsage? usage = null) =>
+        TokenUsage? usage = null,
+        bool unverified = false) =>
         new()
         {
             Outcome = outcome,
@@ -615,5 +656,6 @@ public sealed class ConsoleRenderingTests
             Usage = usage ?? new TokenUsage(10, 5),
             Iterations = 1,
             Detail = detail,
+            IsUnverified = unverified,
         };
 }

@@ -148,6 +148,30 @@ public sealed class ToolArgumentReader : IDisposable
     }
 
     /// <summary>
+    /// Reads a required integer, rejecting a value outside its documented range.
+    /// </summary>
+    /// <param name="name">The parameter name.</param>
+    /// <param name="minimum">The smallest accepted value.</param>
+    /// <param name="maximum">The largest accepted value.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="ToolArgumentException">
+    /// The parameter is missing, is not an integer, or is out of range.
+    /// </exception>
+    /// <remarks>
+    /// A required integer has no honest fallback, unlike <see cref="GetOptionalInt"/>: a position whose line was never
+    /// given cannot be answered by guessing line one, so the model is told which argument it left out.
+    /// </remarks>
+    public int GetRequiredInt(string name, int minimum = int.MinValue, int maximum = int.MaxValue)
+    {
+        if (!TryGetValue(name, out _))
+        {
+            throw new ToolArgumentException(_toolName, name, "is required");
+        }
+
+        return GetOptionalInt(name, minimum, minimum, maximum);
+    }
+
+    /// <summary>
     /// Reads an optional boolean.
     /// </summary>
     /// <param name="name">The parameter name.</param>

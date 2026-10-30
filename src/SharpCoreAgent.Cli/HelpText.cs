@@ -44,6 +44,7 @@ internal static class HelpText
           --workspace <path>       all         current directory
           --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
           --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
+          --fsharp                 run, chat   off         file_diagnostics, uses_at and signature_at may ask the F# type checker; off otherwise
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --client <name>          mcp config  —           claude, vscode or codex: whose configuration gets the block
@@ -78,8 +79,10 @@ internal static class HelpText
           stdout, and offers the tools that program lists as <server>_<tool>, where <server> is the
           command's own name. The command runs through the platform shell, so npx, uvx and deno work as
           typed. A tool the server marks read-only runs without asking; everything else is approved like
-          a write. The servers are started before the first turn and killed when the process exits, and
-          none of this is a setting: with no --mcp there is no client in the process at all.
+          a write. A screenshot a server returns is written to .sharpcoreagent/artifacts/ and the answer
+          names the file and its size, so the page the developer asked about is one they can open.
+          The servers are started before the first turn and killed when the process exits, and none of
+          this is a setting: with no --mcp there is no client in the process at all.
 
         Config
           sharpcoreagent config                     every setting, its value and its source

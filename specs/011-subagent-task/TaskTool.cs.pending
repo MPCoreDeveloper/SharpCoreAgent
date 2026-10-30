@@ -1,0 +1,62 @@
+using System.Globalization;
+using SharpCoreAgent.Application;
+using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Conversation;
+using SharpCoreAgent.Domain.Tools;
+
+namespace SharpCoreAgent.Infrastructure.Tools;
+
+/// <summary>
+/// Runs one self-contained task in a sub-agent with its own transcript and returns that sub-agent's report.
+/// </summary>
+/// <remarks>
+/// The point is context, not parallelism. A broad investigation can cost fifteen tool calls and thirty
+/// thousand tokens of intermediate output that the main conversation will never refer to again; a
+/// sub-agent burns that context in its own window and hands back the answer. The price is that it starts
+/// blind: it sees the instruction and nothing else, which is why the tool's description tells the model to
+/// put every fact the child needs into the prompt.
+/// <para>
+/// Two invariants hold by construction. The child registry is this registry minus <c>task</c>, so delegation
+/// cannot recurse. And the child never prompts: it inherits <see cref="ApprovalMode.AllowAll"/> only when the
+/// conversation already allows everything, and is <see cref="ApprovalMode.ReadOnly"/> otherwise, because a
+/// modal question raised from inside a tool call would arrive while the developer is watching the parent turn
+/// and has no idea which of two nested turns is asking.
+/// </para>
+/// </remarks>
+public sealed class TaskTool : ITool
+{
+    /// <summary>Gets the tool name.</summary>
+    public const string Name = "task";
+
+    /// <summary>Gets the most iterations a sub-agent may use, whatever the caller asks for.</summary>
+    public const int MaxSubAgentIterations = 24;
+
+    private const int DefaultSubAgentIterations = 12;
+
+    private const string Schema =
+        """{"type":"object","properties":{"description":{"type":"string","description":"Short label for the work, shown in the transcript and in an approval prompt: 'find every caller of PriceCalculator'."},"prompt":{"type":"string","description":"The complete instruction. The sub-agent sees this and nothing else of this conversation, so state the goal, the paths you already know, and what done looks like."},"max_iterations":{"type":"integer","minimum":1,"maximum":24,"description":"Round trips the sub-agent may take before it must report. Defaults to 12."}},"required":["prompt"],"additionalProperties":false}""";
+
+    private readonly IChatModelResolver _models;
+    private readonly IToolRegistry _tools;
+    private readonly AgentOptions _options;
+
+    /// <summary>
+    /// Creates the delegation tool.
+    /// </summary>
+    /// <param name="models">Resolves the conversation's model for the child turn.</param>
+    /// <param name="tools">Every tool this build knows about; the sub-agent gets all of them except this one.</param>
+    /// <param name="options">The budgets the child inherits, narrowed to the sub-agent's iteration ceiling.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    public TaskTool(IChatModelResolver models, IEnumerable<ITool> tools, AgentOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(models);
+        ArgumentNullException.ThrowIfNull(tools);
+        ArgumentNullException.ThrowIfNull(options);
+
+        _models = models;
+        _options = options.Validate();
+
+        // Filtered by name rather than trusted to be absent: a host that registers this tool as an ITool in
+        // its own container must still not hand the child a way to delegate again.
+        _tools = new ToolRegistry(tools.Where(tool => !string.Equals(tool.Definition.Name, Name, StringComparison.Ordinal)));
+    }

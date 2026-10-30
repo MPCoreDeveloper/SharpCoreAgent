@@ -11,6 +11,12 @@
     <ProjectReference Include="..\SharpCoreAgent.Application\SharpCoreAgent.Application.csproj" />
     <ProjectReference Include="..\SharpCoreAgent.Infrastructure\SharpCoreAgent.Infrastructure.csproj" />
     <ProjectReference Include="..\SharpCoreAgent.Indexing\SharpCoreAgent.Indexing.csproj" />
+    <!--
+      The F# adapter, referenced here and nowhere else: the composition root is the one place that knows which concrete
+      adapter satisfies which port, so the tools in Infrastructure keep taking ports and the language project keeps
+      knowing nothing about tools.
+    -->
+    <ProjectReference Include="..\SharpCoreAgent.Languages.FSharp\SharpCoreAgent.Languages.FSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

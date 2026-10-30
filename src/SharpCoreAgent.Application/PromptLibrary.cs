@@ -22,15 +22,16 @@ public static class PromptLibrary
         2. Prefer replace_in_file over write_file: replace the fragment you read, and put the fragments you already know into one call's edits array instead of one call each. Never rewrite a file to change three lines.
         3. Every path is relative to the workspace root. Read only the roots list_roots reports; a path outside them is rejected, so do not try.
         4. Call one tool when the next step depends on its result; batch only calls that are independent.
-        5. After changing code, verify it: run the project's build or tests with run_shell and read the output. Give a slow build a wait_seconds it can finish in, and poll a command that outlived it with shell_output instead of running it again.
+        5. After changing code, verify it: call dotnet_verify with kind build (or kind test) and read the report. run_shell is for the commands dotnet_verify does not cover, never for proving a .NET edit. Give a slow command a wait_seconds it can finish in, and poll a command that outlived it with shell_output instead of running it again.
         6. If a tool returns an error, read it. Fix the arguments or change approach; do not repeat the same call.
         7. Stop when the task is done. Do not keep exploring to look thorough.
+        8. Delegate one broad investigation with task instead of running it here: a sub-agent reads the prompt you give it and nothing else of this conversation, works in its own transcript and answers with one message, so the listings and the grep hits never enter this one. Put the goal, the paths you already know and what done looks like into the prompt; the sub-agent cannot delegate further, and may write only when this session already allows every tool without asking. Do the edits yourself — a delegated write still needs your dotnet_verify before the turn may end.
 
         Reporting:
         - Your final message is read by a developer in a terminal. Say what you changed, where, and how you verified it.
         - Name files by their workspace-relative path and commands exactly as you ran them.
         - If you could not finish, say what blocked you and what you would try next.
-        - Never claim a command succeeded unless you saw its output.
+        - Never claim a build or a test passed unless a dotnet_verify result said so. A turn that edited .NET source without one is marked unverified, and the developer reads that next to your answer.
         """;
 
     /// <summary>
@@ -91,7 +92,7 @@ public static class PromptLibrary
 
         How to work:
         1. Read before you write, and prefer replace_in_file over write_file.
-        2. Verify what you change with run_shell, and read the output before claiming it passed.
+        2. Verify what you change with dotnet_verify, and read the report before claiming it passed.
         3. Stop when the task is done. Do not explore beyond it.
 
         Your final message is the entire result: the caller sees it verbatim and nothing else. Say what you found or changed, name files by their workspace-relative path, and say plainly if you could not finish.
@@ -136,16 +137,58 @@ public static class PromptLibrary
         """;
 
     /// <summary>
+    /// Gets the rule that governs asking the language service about a file.
+    /// </summary>
+    /// <remarks>
+    /// Shipped only when <c>--fsharp</c> registered the three tools, for the same reason <see cref="IndexRule"/> is: a
+    /// rule whose tool is absent teaches the model that instructions are approximate. Three things have to be said
+    /// that no other rule covers — the position convention, because a model that guesses the column gets
+    /// <c>FSH003</c>; that a clean file is not a passing build, because the loop's verification gate is
+    /// <c>dotnet_verify</c>; and what to do with <c>FSH002</c>, which is the one failure the model can fix itself.
+    /// </remarks>
+    public const string FSharpRule =
+        """
+        Using the F# type checker:
+        - Three tools ask the language service about F# source directly, without a build: file_diagnostics lists what the compiler says about one file, uses_at finds every place the compiler bound a symbol to one declaration, and signature_at shows what a callable takes at a call site.
+        - Positions are a 1-based line and a 0-based column, and the column must be inside the name: the diagnostic a tool printed carries both, so copy them instead of counting. A position outside the name is how you get FSH003 back.
+        - Prefer file_diagnostics over a build while you iterate: it answers in milliseconds once the project is loaded, and it reports the same ids the compiler does. A clean file still has to be proved by dotnet_verify before you answer.
+        - FSH002 means the project has not been restored, so run dotnet_verify with kind build once and ask again. FSH001 means the workspace holds no .fsproj, and LANG001 means the path is not a language this build can read: use find_references or dotnet_verify for those files rather than retrying.
+        """;
+
+    /// <summary>
+    /// Gets the sentence the turn loop appends when a .NET edit has not been verified.
+    /// </summary>
+    /// <remarks>
+    /// Not part of the system prompt: the instruction only lands if it arrives after the tool result that
+    /// earned it, and a turn that edited no .NET source has no business reading it. Appending it to the
+    /// transcript also means a developer who resumes the session sees what the harness asked for.
+    /// </remarks>
+    public const string VerifyNudge =
+        """
+        You changed .NET source, and dotnet_verify has not passed since that change. Call dotnet_verify with kind build (or kind test) now, read the report, and fix anything it names before you answer. If the build cannot pass in this turn, say what it reported instead of saying the change works.
+        """;
+
+    /// <summary>
     /// Gets the system prompt for one host.
     /// </summary>
     /// <param name="indexAvailable">Whether the host registered a code index and the five tools that read it.</param>
     /// <param name="webAvailable">Whether the host registered <c>fetch_url</c> for this process.</param>
     /// <param name="mcpAvailable">Whether the host started at least one MCP server for this invocation.</param>
+    /// <param name="fsharpAvailable">Whether the host registered the three F# code-intelligence tools.</param>
     /// <returns>
-    /// The shipped prompt, followed by <see cref="IndexRule"/>, <see cref="WebRule"/> and <see cref="McpRule"/>
-    /// for the capabilities the host actually has.
+    /// The shipped prompt, followed by <see cref="IndexRule"/>, <see cref="WebRule"/>, <see cref="McpRule"/> and
+    /// <see cref="FSharpRule"/> for the capabilities the host actually has.
     /// </returns>
-    public static string SystemPromptFor(bool indexAvailable, bool webAvailable = false, bool mcpAvailable = false)
+    /// <remarks>
+    /// <c>dotnet_verify</c> has no switch here, unlike the index and the network: the composition root registers
+    /// it unconditionally, so the rule in the shipped prompt always has its tool. A new capability that is not
+    /// unconditional belongs in this method, not in the prompt text.
+    /// </remarks>
+    public static string SystemPromptFor(
+        bool indexAvailable,
+        bool webAvailable = false,
+        bool mcpAvailable = false,
+        bool fsharpAvailable = false)
     {
         var prompt = SystemPrompt;
 
@@ -159,6 +202,11 @@ public static class PromptLibrary
             prompt = string.Concat(prompt, "\n\n", WebRule);
         }
 
-        return mcpAvailable ? string.Concat(prompt, "\n\n", McpRule) : prompt;
+        if (mcpAvailable)
+        {
+            prompt = string.Concat(prompt, "\n\n", McpRule);
+        }
+
+        return fsharpAvailable ? string.Concat(prompt, "\n\n", FSharpRule) : prompt;
     }
 }

@@ -107,6 +107,8 @@ Acceptance:
   not a JSON object is a failure before anything is sent.
 - **FR-009** The result is the flattened `content[]` — text concatenated with one blank line between
   entries, every other type described — bounded at 64 000 characters, then by the loop's own budget.
+  Amended by `010` for image entries, which are now described **and saved**: see
+  [`specs/010-browser/contracts/mcp-content.md`](../010-browser/contracts/mcp-content.md).
 - **FR-010** `isError: true` is a `ToolResult` with `IsError` set carrying the same flattened text; a
   JSON-RPC error object is a failure naming the code and message.
 - **FR-011** A control request has 20 seconds, a tool call 120; a timeout is a failure naming the

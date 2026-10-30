@@ -181,6 +181,16 @@ internal sealed record CliOptions
     public bool Web { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether this invocation may ask the F# type checker about the workspace.
+    /// </summary>
+    /// <remarks>
+    /// <c>--fsharp</c>, and nothing else: not a settings key, not an environment variable. The checker's first answer
+    /// loads a project's references, so the capability is turned on for the workspace a developer is working in and
+    /// gone with the process — the same reasoning as <see cref="Web"/>.
+    /// </remarks>
+    public bool FSharp { get; init; }
+
+    /// <summary>
     /// Gets the hosts this invocation may read even though their addresses are refused, in the order they were named.
     /// </summary>
     /// <remarks>
@@ -320,6 +330,7 @@ internal sealed record CliOptions
         AdditionalRoots = AdditionalRoots,
         WebAccessEnabled = Web,
         WebAllowedHosts = WebAllowedHosts,
+        FSharpToolsEnabled = FSharp,
         McpServers = McpServers,
         Approval = Approval,
         MaxIterations = MaxIterations,
@@ -1520,6 +1531,9 @@ internal sealed record CliOptions
 
             case "--web":
                 return options with { Web = true };
+
+            case "--fsharp":
+                return options with { FSharp = true };
 
             case "--web-allow":
                 return options with

@@ -64,6 +64,20 @@
     <PackageVersion Include="SharpCoreDB.HybridSearch" Version="$(SharpCoreDBVersion)" />
 
     <!--
+      The F# compiler, as a library (spec 015).
+
+      FSharp.Compiler.Service is the type checker the F# SDK itself ships; referencing it lets the agent ask
+      "does this file compile, where is this symbol used, what does this call take" without starting a compiler,
+      running MSBuild or restoring anything. That is the whole reason F# gets code intelligence before C# does:
+      the checker is an in-process library with a documented API, not a build server to wrap.
+
+      43.12.403 is the release that matches the F# 9 compiler in the pinned SDK, so diagnostics in the agent and
+      diagnostics from `dotnet build` agree about both messages and ids. It is netstandard2.0 and brings
+      FSharp.Core transitively, which is why the languages project declares no second F# dependency.
+    -->
+    <PackageVersion Include="FSharp.Compiler.Service" Version="43.12.403" />
+
+    <!--
       The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
       PrivateAssets="all" keeps it out of every package and out of a consumer's build.
     -->

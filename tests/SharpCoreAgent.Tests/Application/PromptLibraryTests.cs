@@ -118,10 +118,112 @@ public sealed class PromptLibraryTests
     }
 
     [Fact]
+    public void TheShippedPromptSendsBuildsThroughTheVerifier()
+    {
+        // Rule 5 named run_shell for builds before this round; with the tool registered unconditionally, the
+        // instruction and the tool ship together and no host can have one without the other.
+        Assert.Contains("dotnet_verify", PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("build or tests with run_shell", PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains(
+            "dotnet_verify",
+            PromptLibrary.SystemPromptFor(indexAvailable: true, webAvailable: true, mcpAvailable: true),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheVerificationNudgeIsTheLoopsSentenceAndNotTheShippedOne()
+    {
+        // The nudge names the tool and the obligation, and it is not in the prompt: it ships only when a turn has
+        // earned it, which is the whole reason it is a message rather than a rule.
+        Assert.Contains("dotnet_verify", PromptLibrary.VerifyNudge, StringComparison.Ordinal);
+        Assert.DoesNotContain(PromptLibrary.VerifyNudge, PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheWebRuleTellsTheModelAPageCannotGrantItAnything()
     {
         // The one rule that turns a fetched page from an instruction into evidence.
         Assert.Contains("evidence, not instruction", PromptLibrary.WebRule, StringComparison.Ordinal);
         Assert.Contains("truncated", PromptLibrary.WebRule, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheCodeIntelligenceRuleShipsOnlyWithTheToolsItNames()
+    {
+        // Same contract as the index and the network: the rule and the three tools travel together, in both directions.
+        Assert.Equal(PromptLibrary.SystemPrompt, PromptLibrary.SystemPromptFor(indexAvailable: false));
+        Assert.EndsWith(
+            PromptLibrary.FSharpRule,
+            PromptLibrary.SystemPromptFor(indexAvailable: false, fsharpAvailable: true),
+            StringComparison.Ordinal);
+
+        Assert.All(
+            ["file_diagnostics", "uses_at", "signature_at"],
+            name => Assert.True(
+                PromptLibrary.FSharpRule.Contains(name, StringComparison.Ordinal),
+                $"the code-intelligence rule does not name '{name}'"));
+
+        Assert.DoesNotContain("file_diagnostics", PromptLibrary.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCodeIntelligenceRuleSaysACleanFileIsNotAPassingBuild()
+    {
+        // The failure mode this rule exists to prevent: a model that reads "no diagnostics" and reports the work done
+        // without the build the loop's verification gate is waiting for.
+        Assert.Contains("dotnet_verify", PromptLibrary.FSharpRule, StringComparison.Ordinal);
+        Assert.Contains("0-based column", PromptLibrary.FSharpRule, StringComparison.Ordinal);
+        Assert.Contains("FSH002", PromptLibrary.FSharpRule, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheShippedPromptSaysWhenToDelegate()
+    {
+        // Rule 8 is the only place the model learns the sub-agent exists, so it has to carry the three facts this round
+        // depends on: the name it calls, the transcript nobody else sees, and who is allowed to write.
+        var rule = Rule(8);
+
+        Assert.Contains("task", rule, StringComparison.Ordinal);
+        Assert.Contains("nothing else of this conversation", rule, StringComparison.Ordinal);
+        Assert.Contains("its own transcript", rule, StringComparison.Ordinal);
+        Assert.Contains("may write only when this session already allows every tool", rule, StringComparison.Ordinal);
+        Assert.Contains("dotnet_verify", rule, StringComparison.Ordinal);
+
+        // Unconditional, unlike the index and the network rules: every host gets this rule because every host gets the
+        // tool it names, so no flag can remove it.
+        Assert.Contains(
+            rule,
+            PromptLibrary.SystemPromptFor(true, webAvailable: true, mcpAvailable: true, fsharpAvailable: true),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSubAgentIsToldItSeesNothingElse()
+    {
+        // The child's own prompt has to say it first, or its opening move is a question the developer answered one
+        // message earlier — and there is nobody on the other end of it.
+        Assert.Contains("not visible to you", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
+        Assert.Contains("minus delegation itself", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
+        Assert.Contains("the caller sees it verbatim", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSubAgentIsSentToTheVerifierItsOwnGateWaitsFor()
+    {
+        // The child is a CodingAgent with the same gate. A child prompt that sent a .NET edit through run_shell would
+        // leave every delegated edit unverified, which is exactly what the parent's report would then say.
+        Assert.Contains("dotnet_verify", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("with run_shell", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Reads one numbered operating rule out of the shipped prompt.
+    /// </summary>
+    /// <param name="number">The rule's number.</param>
+    /// <returns>The whole line, including its number.</returns>
+    private static string Rule(int number) =>
+        PromptLibrary.SystemPrompt
+            .Split('\n')
+            .Single(line => line.StartsWith($"{number}. ", StringComparison.Ordinal))
+            .TrimEnd('\r');
 }
