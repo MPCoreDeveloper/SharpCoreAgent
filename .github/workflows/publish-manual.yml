@@ -2,10 +2,10 @@ name: publish-manual
 
 # A build someone asked for, on a run they can point at: dispatch it and download the binary.
 #
-# Manual by design. Nothing here pushes a package, publishes a release or touches a feed — the CLI is
-# `IsPackable=false`, there is no packaging story yet, and inventing a release process inside a workflow is
-# how an unreviewed upload happens. The workflow stops at "here is a framework-dependent build for your
-# platform, zipped as an artifact".
+# Manual by design. The tool package and the feed belong to `release.yml`, which packs the CLI, proves the
+# package installs, and (only with a key, only on a published release) pushes it. This workflow stays the
+# narrower thing it always was: a framework-dependent build for your platform, zipped as an artifact, with
+# nothing pushed and no feed touched.
 #
 # Framework-dependent (~4 MiB) rather than self-contained (~70 MiB per platform): the .NET 11 runtime is a
 # prerequisite of this product anyway, and a small artifact stays downloadable. Each platform publishes on

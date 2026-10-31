@@ -72,3 +72,24 @@ jobs:
         # suite directly — no VSTest adapter, no trx conversion.
         run: dotnet test tests/SharpCoreAgent.Tests/SharpCoreAgent.Tests.csproj -c Release --no-build
 
+      - name: Pack the tool
+        # The CLI is also the .NET tool `sharpcoreagent`; a package that will not pack is a green build
+        # that cannot be installed, so the gate produces one here.
+        run: dotnet pack src/SharpCoreAgent.Cli/SharpCoreAgent.Cli.csproj -c Release -o artifacts/nupkg
+
+      - name: Install the tool and run it (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Installs from the package just produced and proves the command resolves and starts from the
+        # tool path — the one thing `dotnet build` does not tell you about a tool.
+        run: |
+          dotnet tool install SharpCoreAgent --tool-path ./artifacts/toolprobe --add-source ./artifacts/nupkg --ignore-failed-sources
+          ./artifacts/toolprobe/sharpcoreagent.exe --version
+
+      - name: Install the tool and run it (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          dotnet tool install SharpCoreAgent --tool-path ./artifacts/toolprobe --add-source ./artifacts/nupkg --ignore-failed-sources
+          ./artifacts/toolprobe/sharpcoreagent --version
+

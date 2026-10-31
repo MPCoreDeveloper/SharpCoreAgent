@@ -1,0 +1,206 @@
+name: release
+
+# A published release is the reviewed act; this workflow is what follows it.
+#
+# It builds and tests the tag, packs the CLI as the .NET tool `sharpcoreagent`, proves the package
+# installs and runs, pushes it to nuget.org when a key is configured, and attaches both the `.nupkg`
+# and one framework-dependent binary per platform to the GitHub release — the fallback for a machine
+# that would rather install from GitHub than from nuget.org.
+#
+# `workflow_dispatch` runs the same steps with nothing to attach to, so the package can be built and
+# inspected before anyone tags anything. Nothing reaches a feed without NUGET_API_KEY.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (defaults to the tag, or to the committed Version on a dispatch)
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  pack:
+    name: pack and publish the tool
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # Same pin as ci.yml, sonar.yml and publish-manual.yml: a package built by a different patch
+          # than CI tested is exactly the difference nobody remembers by the time it matters.
+          dotnet-version: '11.0.100-rc.2.26504.105'
+          dotnet-quality: 'preview'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Resolve the version
+        id: version
+        shell: bash
+        # The tag wins, an explicit input next, and the committed Version last, so a dispatch on a
+        # branch still produces a package whose number matches what the assembly would print.
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version="${{ github.event.release.tag_name }}"
+            version="${version#v}"
+          fi
+          if [ -z "$version" ]; then
+            version="$(dotnet msbuild src/SharpCoreAgent.Cli/SharpCoreAgent.Cli.csproj -getProperty:Version)"
+          fi
+          if [ -z "$version" ]; then
+            echo "::error::no version resolved; pass the version input or publish a tag"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "packaging $version"
+
+      - name: Restore
+        run: dotnet restore SharpCoreAgent.slnx
+
+      - name: Build
+        run: dotnet build SharpCoreAgent.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/SharpCoreAgent.Tests/SharpCoreAgent.Tests.csproj -c Release --no-build
+
+      - name: Pack
+        # No `--no-build`: a tool package is assembled from a publish layout that pack produces itself.
+        run: >
+          dotnet pack src/SharpCoreAgent.Cli/SharpCoreAgent.Cli.csproj
+          -c Release
+          -o artifacts/nupkg
+          -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Install the package and run it
+        shell: bash
+        # The artifact is only worth publishing if it installs and starts: `--version` prints
+        # `Ariadne <version> (SharpCoreAgent)` and exits 0 without a provider, a network or an index.
+        run: |
+          dotnet tool install SharpCoreAgent --tool-path ./artifacts/toolprobe --add-source ./artifacts/nupkg --ignore-failed-sources
+          ./artifacts/toolprobe/sharpcoreagent --version
+
+      - name: Check for a nuget.org key
+        id: nuget
+        # `secrets` is not an `if` context, and a job-level env would hand the key to every build step in
+        # the job. One step reads it, publishes a boolean, and the push decides on that.
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -n "$NUGET_API_KEY" ]; then
+            echo "can_push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_push=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NUGET_API_KEY is not set; the package is built and attached, not pushed"
+          fi
+
+      - name: Push to nuget.org
+        if: ${{ github.event_name == 'release' && steps.nuget.outputs.can_push == 'true' }}
+        env:
+          # On the environment, not the command line: an api key in argv is visible to every process
+          # that can read the process list.
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push artifacts/nupkg/*.nupkg
+          --api-key "$NUGET_API_KEY"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Attach the package to the release
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/nupkg/*.nupkg --clobber
+
+      - name: Keep the package as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharpcoreagent-nupkg-${{ steps.version.outputs.version }}
+          path: artifacts/nupkg/
+          if-no-files-found: error
+          retention-days: 14
+
+  binaries:
+    name: binaries ${{ matrix.rid }}
+    needs: pack
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            exe: sharpcoreagent.exe
+          - rid: linux-x64
+            os: ubuntu-latest
+            exe: sharpcoreagent
+          - rid: osx-arm64
+            os: macOS-latest
+            exe: sharpcoreagent
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.2.26504.105'
+          dotnet-quality: 'preview'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Publish
+        run: >
+          dotnet publish src/SharpCoreAgent.Cli
+          -c Release
+          -r ${{ matrix.rid }}
+          --self-contained false
+          -p:Version=${{ needs.pack.outputs.version }}
+          -o out
+
+      - name: Run it
+        shell: bash
+        run: ./out/${{ matrix.exe }} --version
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path out/* -DestinationPath "sharpcoreagent-${{ matrix.rid }}-${{ needs.pack.outputs.version }}.zip"
+
+      - name: Zip (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: cd out && zip -r "../sharpcoreagent-${{ matrix.rid }}-${{ needs.pack.outputs.version }}.zip" ./*
+
+      - name: Attach the binaries to the release
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release upload "${{ github.event.release.tag_name }}" "sharpcoreagent-${{ matrix.rid }}-${{ needs.pack.outputs.version }}.zip" --clobber

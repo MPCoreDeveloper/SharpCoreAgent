@@ -69,7 +69,47 @@ until an SDK that supports it is installed, targeting `net12.0` fails on its own
 The language level is C# 15 (`LangVersion=preview`) and the only place that is configured is
 `src/Directory.Build.props`.
 
-## Quickstart
+## Install
+
+`sharpcoreagent` is a .NET tool: one framework-dependent package and no per-platform binaries, so the
+same install command works on Windows, Linux and macOS. It needs the .NET 11 SDK or runtime named in
+*Requirements* and nothing else.
+
+```powershell
+dotnet tool install --global sharpcoreagent
+```
+
+That puts `sharpcoreagent` on your `PATH`; open a new terminal so the shell picks it up. Run it from a
+repository root and that directory is the workspace — the agent reads and edits the repository it was
+called from, with no project file to point at:
+
+```powershell
+cd C:\path\to\your\repository
+sharpcoreagent                                 # an interactive session in this directory
+sharpcoreagent run "summarise what changed in src" --provider deepseek
+```
+
+`--workspace <path>` names a different root for one invocation, and `--add-root` attaches a second
+repository read-only.
+
+### Install from a GitHub release
+
+Every [release](https://github.com/MPCoreDeveloper/SharpCoreAgent/releases) carries the same `.nupkg`
+and a framework-dependent binary per platform (`win-x64`, `linux-x64`, `osx-arm64`), for a machine that
+would rather not use nuget.org. Download the `.nupkg` and install from the folder that holds it:
+
+```powershell
+dotnet tool install --global sharpcoreagent --add-source C:\path\to\downloads
+```
+
+### Update and remove
+
+```powershell
+dotnet tool update --global sharpcoreagent
+dotnet tool uninstall --global sharpcoreagent
+```
+
+## Quickstart from source
 
 ```powershell
 git clone https://github.com/MPCoreDeveloper/SharpCoreAgent.git
@@ -200,6 +240,7 @@ keep working on the file that needs repairing.
 | `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
 | `--web` | run, chat | off — `fetch_url` may read http and https pages; the network is off otherwise |
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
+| `--fsharp` | run, chat | off — `file_diagnostics`, `uses_at` and `signature_at` may ask the F# type checker; off otherwise |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--client <name>` | mcp config | none — `claude`, `vscode` or `codex`: whose configuration the printed block is for |
 | `--approval <mode>` | run, chat | `ask` |

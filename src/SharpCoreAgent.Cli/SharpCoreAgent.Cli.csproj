@@ -6,7 +6,15 @@
     <AssemblyName>sharpcoreagent</AssemblyName>
     <Description>The command line: argument parsing, console rendering, approval prompts and exit codes.</Description>
     <!-- The process is the deliverable; nothing references it, so it never needs an API snapshot. -->
-    <IsPackable>false</IsPackable>
+    <!--
+      It is still a package: the .NET tool is how the process reaches a machine. `dotnet tool install -g
+      sharpcoreagent` puts the command on PATH on Windows, Linux and macOS from one framework-dependent
+      package (no per-RID binaries), and the command name is the one every usage string already prints.
+    -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sharpcoreagent</ToolCommandName>
+    <PackageId>SharpCoreAgent</PackageId>
+    <PackageDescription>A terminal-first coding agent for C# / .NET: reads a repository, edits it, runs the build and the tests, and reports what it changed.</PackageDescription>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
