@@ -166,8 +166,10 @@ temp workspace. Each test states the SC it answers.
   renamed or collected by this round (FR-005).
 - [ ] T034 An `artifacts` tool, a `/files` filter, or index visibility: `list_files` still cannot see
   `.sharpcoreagent` (FR-012).
-- [ ] T035 Showing the image to the model as an image. `ToolResult` carries text; a screenshot the model
-  could *see* is a content-block change in `Domain.Conversation`, which is its own round.
+- [X] T035 Showing the image to the model as an image. Closed by `017-image-view` (`e69cbdc`), which is the round
+  this line predicted: `ImageContent` and `ChatMessage.Images` are the content-block change, and `view_image` fills
+  them from a file in the workspace or a read-only attachment. What is still absent from *images* is the list in
+  `specs/017-image-view/tasks.md` T024-T033.
 
 ## Open, and why
 
