@@ -37,6 +37,7 @@ public sealed class AgentSession
 
         Workspace = workspace;
         ActiveModel = model;
+        SessionModel = model;
         Approval = approval;
         _messages = [];
         _usage = new Dictionary<string, ModelUsage>(StringComparer.Ordinal);
@@ -53,6 +54,17 @@ public sealed class AgentSession
 
     /// <summary>Gets the model the next turn will use.</summary>
     public ModelDescriptor ActiveModel { get; private set; }
+
+    /// <summary>
+    /// Gets the model the conversation runs on when no role names one.
+    /// </summary>
+    /// <remarks>
+    /// Written when the session is created and by <see cref="ChooseModel"/>, which is what <c>/model</c> calls:
+    /// that is a decision about the conversation, not about one mode. A role switch reads it as its fallback, so
+    /// a plan turn on the planner's model followed by <c>/mode act</c> returns to the model the developer chose
+    /// instead of leaving the planner's in place.
+    /// </remarks>
+    public ModelDescriptor SessionModel { get; private set; }
 
     /// <summary>Gets or sets the approval mode. Switching applies to the next tool call.</summary>
     public ApprovalMode Approval { get; set; }
@@ -250,6 +262,17 @@ public sealed class AgentSession
     {
         ArgumentNullException.ThrowIfNull(model);
         ActiveModel = model;
+    }
+
+    /// <summary>
+    /// Makes a model the conversation's own, for this turn and for every turn no role names a model.
+    /// </summary>
+    /// <param name="model">The model the developer chose.</param>
+    public void ChooseModel(ModelDescriptor model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ActiveModel = model;
+        SessionModel = model;
     }
 
     /// <summary>

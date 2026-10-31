@@ -71,7 +71,7 @@ internal static class Program
         {
             return options.Command switch
             {
-                CliCommand.Run => await RunCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+                CliCommand.Run => await RunCommand.ExecuteAsync(options, scope.ExitToken, settingsPath).ConfigureAwait(false),
 
                 // `models` reads the same credential store `run` does, so a file it cannot read has to
                 // reach the catch below: it used to be dispatched above, where a bad path crashed the

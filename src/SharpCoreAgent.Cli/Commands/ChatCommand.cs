@@ -42,9 +42,23 @@ internal static class ChatCommand
         }
 
         using var provider = CliHost.Build(cli);
-        var model = provider.GetRequiredService<ModelDescriptor>();
+        var baseModel = provider.GetRequiredService<ModelDescriptor>();
         var credentials = provider.GetRequiredService<ICredentialStore>();
-        if (!CliHost.TryEnsureCredentials(model, credentials, Console.Error, cli.Fallback))
+
+        // `/config` writes the file `config set` writes, so the path the process resolved is threaded
+        // through rather than guessed a second time from the environment.
+        var settingsFile = settingsPath ?? AgentSettingsFile.PathFromEnvironment();
+
+        // The role decides which model the first turn runs on. A resumed transcript keeps the model it
+        // recorded instead, because a session file is the authority on what that conversation was.
+        var model = AgentRoles.ForMode(cli, cli.Mode, baseModel);
+
+        if (!CliHost.TryEnsureCredentials(
+            AgentRoles.RequestModels(cli, baseModel),
+            credentials,
+            Console.Error,
+            cli.Fallback,
+            CredentialPrompt.ForConsole(cli, settingsFile)))
         {
             return ExitCodes.Credentials;
         }
@@ -62,10 +76,6 @@ internal static class ChatCommand
 
         var path = Path.GetFullPath(
             cli.SessionPath ?? CliOptions.DefaultSessionPath(workspace!.Root, DateTimeOffset.UtcNow));
-
-        // `/config` writes the file `config set` writes, so the path the process resolved is threaded
-        // through rather than guessed a second time from the environment.
-        var settingsFile = settingsPath ?? AgentSettingsFile.PathFromEnvironment();
 
         var (session, failure) = await OpenAsync(cli, workspace!, model, store, credentials, options, path)
             .ConfigureAwait(false);
@@ -167,6 +177,16 @@ internal static class ChatCommand
                 $"{mcp.Servers.Count} server(s) · {mcp.Tools.Count} tool(s)")));
         }
 
+        // A role row only when a role was named: three rows repeating the model already on screen would be
+        // noise on the one screen whose job is to say what this session is.
+        var named = AgentRoles.All.Where(role => AgentRoles.Text(cli, role) is not null).ToArray();
+        if (named.Length > 0)
+        {
+            rows.Add(("roles", string.Join(
+                " · ",
+                named.Select(role => $"{AgentRoles.Label(role)} {RoleModel(cli, role)}"))));
+        }
+
         if (cli.SaveSession)
         {
             rows.Add(("session", path));
@@ -235,6 +255,15 @@ internal static class ChatCommand
         $"{theme.Dim("workspace:")} {session.Workspace.Root}";
 
     /// <summary>
+    /// Renders one role for the banner.
+    /// </summary>
+    /// <param name="cli">The command line, which holds the roles.</param>
+    /// <param name="role">The role to render.</param>
+    /// <returns>The <c>provider:id</c> name the role names, or the words that say it names none.</returns>
+    private static string RoleModel(CliOptions cli, AgentRole role) =>
+        AgentRoles.For(cli, role)?.QualifiedName ?? "session model";
+
+    /// <summary>
     /// Prompts, runs a turn, saves the transcript — until the developer leaves.
     /// </summary>
     /// <param name="provider">The container the turn runs in.</param>
@@ -284,6 +313,23 @@ internal static class ChatCommand
                 }
 
                 line = ContinuePrompt;
+            }
+
+            // `/review` is the one command that runs a turn, so it is handled here rather than in
+            // HandleCommand: it needs the agent, the observer and the cancellation split, and it must save the
+            // transcript afterwards like any other turn.
+            if (line[0] == '/' && Is(CommandOf(line), "/review"))
+            {
+                last = await RunReviewAsync(provider, cli, agent, session, line, observer, scope, theme)
+                    .ConfigureAwait(false);
+
+                if (cli.SaveSession
+                    && !await CliHost.TrySaveSessionAsync(store, session, path, Console.Error).ConfigureAwait(false))
+                {
+                    return ExitCodes.SessionIo;
+                }
+
+                continue;
             }
 
             if (line[0] == '/' && !Is(line, "/continue"))
@@ -480,6 +526,85 @@ internal static class ChatCommand
     }
 
     /// <summary>
+    /// Runs <c>/review</c>: one read-only turn on the reviewer's model, inside this transcript.
+    /// </summary>
+    /// <param name="provider">The container the turn runs in.</param>
+    /// <param name="cli">The parsed command line, for the index budget and the reviewer's model.</param>
+    /// <param name="agent">The agent that runs the turn.</param>
+    /// <param name="session">The conversation the review reads and appends to.</param>
+    /// <param name="line">The command as typed, with the optional focus after it.</param>
+    /// <param name="observer">Where the turn's events go.</param>
+    /// <param name="scope">Supplies the turn's token.</param>
+    /// <param name="theme">The palette the header is rendered with.</param>
+    /// <returns>The review's report.</returns>
+    /// <remarks>
+    /// The approval mode is read-only for the duration and put back afterwards, so a review cannot become an
+    /// edit even when the session it inspects is allowed to write; the model is restored for the same reason.
+    /// The mode itself is left alone: the reviewer has to be told what to look at, and a plan turn would hide
+    /// every tool that produces evidence for a <c>/review</c> of an edit.
+    /// </remarks>
+    private static async Task<AgentReport> RunReviewAsync(
+        IServiceProvider provider,
+        CliOptions cli,
+        CodingAgent agent,
+        AgentSession session,
+        string line,
+        IAgentObserver observer,
+        CancellationScope scope,
+        AnsiTheme theme)
+    {
+        var command = CommandOf(line);
+        var focus = line.Length > command.Length ? line[(command.Length + 1)..].Trim() : string.Empty;
+        var reviewer = AgentRoles.For(cli, AgentRole.Reviewer);
+        var model = reviewer ?? session.ActiveModel;
+        var approval = session.Approval;
+        var active = session.ActiveModel;
+
+        await WriteErrorLineAsync(
+            $"{theme.Dim("review:")} {theme.Strong(model.QualifiedName)} {theme.Dim("(read-only, in this transcript)")}",
+            scope.ExitToken).ConfigureAwait(false);
+
+        try
+        {
+            session.Approval = ApprovalMode.ReadOnly;
+            if (reviewer is not null)
+            {
+                session.SwitchModel(reviewer);
+            }
+
+            return await RunTurnAsync(provider, cli, agent, session, ReviewPrompt(focus), observer, scope)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            // Restored whatever happened: a review that failed, timed out or was cancelled is one look, not a
+            // mode change, and the next prompt must come back on the model the developer chose.
+            session.Approval = approval;
+            session.SwitchModel(active);
+        }
+    }
+
+    /// <summary>
+    /// Builds the instruction a <c>/review</c> turn carries.
+    /// </summary>
+    /// <param name="focus">What the developer asked to concentrate on, or an empty string.</param>
+    /// <returns>The shipped review rule, followed by the focus when one was given.</returns>
+    private static string ReviewPrompt(string focus) => focus.Length == 0
+        ? PromptLibrary.ReviewInstruction
+        : string.Concat(PromptLibrary.ReviewInstruction, "\n\nFocus: ", focus);
+
+    /// <summary>
+    /// Splits the command word off a line the developer typed.
+    /// </summary>
+    /// <param name="line">The trimmed line, starting with <c>/</c>.</param>
+    /// <returns>The command, without its argument.</returns>
+    private static string CommandOf(string line)
+    {
+        var space = line.IndexOf(' ', StringComparison.Ordinal);
+        return space < 0 ? line : line[..space];
+    }
+
+    /// <summary>
     /// Opens the conversation: a new session, or the transcript named by <c>--session</c>.
     /// </summary>
     /// <param name="cli">The parsed command line.</param>
@@ -564,8 +689,8 @@ internal static class ChatCommand
         AnsiTheme theme,
         string settingsPath)
     {
+        var command = CommandOf(line);
         var space = line.IndexOf(' ', StringComparison.Ordinal);
-        var command = space < 0 ? line : line[..space];
         var argument = space < 0 ? string.Empty : line[(space + 1)..].Trim();
 
         if (Is(command, "/exit") || Is(command, "/quit"))
@@ -638,12 +763,19 @@ internal static class ChatCommand
             {
                 session.Mode = mode;
                 Console.Error.WriteLine($"{theme.Dim("mode:")} {Name(mode)}");
+                ApplyRoleModel(session, cli, mode, theme);
             }
             else
             {
                 Console.Error.WriteLine("usage: /mode plan|act");
             }
 
+            return (true, last);
+        }
+
+        if (Is(command, "/roles"))
+        {
+            PrintRoles(cli, session, theme);
             return (true, last);
         }
 
@@ -860,6 +992,69 @@ internal static class ChatCommand
         {
             Apply(session, model, theme);
         }
+
+        // A changed role applies to the mode the conversation is in, so `/config set executor …` takes effect
+        // without waiting for the next mode switch.
+        ApplyRoleModel(session, applied, session.Mode, theme);
+    }
+
+    /// <summary>
+    /// Switches to the model the role for this mode names, when it names one.
+    /// </summary>
+    /// <param name="session">The conversation to switch.</param>
+    /// <param name="cli">The command line, which holds the roles.</param>
+    /// <param name="mode">The mode the next turn will run in.</param>
+    /// <param name="theme">The palette the confirmation is rendered with.</param>
+    /// <remarks>
+    /// A role is only a model when the developer named one. With no <c>--planner</c>, switching to plan keeps
+    /// whatever <c>/model</c> chose — the behaviour of every session before roles existed — so the rule here is
+    /// "the role wins only where it exists", not "the role resets the model".
+    /// </remarks>
+    private static void ApplyRoleModel(AgentSession session, CliOptions cli, AgentMode mode, AnsiTheme theme)
+    {
+        var role = AgentRoles.ForMode(mode);
+
+        // A role that names nothing falls back to the session's own model, so leaving a plan turn that ran on
+        // the planner's model returns the act turn to what `/model` chose rather than keeping the planner's.
+        var model = AgentRoles.For(cli, role) ?? session.SessionModel;
+        if (string.Equals(model.QualifiedName, session.ActiveModel.QualifiedName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!model.SupportsTools)
+        {
+            Console.Error.WriteLine(
+                $"refused: {model.QualifiedName} is declared as not supporting tool calls, so the {AgentRoles.Name(role)} role keeps the current model.");
+            return;
+        }
+
+        session.SwitchModel(model);
+        var why = AgentRoles.For(cli, role) is null ? "the session model" : $"the {AgentRoles.Name(role)} model";
+        Console.Error.WriteLine($"{theme.Dim("model:")} {model.QualifiedName} {theme.Dim($"({why})")}");
+    }
+
+    /// <summary>
+    /// Prints <c>/roles</c>: the model each role runs on.
+    /// </summary>
+    /// <param name="cli">The command line, which holds the roles.</param>
+    /// <param name="session">The conversation, for the model a role without one falls back to.</param>
+    /// <param name="theme">The palette the labels are rendered with.</param>
+    /// <remarks>
+    /// A role nobody named is reported with the model the conversation is on and the word "session", because
+    /// "not set" and "set to the same model" would otherwise look identical on screen and be very different
+    /// after the next <c>/model</c>.
+    /// </remarks>
+    private static void PrintRoles(CliOptions cli, AgentSession session, AnsiTheme theme)
+    {
+        foreach (var role in AgentRoles.All)
+        {
+            var value = AgentRoles.For(cli, role) is { } model
+                ? theme.Strong(model.QualifiedName)
+                : string.Concat(theme.Dim(session.ActiveModel.QualifiedName), theme.Dim(" (session model)"));
+
+            Console.Out.WriteLine($"{theme.Dim(AgentRoles.Label(role).PadRight(7))} {value}");
+        }
     }
 
     /// <summary>
@@ -916,7 +1111,9 @@ internal static class ChatCommand
             return;
         }
 
-        session.SwitchModel(model);
+        // `/model` is a decision about the conversation, so it moves the session's own model as well as the
+        // active one: the next mode switch falls back to it where a role names nothing.
+        session.ChooseModel(model);
         Console.Out.WriteLine($"{theme.Dim("model:")} {theme.Strong(model.QualifiedName)}");
     }
 

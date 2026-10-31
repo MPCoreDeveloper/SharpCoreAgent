@@ -40,6 +40,9 @@ internal static class HelpText
         Options
           --provider <name>        run, chat   deepseek    deepseek, grok, openai-compatible, demo
           --model <id>             run, chat   provider default (deepseek-flash, grok-4.7)
+          --planner <model>        run, chat   session     the model a plan turn runs on; a bare id keeps --provider
+          --executor <model>       run, chat   session     the model an act turn runs on, and /model's starting point
+          --reviewer <model>       run, chat   session     the model /review sends its read-only turn to
           --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
           --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
@@ -63,6 +66,14 @@ internal static class HelpText
           --quiet                  run, chat   off         no thinking, tool lines or summary
           --verbose                run, chat   off         stack traces, and a line as each turn starts
           --                       run         —           everything after it is part of the prompt
+
+          A role is the model one job runs on: --planner for a plan turn, --executor for an act turn, and the
+          reviewer (--reviewer) for /review. A role nobody named runs on the session model, so naming one is
+          the only thing that changes; a bare identifier keeps --provider and provider:id names both. The
+          same three names are settings, and SHARPCOREAGENT_PLANNER_MODEL, SHARPCOREAGENT_EXECUTOR_MODEL and
+          SHARPCOREAGENT_REVIEWER_MODEL supply them from the environment. Every named role's provider is
+          checked for a key before the first turn, and a missing one is offered as a paste rather than a
+          restart.
 
           An attached root is read-only. read_file, list_directory and search_text answer from it when
           given an absolute path, list_roots reports every root, and every write, delete and shell
@@ -92,15 +103,18 @@ internal static class HelpText
           sharpcoreagent config path                the settings file in use
           sharpcoreagent setup                      the same file, written by answering five questions
 
-          Settings are provider, model, base-url, approval, mode, temperature, max-iterations,
-          max-output-tokens, max-total-tokens and credential-file; each accepts what its flag
-          accepts. The file is %APPDATA%\sharpcoreagent\config.json on Windows and
+          Settings are provider, model, planner, executor, reviewer, base-url, approval, mode, temperature,
+          max-iterations, max-output-tokens, max-total-tokens and credential-file; each accepts what its
+          flag accepts. The file is %APPDATA%\sharpcoreagent\config.json on Windows and
           $XDG_CONFIG_HOME/sharpcoreagent/config.json (or ~/.config/sharpcoreagent/config.json)
           elsewhere; SHARPCOREAGENT_CONFIG names a different one. The command line beats the
           environment, which beats the file, which beats the built-in default.
 
           A key never belongs in it: 'config set api-key' is refused, because that file is copied
-          and committed. Use --credential-file for the key and this file for the preferences.
+          and committed. Use --credential-file for the key and this file for the preferences. With no
+          key at all and a terminal on both ends, the first run offers to take one: it is written to
+          credentials.env beside this file, never echoed, and named here as credential-file so the next
+          run reads it. On other streams nothing is asked and the three routes above are printed.
 
         Index options
           --status                 index       off         print coverage and freshness; never writes
@@ -149,7 +163,7 @@ internal static class HelpText
           number and not a claim.
 
         Chat
-          /help                    every chat command, including /cost and /usage
+          /help                    every chat command, including /cost, /roles and /review
 
         Environment
           SHARPCOREAGENT_PROVIDER      provider used when --provider is absent
@@ -178,6 +192,7 @@ internal static class HelpText
         Examples
           sharpcoreagent run "summarise what changed in src" --workspace .
           sharpcoreagent chat --provider grok --model grok-4.7
+          sharpcoreagent chat --planner grok:grok-4.7 --executor deepseek:deepseek-flash
           sharpcoreagent models --provider demo
           sharpcoreagent index --status --json
           sharpcoreagent index --rebuild --workspace .
@@ -190,11 +205,14 @@ internal static class HelpText
     public static string ChatCommands { get; } = """
         Commands
           /model                   show the active model
-          /model <id>              switch model, keeping the provider
+          /model <id>              switch model for this role, keeping the provider
           /model <provider>:<id>   switch provider and model
+          /roles                   the model each role runs on: plan, act and review
+          /review [focus]          one read-only turn on the reviewer model, in this transcript
           /approval [mode]         readonly, ask or allow; bare reports the mode and what it stops asking about,
                                    allow lasts until exit; /approval forget revokes the yeses given to single tools
-          /mode <mode>             plan or act; plan refuses every write and answers with a plan
+          /mode <mode>             plan or act; plan refuses every write and answers with a plan, and the
+                                   role for that mode supplies the model when one is named
           /compact [n]             drop old messages, keeping the system prompts and the last n (default 8)
           /budget [n|+n|unlimited] the session token budget; bare reports what is spent
           /continue                carry on from the last request; an empty line does the same after a pause

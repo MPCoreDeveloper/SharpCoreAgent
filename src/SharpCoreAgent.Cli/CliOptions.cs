@@ -158,6 +158,22 @@ internal sealed record CliOptions
     /// <summary>Gets the model identifier, or null for the provider's default.</summary>
     public string? Model { get; init; }
 
+    /// <summary>
+    /// Gets the model a plan turn runs on, or null when plan mode uses the session model.
+    /// </summary>
+    /// <remarks>
+    /// Stored as text rather than as a descriptor because a bare identifier keeps <c>--provider</c>, and
+    /// that flag may arrive later on the same command line. <see cref="AgentRoles"/> is the one place the
+    /// text becomes a model.
+    /// </remarks>
+    public string? PlannerModel { get; init; }
+
+    /// <summary>Gets the model an act turn runs on, or null when act mode uses the session model.</summary>
+    public string? ExecutorModel { get; init; }
+
+    /// <summary>Gets the model <c>/review</c> sends its read-only turn to, or null for the session model.</summary>
+    public string? ReviewerModel { get; init; }
+
     /// <summary>Gets the workspace root the tools are confined to.</summary>
     public string Workspace { get; init; } = Directory.GetCurrentDirectory();
 
@@ -458,12 +474,15 @@ internal sealed record CliOptions
 
         if (named.Contains("provider")
             || named.Contains("model")
+            || named.Contains("planner")
+            || named.Contains("executor")
+            || named.Contains("reviewer")
             || named.Contains("base-url")
             || options.Fallback is not null
             || options.SessionPath is not null)
         {
             throw new CliUsageException(
-                "mcp serve runs no model and keeps no transcript: --provider, --model, --base-url, --fallback and --session do not apply.",
+                "mcp serve runs no model and keeps no transcript: --provider, --model, --planner, --executor, --reviewer, --base-url, --fallback and --session do not apply.",
                 "For example: sharpcoreagent mcp serve --workspace .");
         }
     }
@@ -494,6 +513,9 @@ internal sealed record CliOptions
     [
         "provider",
         "model",
+        "planner",
+        "executor",
+        "reviewer",
         "base-url",
         "approval",
         "mode",
@@ -593,6 +615,9 @@ internal sealed record CliOptions
         Provider = NormalizeProvider(environment("SHARPCOREAGENT_PROVIDER")),
         ProviderExplicit = Trim(environment("SHARPCOREAGENT_PROVIDER")) is not null,
         Model = Trim(environment("SHARPCOREAGENT_MODEL")),
+        PlannerModel = Trim(environment("SHARPCOREAGENT_PLANNER_MODEL")),
+        ExecutorModel = Trim(environment("SHARPCOREAGENT_EXECUTOR_MODEL")),
+        ReviewerModel = Trim(environment("SHARPCOREAGENT_REVIEWER_MODEL")),
         Workspace = Trim(environment("SHARPCOREAGENT_WORKSPACE")) ?? Directory.GetCurrentDirectory(),
         CredentialFile = Trim(environment("SHARPCOREAGENT_CREDENTIAL_FILE")),
     };
@@ -1215,6 +1240,9 @@ internal sealed record CliOptions
     {
         "--provider" => "provider",
         "--model" => "model",
+        "--planner" => "planner",
+        "--executor" => "executor",
+        "--reviewer" => "reviewer",
         "--base-url" => "base-url",
         "--approval" => "approval",
 
@@ -1234,6 +1262,9 @@ internal sealed record CliOptions
     {
         "provider" => "--provider",
         "model" => "--model",
+        "planner" => "--planner",
+        "executor" => "--executor",
+        "reviewer" => "--reviewer",
         "base-url" => "--base-url",
         "approval" => "--approval",
         "mode" => "--mode",
@@ -1279,6 +1310,9 @@ internal sealed record CliOptions
     {
         "provider" => "SHARPCOREAGENT_PROVIDER",
         "model" => "SHARPCOREAGENT_MODEL",
+        "planner" => "SHARPCOREAGENT_PLANNER_MODEL",
+        "executor" => "SHARPCOREAGENT_EXECUTOR_MODEL",
+        "reviewer" => "SHARPCOREAGENT_REVIEWER_MODEL",
         "credential-file" => "SHARPCOREAGENT_CREDENTIAL_FILE",
         _ => null,
     };
@@ -1469,6 +1503,32 @@ internal sealed record CliOptions
         : throw new CliUsageException($"unknown colour mode '{value}'.", "Use auto, always or never.");
 
     /// <summary>
+    /// Validates the text a role flag was given and returns it unchanged.
+    /// </summary>
+    /// <param name="flag">The flag, for the message.</param>
+    /// <param name="value">The model, or <c>provider:model</c>.</param>
+    /// <returns>The text as typed; a bare identifier is resolved against <c>--provider</c> at use.</returns>
+    /// <exception cref="CliUsageException">The text looks like a pair and names a provider this build does not serve.</exception>
+    /// <remarks>
+    /// Only the shape is checked here. A bare identifier keeps the provider, which may be named later on the
+    /// same command line, so resolving it now would make <c>--planner X --provider Y</c> mean something
+    /// different from <c>--provider Y --planner X</c>. <see cref="AgentRoles.Resolve"/> does the rest, and
+    /// the catalogue accepts an identifier it has never heard of on purpose: the provider is the authority
+    /// on its own model names, and a typo there fails at the first request with the provider's own words.
+    /// </remarks>
+    private static string ParseRoleModel(string flag, string value)
+    {
+        if (!value.Contains(':', StringComparison.Ordinal) || ModelCatalog.TryParseQualified(value, out _))
+        {
+            return value;
+        }
+
+        throw new CliUsageException(
+            $"{flag} got '{value}', which names no provider this build serves.",
+            $"Name a provider and a model, for example {flag} grok:grok-4.7, or a bare model id to keep --provider.");
+    }
+
+    /// <summary>
     /// Parses <c>--fallback</c>, which names a model the same way <c>/model</c> does.
     /// </summary>
     /// <param name="value">The <c>provider:model</c> text.</param>
@@ -1519,6 +1579,15 @@ internal sealed record CliOptions
 
             case "--model":
                 return options with { Model = TakeValue(args, ref index, name) };
+
+            case "--planner":
+                return options with { PlannerModel = ParseRoleModel(name, TakeValue(args, ref index, name)) };
+
+            case "--executor":
+                return options with { ExecutorModel = ParseRoleModel(name, TakeValue(args, ref index, name)) };
+
+            case "--reviewer":
+                return options with { ReviewerModel = ParseRoleModel(name, TakeValue(args, ref index, name)) };
 
             case "--workspace":
                 return options with { Workspace = TakeValue(args, ref index, name) };

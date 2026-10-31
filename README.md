@@ -128,6 +128,14 @@ dotnet run --project src\SharpCoreAgent.Cli -- run "fix the failing test in src"
 setx SHARPCOREAGENT_CREDENTIAL_FILE "D:\keys\.secrets.env"
 ```
 
+With no key at all and a terminal on both ends, the first run asks instead of failing: it names the
+variable it needs, reads a pasted key with the echo off, writes it to `credentials.env` beside the settings
+file — outside every workspace, readable by its owner only on Unix — and records that path as the
+`credential-file` setting so the next run finds it. The key is never printed, logged or put in a transcript.
+On a pipe, in a script or after an `n`, nothing is asked and the three documented routes are printed
+instead. `--credential-file` and `SHARPCOREAGENT_CREDENTIAL_FILE` still win: a file the developer named is
+where the paste goes.
+
 ## Providers
 
 | Provider key | Models | Credential |
@@ -181,6 +189,9 @@ keep working on the file that needs repairing.
 |---|---|---|
 | `--provider <name>` | run, chat | `deepseek` |
 | `--model <id>` | run, chat | provider default |
+| `--planner <model>` | run, chat | session model — what a plan turn runs on, e.g. `grok:grok-4.7` |
+| `--executor <model>` | run, chat | session model — what an act turn runs on |
+| `--reviewer <model>` | run, chat | session model — where `/review` sends its read-only turn |
 | `--fallback <provider:model>` | run, chat | none — a 401 or 5xx is replayed once there |
 | `--workspace <path>` | run, chat, index | current directory |
 | `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
@@ -212,7 +223,8 @@ keep working on the file that needs repairing.
 | `--embedder <mode>` | index | `hashed-local` — the only mode in this build |
 | `--tier <name>` | index | `lean` — the only tier in this build |
 
-Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_WORKSPACE`, and
+Environment: `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`, `SHARPCOREAGENT_PLANNER_MODEL`,
+`SHARPCOREAGENT_EXECUTOR_MODEL`, `SHARPCOREAGENT_REVIEWER_MODEL`, `SHARPCOREAGENT_WORKSPACE`, and
 `SHARPCOREAGENT_ADD_ROOTS` for the read-only roots `run` and `chat` start with, separated by the
 platform's path separator (`;` on Windows, `:` elsewhere). Command-line roots come first. There is
 deliberately no `SHARPCOREAGENT_WEB` and no `SHARPCOREAGENT_MCP`: the network is turned on by typing
@@ -220,9 +232,20 @@ deliberately no `SHARPCOREAGENT_WEB` and no `SHARPCOREAGENT_MCP`: the network is
 or a CI image exports can grant either on the developer's behalf.
 
 In `chat`, the loop understands `/model grok:grok-4` (switch provider and model without losing the
-conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/approval`, `/mode plan|act`,
-`/compact [n]`, `/budget [n|+n|unlimited]`, `/continue`, `/usage`, `/cost`, `/files`, `/session`,
-`/roots`, `/help` and `/exit` (or `/quit`).
+conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/roles` (what each job runs on),
+`/review [focus]` (one read-only turn on the reviewer's model, inside this transcript), `/approval`,
+`/mode plan|act`, `/compact [n]`, `/budget [n|+n|unlimited]`, `/continue`, `/usage`, `/cost`, `/files`,
+`/session`, `/roots`, `/help` and `/exit` (or `/quit`).
+
+Three jobs, three models. `--planner`, `--executor` and `--reviewer` name the model a plan turn, an act
+turn and `/review` run on — planning on the model that reasons best, execution on the one that is fastest
+or cheapest, review on a third opinion — and the same three names are settings and environment variables
+(`SHARPCOREAGENT_PLANNER_MODEL`, `SHARPCOREAGENT_EXECUTOR_MODEL`, `SHARPCOREAGENT_REVIEWER_MODEL`). A role
+nobody named runs on the session model, so naming none changes nothing; a role that *is* named wins for its
+mode, and `/mode` says which model it moved to. Every named role's provider is checked for a key before the
+first turn, so a missing `XAI_API_KEY` on `--planner grok:grok-4.7` is an exit `3` at startup rather than a
+failed plan turn an hour later. `/review` runs its turn with writes refused and puts the approval mode and
+the model back afterwards: it reads the transcript, it does not become it.
 
 A session says what it is and what it spent. A bare `sharpcoreagent` opens on a box naming the workspace,
 model, approval mode, mode and budget; the prompt reads `<model> · <mode> ❯`; each tool call is one
@@ -598,7 +621,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 1,200 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 1,228 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
@@ -715,6 +738,16 @@ the second duplicates settings that would drift.
   `ITool` in the container, so the constructor takes a deferred registry source instead. The whole suite is 1190
   green in `Debug` and in `Release`, both builds at 0 warnings, with no diff this round wrote on `Domain/Index`
   or `SharpCoreAgent.Indexing`.
+
+- `specs/016-model-roles` — three jobs, three models: `--planner` / `--executor` / `--reviewer` (and the settings
+  and environment variables of the same names) decide which model a plan turn, an act turn and `/review` run on,
+  and a role nobody named leaves the session model exactly where `/model` put it. `/roles` reports the three,
+  `/review [focus]` runs one read-only turn on the reviewer's model in the same transcript and restores the
+  approval mode afterwards, every named role's provider is checked for a key before the first turn, and a key that
+  is missing on a terminal is now offered as a paste that writes `credentials.env` beside the settings file
+  instead of failing the first run. Twenty-eight tests across four classes cover the flags, the resolution, the
+  loop, the paste and the file write; the whole suite is 1,228 green in `Release` at 0 warnings, with no line added
+  to `Domain`.
 
 ## Spec-driven development
 

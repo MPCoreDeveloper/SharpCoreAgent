@@ -164,41 +164,92 @@ internal static class CliHost
         ModelDescriptor model,
         ICredentialStore credentials,
         TextWriter error,
-        ModelDescriptor? fallback = null)
+        ModelDescriptor? fallback = null) =>
+        TryEnsureCredentials([model], credentials, error, fallback);
+
+    /// <summary>
+    /// Checks every model the process may send a request to, and offers to take a key for whichever
+    /// provider has none.
+    /// </summary>
+    /// <param name="models">The models the session may use: the session's own, every named role, and the fallback.</param>
+    /// <param name="credentials">The credential source.</param>
+    /// <param name="error">Where a missing key's name and the three routes go.</param>
+    /// <param name="fallback">The fallback model, when it is not already in <paramref name="models"/>.</param>
+    /// <param name="prompt">
+    /// The interactive offer to paste a key, or <see langword="null"/> for the up-front refusal a script
+    /// gets. It is consulted only when something is actually missing.
+    /// </param>
+    /// <returns><see langword="true"/> when every model has a key, by configuration or by a paste.</returns>
+    /// <remarks>
+    /// Every role is checked, not just the model the first turn runs on: a planner whose key is missing is a
+    /// session that starts and then fails on the first <c>/mode plan</c>, which is the failure this preflight
+    /// exists to move to the front.
+    /// </remarks>
+    public static bool TryEnsureCredentials(
+        IReadOnlyList<ModelDescriptor> models,
+        ICredentialStore credentials,
+        TextWriter error,
+        ModelDescriptor? fallback = null,
+        CredentialPrompt? prompt = null)
     {
-        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(models);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(error);
 
-        return HasCredential(model, credentials, error)
-            && (fallback is null || HasCredential(fallback, credentials, error));
-    }
-
-    /// <summary>
-    /// Checks one model's provider and reports the keys it would read.
-    /// </summary>
-    /// <param name="model">The model to check.</param>
-    /// <param name="credentials">The credential source.</param>
-    /// <param name="error">Where the missing key's name goes.</param>
-    /// <returns><see langword="true"/> when a key is set, or the provider needs none.</returns>
-    /// <remarks>
-    /// A fallback on the same provider as the primary is checked twice; that costs two dictionary
-    /// lookups and keeps the rule readable.
-    /// </remarks>
-    private static bool HasCredential(ModelDescriptor model, ICredentialStore credentials, TextWriter error)
-    {
-        var names = ModelCatalog.CredentialNames(model.Provider);
-        if (names.Count == 0 || names.Any(name => credentials.Find(name) is not null))
+        var wanted = fallback is null ? models : [.. models, fallback];
+        var missing = wanted.Where(model => !HasCredential(model, credentials)).ToArray();
+        if (missing.Length == 0)
         {
             return true;
         }
 
-        // Three routes, because "set the variable" is the least durable one and a developer who just
-        // watched a session refuse to start deserves to know the one that survives a restart.
+        if (prompt is not null && prompt.TryFix(missing, credentials))
+        {
+            return true;
+        }
+
+        // Re-checked because a developer may have pasted a key for one provider and declined the next: the
+        // refusal names only what is still missing, and one provider once however many roles name it.
+        var stillMissing = wanted
+            .Where(model => !HasCredential(model, credentials))
+            .DistinctBy(model => model.Provider)
+            .ToArray();
+
+        foreach (var model in stillMissing)
+        {
+            Report(model, error);
+        }
+
+        return stillMissing.Length == 0;
+    }
+
+    /// <summary>
+    /// Answers whether a model's provider already has a key, without reporting anything.
+    /// </summary>
+    /// <param name="model">The model to check.</param>
+    /// <param name="credentials">The credential source.</param>
+    /// <returns><see langword="true"/> when a key is set, or the provider needs none.</returns>
+    private static bool HasCredential(ModelDescriptor model, ICredentialStore credentials)
+    {
+        var names = ModelCatalog.CredentialNames(model.Provider);
+        return names.Count == 0 || names.Any(name => credentials.Find(name) is not null);
+    }
+
+    /// <summary>
+    /// Names the missing credential and the three routes that fix it.
+    /// </summary>
+    /// <param name="model">The model whose provider has no key.</param>
+    /// <param name="error">Where the lines go.</param>
+    /// <remarks>
+    /// Three routes because "set the variable" is the least durable one, and a developer who just watched a
+    /// session refuse to start deserves to know the one that survives a restart.
+    /// </remarks>
+    private static void Report(ModelDescriptor model, TextWriter error)
+    {
+        var names = ModelCatalog.CredentialNames(model.Provider);
         error.WriteLine(
             $"error: {model.Provider} needs a credential and none is set for {model.QualifiedName}.");
         error.WriteLine($"hint: set {string.Join(" or ", names)}, or write it to a file as {names[0]}=<key> and pass --credential-file <path>, or run 'sharpcoreagent config set credential-file <path>' once.");
-        return false;
     }
 
     /// <summary>

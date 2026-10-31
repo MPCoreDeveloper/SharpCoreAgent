@@ -3,6 +3,7 @@ using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
+using SharpCoreAgent.Infrastructure.Configuration;
 
 namespace SharpCoreAgent.Cli;
 
@@ -21,8 +22,11 @@ internal static class RunCommand
     /// </summary>
     /// <param name="cli">The parsed command line.</param>
     /// <param name="cancellationToken">Cancels the turn.</param>
+    /// <param name="settingsPath">
+    /// The settings file this process resolved, which a pasted key is recorded in; null resolves it again.
+    /// </param>
     /// <returns>The process exit code.</returns>
-    public static async Task<int> ExecuteAsync(CliOptions cli, CancellationToken cancellationToken)
+    public static async Task<int> ExecuteAsync(CliOptions cli, CancellationToken cancellationToken, string? settingsPath = null)
     {
         ArgumentNullException.ThrowIfNull(cli);
 
@@ -32,8 +36,20 @@ internal static class RunCommand
         }
 
         using var provider = CliHost.Build(cli);
-        var model = provider.GetRequiredService<ModelDescriptor>();
-        if (!CliHost.TryEnsureCredentials(model, provider.GetRequiredService<ICredentialStore>(), Console.Error, cli.Fallback))
+        var baseModel = provider.GetRequiredService<ModelDescriptor>();
+
+        // The role decides which model a turn of this mode runs on; with no role named it is the model the
+        // command line resolved, exactly as it was before roles existed.
+        var model = AgentRoles.ForMode(cli, cli.Mode, baseModel);
+
+        // Every model this process may use is checked, not just this one: --planner grok with no XAI_API_KEY
+        // is a session that would fail on its first plan turn, and saying so now is the whole point.
+        if (!CliHost.TryEnsureCredentials(
+            AgentRoles.RequestModels(cli, baseModel),
+            provider.GetRequiredService<ICredentialStore>(),
+            Console.Error,
+            cli.Fallback,
+            CredentialPrompt.ForConsole(cli, settingsPath ?? AgentSettingsFile.PathFromEnvironment())))
         {
             return ExitCodes.Credentials;
         }

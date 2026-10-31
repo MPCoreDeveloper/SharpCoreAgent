@@ -9,7 +9,9 @@ whole suite 1190/1190 and no new line in `Domain`, `CodingAgent`, `Domain/Index`
 round 4 (`010`) landed complete the same day, whole suite 1200/1200 at 0 warnings, with no hunk of this round on
 the four paths it may not touch. Those three rounds and `012` are one commit, `a447a4d`, because their diffs
 cannot be separated: `README.md`, `HelpText.cs`, `CodingAgent.cs` and this roadmap each carry hunks from more
-than one of them, and any split would leave an intermediate commit whose registration tests fail.
+than one of them, and any split would leave an intermediate commit whose registration tests fail. Round 8 (`016`)
+is specified and implemented in one change: three role flags, two interactive commands and the first-run key
+prompt, with four new test classes and no line added to `Domain` — whole suite 1228/1228 at 0 warnings.
 
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
@@ -47,13 +49,14 @@ The four gaps a newcomer hits, in the order they hit them.
 | 5 | [`011-subagent-task`](011-subagent-task/spec.md) | `task` — delegation with an isolated transcript (landed 2026-10-30 as `a447a4d`: `TaskTool`, `TaskFormat`, `NoPromptApprover`, the registration, prompt rule 8, 23 tests) | — |
 | 6 | [`013-evidence-mcp-server`](013-evidence-mcp-server/spec.md) | `mcp serve` — the index's evidence for Copilot, Codex and Claude Code, over stdio | 0 (amended to 1.2.0), and `002` (landed) |
 | 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30 as `a447a4d`) | 0, and `012` (landed) |
+| 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run | 0, `004`, `005`, `006` (all landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
-repository has not made. If it is made, it becomes `016` and it does not change 007–011. (`012` went to
+repository has not made. If it is made, it becomes `017` and it does not change 007–011. (`012` went to
 the compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider
 nor a key, `013` is the evidence server, and `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
-server.)
+server, and `016` is model roles.)
 
 ## Decision record
 
@@ -325,9 +328,9 @@ empty checkbox.
 | — | `006` T016–T018 | a first-run key prompt with restricted permissions, `config edit`, per-provider sections |
 
 The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
-and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `016` and it
+and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `017` and it
 changes no round above it. `012` is no longer spare: it is the compiler oracle, which needs neither a
-provider nor a key, and `015` is F# code intelligence.
+provider nor a key, `015` is F# code intelligence, and `016` is model roles.
 
 ## What stays out of this program
 

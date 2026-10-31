@@ -227,6 +227,9 @@ internal static class ConfigCommand
     {
         "provider" => cli.Provider,
         "model" => cli.Model ?? "provider default",
+        "planner" => cli.PlannerModel ?? "session model",
+        "executor" => cli.ExecutorModel ?? "session model",
+        "reviewer" => cli.ReviewerModel ?? "session model",
         "base-url" => cli.BaseUrl ?? "none",
         "approval" => cli.Approval switch
         {

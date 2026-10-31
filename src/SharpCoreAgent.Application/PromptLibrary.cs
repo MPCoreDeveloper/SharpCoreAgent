@@ -74,6 +74,25 @@ public static class PromptLibrary
         """;
 
     /// <summary>
+    /// Gets the instruction a <c>/review</c> turn runs under.
+    /// </summary>
+    /// <remarks>
+    /// A reviewer is a second pair of eyes on work the transcript already holds, so the instruction asks
+    /// for judgement rather than action, and the loop that sends it runs the turn read-only. It is prompt
+    /// text rather than a host flag for the same reason the plan rule is: a behaviour tuned in a scratch
+    /// file is a behaviour nobody reviewed.
+    /// </remarks>
+    public const string ReviewInstruction =
+        """
+        Review:
+        - You are the reviewer for the work in this transcript. Nothing here may be changed; every write, edit, delete and shell command is refused.
+        - Read what is claimed, then check it against the files and tool results above: the change, the evidence and the report have to agree.
+        - Report what is wrong, in the order a developer should fix it: correctness first, then a missed requirement, then a risk that is not a bug yet.
+        - Name the file and the line or symbol for each finding. Say plainly when a claim in the transcript is not supported by a tool result.
+        - End with one line: either "no findings" or the single most important thing to fix first.
+        """;
+
+    /// <summary>
     /// Gets the system prompt a delegated task runs under.
     /// </summary>
     /// <remarks>
