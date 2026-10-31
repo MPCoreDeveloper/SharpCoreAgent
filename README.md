@@ -146,7 +146,9 @@ where the paste goes.
 | `demo` | `demo-scripted` (deterministic, for tests and demos) | none |
 
 `deepseek` is the default provider. `models` prints the catalogue of the build you have, including
-whether each model accepts tool calls.
+whether each model accepts tool calls and whether it reads images — `grok-4.7`, `grok-4`, `grok-3` and
+every `openai-compatible` model declare `images=yes`, which is what `view_image` checks before it opens a
+file.
 
 ## Commands and options
 
@@ -174,6 +176,7 @@ sharpcoreagent config                              # every setting, its value an
 sharpcoreagent config set provider grok
 sharpcoreagent config set approval readonly
 sharpcoreagent config set model grok-4.7
+sharpcoreagent config set planner grok:grok-4.7      # plan turns on Grok, act turns on the rest
 sharpcoreagent config get provider                 # one value, alone, for a script
 sharpcoreagent config unset approval               # the built-in default applies again
 ```
@@ -308,7 +311,7 @@ session: a standing approval belongs to the conversation that earned it.
 
 ## Tools
 
-`list_directory`, `read_file`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
+`list_directory`, `read_file`, `view_image`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
 `delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `task`.
 
 `dotnet_verify` builds or tests the workspace and answers with a report rather than a log: exit code,
@@ -331,6 +334,24 @@ system prompt now says so.
 `list_roots` reports the primary root and every read-only attached root, and it is the one tool result
 that prints an absolute path: naming the legal ones is its whole job.
 
+`view_image` is how a picture enters the conversation. It reads a `.png`, `.jpg`, `.jpeg`, `.gif` or
+`.webp` from the workspace or an attached root, up to 4 MiB, and answers with the image itself attached to
+the message that follows — the tool role carries text only, because every OpenAI-compatible provider
+rejects an image there, so the loop hands the picture over on the next user message. It refuses before
+reading a byte when the session's model is not declared to read images, and the refusal names the model, so
+a text-only turn says it cannot see the picture instead of describing one it never saw. `models` prints
+`images=yes` or `images=no` for every model this build knows. The output of the MCP client's browser
+screenshot is already a file under `.sharpcoreagent/artifacts/`, which is the commonest path in:
+
+```text
+view_image · .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (image/png · 36,912 bytes) is attached to the next message.
+```
+
+A session file keeps the transcript's text and not its images: a screenshot is megabytes of base64 on one
+line of a document people grep, and the file it came from is still on disk and one `view_image` call away —
+the sentence "call view_image again rather than describing what you remember" is what survives the
+reload.
+
 `task` delegates one self-contained investigation to a sub-agent. The child starts with an empty transcript and
 sees only the prompt it was given, works with the session's tools minus `task` so it cannot delegate again, and
 answers with one message that comes back as the tool result — with its created, modified, deleted and command
@@ -344,9 +365,12 @@ no channel from a tool result back into session usage:
 task · find every caller of PriceCalculator · 6 model calls · 18,940 tokens
 ```
 
-`fetch_url` is the eighteenth tool and the only one that is not registered by default: `--web` adds it
-for one invocation, and without the flag it is absent from the registry, from the definitions the model
-sees and from the system prompt. It reads one absolute `http`/`https` URL, follows at most five
+`fetch_url` is the nineteenth tool, and one of three flags that add tools to the registry. `--web` adds this
+one for a single invocation, and without the flag it is absent from the registry, from the definitions the
+model sees and from the system prompt. `--fsharp` adds the three that ask a type checker, `--mcp` adds
+whatever each server offers, and no flag can remove a tool from the eighteen a build starts with. Of the
+three, `fetch_url` is the one the system prompt has to be told about, because its absence is a *network*
+decision rather than a capability one. It reads one absolute `http`/`https` URL, follows at most five
 redirects, and answers with the final URL, the status, the content type, the byte count and whether the
 text was cut. It sends one `User-Agent` and nothing else — no cookie, no referer, no credential — and it
 refuses a host that resolves to a loopback, private, link-local or cloud-metadata address unless
@@ -621,18 +645,17 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 1,228 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 1,256 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
   reading, `fetch_url` with its HTML reduction and its address rule, the MCP client with its hand-built
-  JSON-RPC transport, its scripted server and a real child process, and now `dotnet_verify` with its
-  log parser, its real compiler run and the turn that is not allowed to end without it — so
-  the next scan moves
-  both the line count and
-  the percentage. **The gate
-  passes**, including
-  new-code coverage: the tests that lift the baseline ship in the same commit as the code they cover.
+  JSON-RPC transport, its scripted server and a real child process, `dotnet_verify` with its log parser,
+  its real compiler run and the turn that is not allowed to end without it, the three F# tools that ask a
+  type checker rather than read bytes, three jobs on three models, and `view_image` handing a picture to
+  the next user message — so the next scan moves both the line count and the percentage. **The gate
+  passes**, including new-code coverage: the tests that lift the baseline ship in the same commit as the
+  code they cover.
 - **The gate is enforced.** CI passes `-WaitForQualityGate`, so a red gate fails the job instead of only
   colouring the badge. Setting the repository variable `SONAR_ENFORCE_GATE` to `false` turns that back
   off — which is the switch you want the day a rename lands and new-code arithmetic dips, not a rewrite.
@@ -748,6 +771,18 @@ the second duplicates settings that would drift.
   instead of failing the first run. Twenty-eight tests across four classes cover the flags, the resolution, the
   loop, the paste and the file write; the whole suite is 1,228 green in `Release` at 0 warnings, with no line added
   to `Domain`.
+
+- `specs/017-image-view` — a picture can enter a turn. `view_image` reads a `.png`, `.jpg`, `.jpeg`, `.gif` or
+  `.webp` up to 4 MiB from the workspace or an attached root, `ImageContent` carries the bytes as
+  `Domain.Conversation` types (`MediaType`, base64, `ToDataUri`), and because every compatible provider rejects an
+  image in the tool role the loop hands it over on the user message that follows the tool result — the call, the
+  sentence, the picture. The gate is a declared capability rather than a guess: `ModelDescriptor.SupportsImages` is
+  `false` unless a catalogue says otherwise, so a text-only session is refused before a byte is read and told which
+  model it asked, and `models` prints `images=yes|no` so the answer is visible before the turn. The wire is an
+  `image_url` part with a `data:` URI, and a message with no images is still a plain string, so no request shape that
+  existed before the round changed. Sixteen tests in two new classes, five new cases in four existing ones, and three
+  more whose assertions moved; a session file keeps the text and not the pictures. The whole suite is 1,256 green in
+  `Release` at 0 warnings.
 
 ## Spec-driven development
 

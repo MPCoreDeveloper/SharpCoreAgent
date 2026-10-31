@@ -31,9 +31,10 @@ internal static class ModelsCommand
             foreach (var model in ModelCatalog.ForProvider(provider))
             {
                 var tools = model.SupportsTools ? "tools=yes" : "tools=no";
+                var images = model.SupportsImages ? "images=yes" : "images=no";
                 Console.Out.WriteLine(string.Create(
                     System.Globalization.CultureInfo.InvariantCulture,
-                    $"{theme.Strong(model.QualifiedName)}  {model.DisplayName}  {theme.Dim(tools)}"));
+                    $"{theme.Strong(model.QualifiedName)}  {model.DisplayName}  {theme.Dim(tools)}  {theme.Dim(images)}"));
             }
 
             var names = ModelCatalog.CredentialNames(provider);

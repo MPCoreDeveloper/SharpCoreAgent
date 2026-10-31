@@ -562,6 +562,19 @@ public sealed class OpenAiCompatibleTransport : IStreamingChatModel, IChatModel
             Content = message.Content,
         };
 
+        if (message.Role == ChatRole.User && message.HasImages)
+        {
+            // The parts form, only where an image exists: an array of one text part is legal, and the plain
+            // string is the form every text-only server is known to parse.
+            var uris = new string[message.Images.Count];
+            for (var i = 0; i < uris.Length; i++)
+            {
+                uris[i] = message.Images[i].ToDataUri();
+            }
+
+            wire.Content = new OpenAiContent { Text = message.Content, ImageDataUris = uris };
+        }
+
         if (message.Role == ChatRole.Tool)
         {
             wire.ToolCallId = message.ToolCallId ?? string.Empty;

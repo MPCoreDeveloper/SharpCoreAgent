@@ -8,9 +8,13 @@ namespace SharpCoreAgent.Domain.Conversation;
 /// persisted without a type switch at every step:
 /// <list type="bullet">
 /// <item><description>system and user messages use <see cref="Content"/> only;</description></item>
+/// <item><description>a user message may carry <see cref="Images"/> beside its text;</description></item>
 /// <item><description>an assistant message may carry <see cref="ToolCalls"/> next to its text;</description></item>
 /// <item><description>a tool message echoes <see cref="ToolCallId"/> and <see cref="ToolName"/>.</description></item>
 /// </list>
+/// An image rides on the user role because that is the only role every OpenAI-compatible provider accepts
+/// one on: a tool that answers with a picture still says so in text, and the loop hands the picture over in
+/// the user message that follows the result.
 /// </remarks>
 public sealed record ChatMessage
 {
@@ -19,6 +23,9 @@ public sealed record ChatMessage
 
     /// <summary>Gets the message body. Empty, never null.</summary>
     public string Content { get; init; } = string.Empty;
+
+    /// <summary>Gets the images a user message carries beside its text.</summary>
+    public IReadOnlyList<ImageContent> Images { get; init; } = [];
 
     /// <summary>Gets the tool calls an assistant message requested.</summary>
     public IReadOnlyList<ToolCall> ToolCalls { get; init; } = [];
@@ -34,6 +41,9 @@ public sealed record ChatMessage
 
     /// <summary>Gets a value indicating whether the assistant message requested at least one tool call.</summary>
     public bool HasToolCalls => ToolCalls.Count > 0;
+
+    /// <summary>Gets a value indicating whether the message carries at least one image.</summary>
+    public bool HasImages => Images.Count > 0;
 
     /// <summary>Creates a system message.</summary>
     /// <param name="content">The prompt text.</param>
@@ -51,6 +61,16 @@ public sealed record ChatMessage
     {
         ArgumentNullException.ThrowIfNull(content);
         return new ChatMessage { Role = ChatRole.User, Content = content };
+    }
+
+    /// <summary>Creates a user message that carries images as well as text.</summary>
+    /// <param name="content">The instruction text; may be empty when the images carry the request.</param>
+    /// <param name="images">The images to attach, or <see langword="null"/> for a text-only message.</param>
+    /// <returns>A message with <see cref="ChatRole.User"/>.</returns>
+    public static ChatMessage User(string content, IReadOnlyList<ImageContent>? images)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        return new ChatMessage { Role = ChatRole.User, Content = content, Images = images ?? [] };
     }
 
     /// <summary>Creates an assistant message.</summary>

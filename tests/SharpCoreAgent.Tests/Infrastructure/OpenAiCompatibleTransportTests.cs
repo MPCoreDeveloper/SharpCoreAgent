@@ -346,6 +346,42 @@ public sealed class OpenAiCompatibleTransportTests
     }
 
     [Fact]
+    public async Task AUserMessageWithAnImageIsSentAsParts()
+    {
+        var handler = new StubHandler(_ => Sse("[DONE]"));
+        var image = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+
+        await Assert.ThrowsAsync<ModelException>(() => ReadAsync(
+            Transport(handler),
+            Request([ChatMessage.User("what is in this picture?", [image])])));
+
+        using var body = JsonDocument.Parse(handler.LastBody!);
+        var content = body.RootElement.GetProperty("messages")[0].GetProperty("content");
+        Assert.Equal(JsonValueKind.Array, content.ValueKind);
+        Assert.Equal(2, content.GetArrayLength());
+        Assert.Equal("text", content[0].GetProperty("type").GetString());
+        Assert.Equal("what is in this picture?", content[0].GetProperty("text").GetString());
+        Assert.Equal("image_url", content[1].GetProperty("type").GetString());
+        Assert.Equal(
+            "data:image/png;base64,AAAA",
+            content[1].GetProperty("image_url").GetProperty("url").GetString());
+    }
+
+    [Fact]
+    public async Task ATextOnlyMessageIsStillSentAsAString()
+    {
+        var handler = new StubHandler(_ => Sse("[DONE]"));
+
+        await Assert.ThrowsAsync<ModelException>(
+            () => ReadAsync(Transport(handler), Request([ChatMessage.User("hi")])));
+
+        using var body = JsonDocument.Parse(handler.LastBody!);
+        Assert.Equal(
+            JsonValueKind.String,
+            body.RootElement.GetProperty("messages")[0].GetProperty("content").ValueKind);
+    }
+
+    [Fact]
     public void DescribeRequestNamesTheEndpointWithoutTheCredential()
     {
         var transport = Transport(new StubHandler(_ => Sse("[DONE]")));

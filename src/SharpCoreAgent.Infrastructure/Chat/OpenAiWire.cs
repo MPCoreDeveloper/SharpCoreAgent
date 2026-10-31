@@ -42,13 +42,83 @@ internal sealed class OpenAiChatMessage
     public string Role { get; set; } = string.Empty;
 
     [JsonPropertyName("content")]
-    public string Content { get; set; } = string.Empty;
+    [JsonConverter(typeof(OpenAiContentConverter))]
+    public OpenAiContent Content { get; set; } = OpenAiContent.Empty;
 
     [JsonPropertyName("tool_calls")]
     public IReadOnlyList<OpenAiToolCallRequest>? ToolCalls { get; set; }
 
     [JsonPropertyName("tool_call_id")]
     public string? ToolCallId { get; set; }
+}
+
+/// <summary>
+/// A message's <c>content</c>, which the protocol types as either a string or an array of parts.
+/// </summary>
+/// <remarks>
+/// The string form is what every provider accepted first and what a text-only transcript still sends, so it
+/// stays the form for a message with no image: an array of one text part is legal and is not what a
+/// text-only server is guaranteed to parse. The implicit conversion keeps the text path unchanged in
+/// <see cref="OpenAiCompatibleTransport"/>.
+/// </remarks>
+internal sealed class OpenAiContent
+{
+    /// <summary>Gets a content value with no text and no images.</summary>
+    public static OpenAiContent Empty { get; } = new();
+
+    /// <summary>Gets the message text.</summary>
+    public string? Text { get; init; }
+
+    /// <summary>Gets the images to send as <c>image_url</c> parts, as <c>data:</c> URIs.</summary>
+    public IReadOnlyList<string> ImageDataUris { get; init; } = [];
+
+    /// <summary>Converts text into a text-only content value.</summary>
+    /// <param name="text">The message text.</param>
+    public static implicit operator OpenAiContent(string text) => new() { Text = text };
+}
+
+/// <summary>Writes <see cref="OpenAiContent"/> as a string, or as an array of parts when it carries images.</summary>
+internal sealed class OpenAiContentConverter : JsonConverter<OpenAiContent>
+{
+    /// <inheritdoc />
+    /// <exception cref="NotSupportedException">Always: this client only writes requests in this shape.</exception>
+    public override OpenAiContent Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        throw new NotSupportedException("A chat-completions message is written, never read, by this client.");
+
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, OpenAiContent value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.ImageDataUris.Count == 0)
+        {
+            writer.WriteStringValue(value.Text ?? string.Empty);
+            return;
+        }
+
+        writer.WriteStartArray();
+
+        if (!string.IsNullOrEmpty(value.Text))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", "text");
+            writer.WriteString("text", value.Text);
+            writer.WriteEndObject();
+        }
+
+        foreach (var uri in value.ImageDataUris)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", "image_url");
+            writer.WriteStartObject("image_url");
+            writer.WriteString("url", uri);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+    }
 }
 
 /// <summary>An assistant message's request to call a tool, as sent back on the next request.</summary>

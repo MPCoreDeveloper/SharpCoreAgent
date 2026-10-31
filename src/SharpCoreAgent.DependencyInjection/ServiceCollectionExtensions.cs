@@ -136,20 +136,26 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the seventeen workspace tools and the registry that advertises them.
+    /// Registers the eighteen workspace tools and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
     /// <c>fetch_url</c> is not one of them: it is registered by <see cref="AddWeb"/> only when the developer asked for the
     /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off. The number is the
-    /// surface a default build advertises — fifteen tools from rounds 1–3, <c>dotnet_verify</c> from <c>012</c>, and
-    /// <c>task</c> from <c>011</c> — and <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added
-    /// or dropped without a failing test.
+    /// surface a default build advertises — fifteen tools from rounds 1–3, <c>dotnet_verify</c> from <c>012</c>,
+    /// <c>task</c> from <c>011</c> and <c>view_image</c> from the image round — and <c>TaskToolRegistrationTests</c>
+    /// pins the whole set, so a tool cannot be added or dropped without a failing test.
     ///
     /// The tools are singletons because they are stateless: each call resolves every path through the
     /// workspace it is handed, so one instance serves every session in the process. The five index-backed
     /// tools take an optional <c>ICodeIndex</c>, which the built-in container leaves null when the host
     /// registered none — that is how <c>--no-index</c> reaches them without a flag they have to check.
+    /// <para>
+    /// <c>view_image</c> is unconditional for the reason <c>dotnet_verify</c> is: reading a picture is a read. The
+    /// capability gate lives in the tool, not in the container — it refuses when the session's own
+    /// <see cref="SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsImages"/> is false, which the container cannot
+    /// know at registration time because the model is chosen per session.
+    /// </para>
     /// <para>
     /// The three shell tools share one <see cref="ShellProcessRegistry"/> on purpose: a handle returned by
     /// <c>run_shell</c> is meaningless to a <c>shell_output</c> that owns a different registry, and the
@@ -161,6 +167,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ShellProcessRegistry>();
         services.AddSingleton<ITool, ListDirectoryTool>();
         services.AddSingleton<ITool, ReadFileTool>();
+        services.AddSingleton<ITool, ViewImageTool>();
         services.AddSingleton<ITool, SearchTextTool>();
         services.AddSingleton<ITool, ListRootsTool>();
         services.AddSingleton<ITool, WriteFileTool>();
@@ -353,7 +360,7 @@ public static class ServiceCollectionExtensions
     /// declared".
     /// <para>
     /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface is
-    /// seventeen workspace tools including the ones that write, start processes and delegate, and the server's
+    /// eighteen workspace tools including the ones that write, start processes and delegate, and the server's
     /// allow-list is the statement that this container holds none of them. The published set filters this registry
     /// again, so the two gates the contract requires are both present.
     /// </para>

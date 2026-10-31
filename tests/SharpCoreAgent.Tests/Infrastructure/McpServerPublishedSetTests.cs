@@ -67,6 +67,7 @@ public sealed class McpServerPublishedSetTests : IDisposable
     [InlineData("search_text")]
     [InlineData("shell_output")]
     [InlineData("shell_stop")]
+    [InlineData("view_image")]
     [InlineData("write_file")]
     public void AToolTheRegistryHoldsIsStillNotPublishedUnlessItIsOnTheList(string name)
     {

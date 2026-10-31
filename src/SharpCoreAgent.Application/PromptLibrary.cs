@@ -26,6 +26,7 @@ public static class PromptLibrary
         6. If a tool returns an error, read it. Fix the arguments or change approach; do not repeat the same call.
         7. Stop when the task is done. Do not keep exploring to look thorough.
         8. Delegate one broad investigation with task instead of running it here: a sub-agent reads the prompt you give it and nothing else of this conversation, works in its own transcript and answers with one message, so the listings and the grep hits never enter this one. Put the goal, the paths you already know and what done looks like into the prompt; the sub-agent cannot delegate further, and may write only when this session already allows every tool without asking. Do the edits yourself — a delegated write still needs your dotnet_verify before the turn may end.
+        9. Look at a picture instead of guessing at it. When the answer depends on what an image contains — a screenshot, a diagram, a chart, a photograph — call view_image with its path; the image arrives with the next message. If it says the model cannot read images, say so in your final message and do not describe a picture you were not shown.
 
         Reporting:
         - Your final message is read by a developer in a terminal. Say what you changed, where, and how you verified it.
@@ -188,6 +189,21 @@ public static class PromptLibrary
         """;
 
     /// <summary>
+    /// Gets the message the loop adds when a tool answered with an image.
+    /// </summary>
+    /// <remarks>
+    /// Not part of the system prompt, for the reason <see cref="VerifyNudge"/> is not: the sentence is only true
+    /// after the tool result that produced the image, and a turn that looked at no picture has no business reading
+    /// it. The second sentence is for the transcript, not for the turn: a session file stores text and not
+    /// megabytes of base64, so a resumed conversation keeps this sentence with no image behind it, and the model
+    /// that reads it must know that the way to see the picture again is one more tool call.
+    /// </remarks>
+    public const string ImageAttached =
+        """
+        Here is the image a tool just returned, attached to this message. If the transcript was reloaded from disk, the sentence survived and the image did not: call view_image again rather than describing what you remember.
+        """;
+
+    /// <summary>
     /// Gets the system prompt for one host.
     /// </summary>
     /// <param name="indexAvailable">Whether the host registered a code index and the five tools that read it.</param>
@@ -200,8 +216,10 @@ public static class PromptLibrary
     /// </returns>
     /// <remarks>
     /// <c>dotnet_verify</c> has no switch here, unlike the index and the network: the composition root registers
-    /// it unconditionally, so the rule in the shipped prompt always has its tool. A new capability that is not
-    /// unconditional belongs in this method, not in the prompt text.
+    /// it unconditionally, so the rule in the shipped prompt always has its tool. <c>view_image</c> is registered
+    /// the same way — reading a picture is a read, not an opt-in capability — so its rule is operating rule 9 in
+    /// <see cref="SystemPrompt"/> rather than a section appended here. A new capability that is not unconditional
+    /// belongs in this method, not in the prompt text.
     /// </remarks>
     public static string SystemPromptFor(
         bool indexAvailable,

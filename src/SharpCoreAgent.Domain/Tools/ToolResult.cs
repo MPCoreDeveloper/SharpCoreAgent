@@ -51,6 +51,14 @@ public sealed record ToolResult
     /// <summary>Gets the text handed to the model. Empty only when the tool genuinely produced nothing.</summary>
     public string Content { get; init; } = string.Empty;
 
+    /// <summary>Gets the images the tool produced, for a tool that answers with a picture rather than a sentence.</summary>
+    /// <remarks>
+    /// The tool role carries text only, so these images are not sent with this result: the loop attaches
+    /// them to the user message that follows it. <see cref="Content"/> still describes them, which is what a
+    /// model that cannot read images — and a transcript read by a person — sees instead.
+    /// </remarks>
+    public IReadOnlyList<Conversation.ImageContent> Images { get; init; } = [];
+
     /// <summary>Gets a value indicating whether the invocation failed.</summary>
     public bool IsError { get; init; }
 
@@ -76,6 +84,24 @@ public sealed record ToolResult
         Content = content,
         Effects = effects ?? [],
     };
+
+    /// <summary>Creates a successful result that carries one image beside its description.</summary>
+    /// <param name="callId">The tool call identifier.</param>
+    /// <param name="toolName">The tool name.</param>
+    /// <param name="content">The text handed to the model, describing the image.</param>
+    /// <param name="image">The image itself.</param>
+    /// <returns>A result with <see cref="Images"/> holding one entry and no effects.</returns>
+    public static ToolResult Image(string callId, string toolName, string content, Conversation.ImageContent image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        return new ToolResult
+        {
+            CallId = callId,
+            ToolName = toolName,
+            Content = content,
+            Images = [image],
+        };
+    }
 
     /// <summary>Creates a failed result.</summary>
     /// <param name="callId">The tool call identifier.</param>

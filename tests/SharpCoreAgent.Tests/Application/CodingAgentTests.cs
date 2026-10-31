@@ -710,6 +710,56 @@ public sealed class CodingAgentTests
         Assert.Equal(2, report.ToolResults.Count);
     }
 
+    [Fact]
+    public async Task AnImageAToolReturnsArrivesOnTheNextUserMessage()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(ViewImageTool.Name)],
+            [Completed("that is a chart")]);
+        var image = new ImageContent { MediaType = "image/png", Base64 = "iVBORw0KGgoAAAANSUhEUg==" };
+        var tool = new StubTool(
+            ViewImageTool.Name,
+            ToolSafety.ReadOnly,
+            call => ToolResult.Image(call.Id, call.Name, "chart.png (image/png) is attached to the next message.", image));
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [tool]).RunTurnAsync(
+            session, "what does chart.png say", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Equal("that is a chart", report.FinalText);
+
+        // The tool's own message carries text and no picture. Every compatible provider rejects an image part on the
+        // tool role, so a result that put one there would fail the whole request instead of showing the model anything.
+        var toolMessage = Assert.Single(session.Messages, message => message.Role == ChatRole.Tool);
+        Assert.False(toolMessage.HasImages);
+        Assert.Contains("chart.png", toolMessage.Content, StringComparison.Ordinal);
+
+        // The picture follows it as a user message, which is the one role every provider reads images from, and the
+        // sentence that comes with it is the one that survives a reload of a session file.
+        var carrier = Assert.Single(session.Messages, message => message.HasImages);
+        Assert.Equal(ChatRole.User, carrier.Role);
+        Assert.Equal(PromptLibrary.ImageAttached, carrier.Content);
+        Assert.Equal(image, Assert.Single(carrier.Images));
+
+        // After the tool result, not before it: an image that overtook the message it belongs to would answer a call
+        // that had not been made yet.
+        var positions = session.Messages.Select((message, index) => (Message: message, Index: index)).ToList();
+        Assert.True(
+            positions.Single(position => position.Message.HasImages).Index >
+            positions.Single(position => position.Message.Role == ChatRole.Tool).Index,
+            "the image has to follow the tool message that produced it");
+
+        // And the path end to end: the second request is the one the model actually received, so the picture has to
+        // be in its transcript rather than only in the one the developer reads afterwards.
+        var sent = Assert.Single(model.Requests[1].Messages, message => message.HasImages);
+        Assert.Equal(ChatRole.User, sent.Role);
+        Assert.Equal(image, Assert.Single(sent.Images));
+        Assert.Equal(2, model.Requests.Count);
+    }
+
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
         AgentWithOptions(new AgentOptions(), model, tools);
 
@@ -773,14 +823,19 @@ public sealed class CodingAgentTests
     private sealed class ScriptedModel(ModelDescriptor model, params ChatStreamEvent[][] turns)
         : IStreamingChatModel
     {
+        private readonly List<ChatRequest> _requests = [];
         private int _calls;
 
         public ModelDescriptor Model => model;
+
+        /// <summary>Gets what the loop asked for, one entry per request, so a test can read the wire rather than the session.</summary>
+        public IReadOnlyList<ChatRequest> Requests => _requests;
 
         public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(
             ChatRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            _requests.Add(request);
             var turn = turns[Math.Min(_calls++, turns.Length - 1)];
 
             foreach (var streamEvent in turn)

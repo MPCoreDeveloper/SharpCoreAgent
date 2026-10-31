@@ -36,6 +36,15 @@ public static class TextLimits
     /// <summary>Gets the size above which a file is not searched, in bytes.</summary>
     public const long MaxSearchableFileBytes = 1024 * 1024;
 
+    /// <summary>Gets the largest image one <c>view_image</c> call shows, in bytes.</summary>
+    /// <remarks>
+    /// Four mebibytes. Base64 spends a third on top of that, so one image costs about 5.6 MB of request body — well
+    /// under every provider's ceiling — and a full-page screenshot, a diagram or a photograph at a readable scale
+    /// still fits. The limit is on the file, not on what the model charges for it: a provider bills an image by its
+    /// pixels, so a large picture costs tokens whether it is compressed or not.
+    /// </remarks>
+    public const int MaxImageBytes = 4 * 1024 * 1024;
+
     /// <summary>Gets how many leading bytes are inspected when deciding whether a file is binary.</summary>
     public const int BinarySniffBytes = 8 * 1024;
 

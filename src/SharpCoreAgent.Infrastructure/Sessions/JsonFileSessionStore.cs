@@ -96,6 +96,13 @@ public sealed class JsonFileSessionStore : ISessionStore
         })],
     };
 
+    /// <remarks>
+    /// Images are deliberately absent from the document. A session file is a transcript a person opens and
+    /// greps, and one screenshot is megabytes of base64 on a single line; the file it came from is still on
+    /// disk and one <c>view_image</c> call away. The <c>ImageAttached</c> sentence the loop writes is what
+    /// survives the round trip and says so, which is why a resumed transcript tells the model to look again
+    /// rather than pretending it still has the picture.
+    /// </remarks>
     private static SessionMessageDocument ToDocument(ChatMessage message) => new()
     {
         Role = message.Role.ToString(),

@@ -1,0 +1,150 @@
+using System.Globalization;
+using SharpCoreAgent.Domain.Conversation;
+using SharpCoreAgent.Domain.Tools;
+
+namespace SharpCoreAgent.Infrastructure.Tools;
+
+/// <summary>
+/// Shows the model an image file: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment.
+/// </summary>
+/// <remarks>
+/// This is the half of reading a picture that no other tool can do. <c>read_file</c> refuses a binary file because
+/// its answer is a numbered listing of text; a screenshot answered that way is a screenful of mojibake that says
+/// nothing. So this tool answers with <see cref="ImageContent"/> instead, and the loop hands the bytes to the model
+/// on the message that follows.
+/// <para>
+/// Two rules keep it honest. The extension decides the media type, because a provider is told what the bytes
+/// are and will reject a mislabelled payload — sniffing would only move the failure later. And the model's own
+/// <see cref="SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsImages"/> decides whether the file is read at
+/// all: a text-only model that is handed a path answers with an invented description of a picture it never saw,
+/// which is the one failure mode this tool exists to prevent.
+/// </para>
+/// </remarks>
+public sealed class ViewImageTool : ITool
+{
+    /// <summary>Gets the tool name.</summary>
+    public const string Name = "view_image";
+
+    private const string Schema =
+        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}""";
+
+    private const string Description =
+        "Show an image file to the model: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment, up to 4 MiB. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified.";
+
+    /// <inheritdoc />
+    public ToolDefinition Definition { get; } = new(Name, Description, Schema);
+
+    /// <inheritdoc />
+    public ToolSafety Safety => ToolSafety.ReadOnly;
+
+    /// <inheritdoc />
+    public async ValueTask<ToolResult> ExecuteAsync(
+        ToolCall toolCall,
+        ToolInvocationContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(toolCall);
+        ArgumentNullException.ThrowIfNull(context);
+
+        using var arguments = ToolArgumentReader.Parse(Name, toolCall.ArgumentsJson);
+        var path = arguments.GetRequiredString("path");
+
+        if (!PathSafety.TryResolveRead(context.Workspace, path, out var fullPath, out var owner, out var error))
+        {
+            return ToolResult.Refused(toolCall.Id, Name, error!);
+        }
+
+        var relative = (owner ?? context.Workspace).ToRelative(fullPath);
+
+        if (Directory.Exists(fullPath))
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                $"'{relative}' is a directory. Use list_directory to see what it contains.");
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            return ToolResult.Failure(toolCall.Id, Name, $"no file at '{relative}'");
+        }
+
+        if (MediaTypeFor(fullPath) is not { } mediaType)
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                $"'{relative}' is not an image this tool can show. It reads files named .png, .jpg, .jpeg, .gif or .webp; use read_file for text.");
+        }
+
+        var length = new FileInfo(fullPath).Length;
+        if (length == 0)
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                $"'{relative}' is empty (0 bytes), so there is nothing to show.");
+        }
+
+        if (length > TextLimits.MaxImageBytes)
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{relative}' is {length} bytes; view_image shows at most {TextLimits.MaxImageBytes} bytes (4 MiB). Ask the developer to shrink it, or to save a smaller copy."));
+        }
+
+        if (context.Model is not { SupportsImages: true })
+        {
+            // Refused before a byte is read, and phrased so the model has nothing to fill in by guessing: a model
+            // that cannot see an image will describe one anyway if the only thing it was told is that a file exists.
+            var name = context.Model?.QualifiedName ?? "the session's model";
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                $"'{relative}' was not opened: {name} is declared text-only in this build and cannot read images. Do not describe what the image contains — say that you cannot see it, and let the developer switch to a model that reads images.");
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ToolResult.Failure(toolCall.Id, Name, $"'{relative}' could not be read: {ex.Message}");
+        }
+
+        var image = new ImageContent
+        {
+            MediaType = mediaType,
+            Base64 = Convert.ToBase64String(bytes),
+        };
+
+        var note = string.Create(
+            CultureInfo.InvariantCulture,
+            $"'{relative}' ({mediaType} · {bytes.Length} bytes) is attached to the next message.");
+
+        return ToolResult.Image(toolCall.Id, Name, note, image) with
+        {
+            Effects = [new ToolEffect(ToolEffectKind.Read, relative)],
+        };
+    }
+
+    /// <summary>
+    /// Maps a file extension to the media type a provider is told.
+    /// </summary>
+    /// <param name="fullPath">The absolute path of the file.</param>
+    /// <returns>The media type, or <see langword="null"/> when the extension is not one this tool shows.</returns>
+    private static string? MediaTypeFor(string fullPath) =>
+        Path.GetExtension(fullPath).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => null,
+        };
+}

@@ -198,6 +198,27 @@ public sealed class PromptLibraryTests
     }
 
     [Fact]
+    public void TheShippedPromptSendsAPictureThroughViewImage()
+    {
+        // Rule 9 is the only place the model learns it can be shown a picture. Without it a screenshot sitting on
+        // disk is read as base64 through read_file and the answer is inferred from the bytes instead of the image.
+        var rule = Rule(9);
+
+        Assert.Contains("view_image", rule, StringComparison.Ordinal);
+
+        // The refusal path matters as much as the call. `view_image` refuses on its own when the model cannot read
+        // pictures, and this sentence is what turns that refusal into an answer instead of a confident invention.
+        Assert.Contains("cannot read images", rule, StringComparison.Ordinal);
+        Assert.Contains("do not describe", rule, StringComparison.Ordinal);
+
+        // Unconditional like rule 8: every host registers `view_image`, so no flag can remove the rule that names it.
+        Assert.Contains(
+            rule,
+            PromptLibrary.SystemPromptFor(true, webAvailable: true, mcpAvailable: true, fsharpAvailable: true),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheSubAgentIsToldItSeesNothingElse()
     {
         // The child's own prompt has to say it first, or its opening move is a question the developer answered one

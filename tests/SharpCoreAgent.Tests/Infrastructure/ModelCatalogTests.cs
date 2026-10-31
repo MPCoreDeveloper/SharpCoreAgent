@@ -54,6 +54,26 @@ public sealed class ModelCatalogTests
     }
 
     [Fact]
+    public void OnlyTheModelsDeclaredToReadImagesSaySo()
+    {
+        // `view_image` asks the session's model this question before it opens a file, so the flag is a promise
+        // made to a tool rather than a line of advertising: an entry that says yes must be one whose provider
+        // accepts an `image_url` part, and a text-only entry has to refuse the picture rather than let the model
+        // invent a description of one it never saw.
+        Assert.All(DeepSeekChatModel.Catalog, model => Assert.False(model.SupportsImages));
+        Assert.All(DemoChatModel.Catalog, model => Assert.False(model.SupportsImages));
+
+        Assert.All(
+            GrokChatModel.Catalog.Where(model => !string.Equals(model.Id, "grok-3-mini", StringComparison.Ordinal)),
+            model => Assert.True(model.SupportsImages));
+        Assert.False(GrokChatModel.DescriptorFor("grok-3-mini").SupportsImages);
+
+        // A compatible endpoint is named by the developer and its protocol defines the part, so the build
+        // promises it for every identifier rather than refusing a server that really does read pictures.
+        Assert.True(OpenAiCompatibleChatModel.DescriptorFor("some-vision-model").SupportsImages);
+    }
+
+    [Fact]
     public void AnIdentifierTheCatalogueDoesNotListStillSynthesisesADescriptor()
     {
         // A model released after this build must not be a hard failure: the provider is the authority

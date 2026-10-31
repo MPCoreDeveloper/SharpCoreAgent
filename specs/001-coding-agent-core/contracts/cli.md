@@ -29,6 +29,9 @@ settings file, its precedence and its exit code are in
 |---|---|---|---|
 | `--provider <name>` | run, chat | `deepseek` | `deepseek`, `grok`, `openai-compatible`, `demo` |
 | `--model <id>` | run, chat | provider default | Model identifier, e.g. `deepseek-chat`, `grok-4` |
+| `--planner <model>` | run, chat | session model | The model a plan turn runs on; a bare id keeps `--provider`, `provider:id` names both; a settings key and `SHARPCOREAGENT_PLANNER_MODEL` (016) |
+| `--executor <model>` | run, chat | session model | The model an act turn runs on, and the one `/model` starts from (016) |
+| `--reviewer <model>` | run, chat | session model | The model `/review` sends its read-only turn to (016) |
 | `--workspace <path>` | run, chat | current directory | Root the tools may touch |
 | `--add-root <path>` | run, chat | — | A read-only root the read tools may also answer from; repeatable, and `SHARPCOREAGENT_ADD_ROOTS` adds more after these (007) |
 | `--web` | run, chat | — | Register `fetch_url` for this process; refused on `models`, `index`, `config` and `setup` (008) |
@@ -51,6 +54,7 @@ settings file, its precedence and its exit code are in
 Parsing rules: options may appear before or after the prompt; `--` ends option parsing; an unknown
 option is a usage error, never ignored; a missing value for an option is a usage error;
 `--provider` values are matched case-insensitively. `SHARPCOREAGENT_PROVIDER`, `SHARPCOREAGENT_MODEL`,
+`SHARPCOREAGENT_PLANNER_MODEL`, `SHARPCOREAGENT_EXECUTOR_MODEL`, `SHARPCOREAGENT_REVIEWER_MODEL`,
 `SHARPCOREAGENT_WORKSPACE` and `SHARPCOREAGENT_CREDENTIAL_FILE` are honoured as defaults, with explicit
 arguments winning.
 
@@ -61,12 +65,24 @@ environment, and a blank value counts as unset. The file is read once per comman
 malformed file exits `3` before the first request with a message naming the file and the line — never
 the line's content.
 
+When no model the process may use has a key and both streams are terminals, `run` and `chat` ask for one
+instead of refusing: the prompt names the variable, the key is read with the echo off, and it is written to
+`credentials.env` beside the settings file (or to the file `--credential-file` /
+`SHARPCOREAGENT_CREDENTIAL_FILE` named). The write keeps every other line of that file, replaces an
+existing assignment for the same name, and leaves the file readable by its owner only where the platform
+has file modes. The key is then set in the process for the rest of the run, and — only when the developer
+named no file — the settings document gains `credential-file` pointing at it, so the next run finds it. A
+piped stdin, a declined `[Y/n]` or a blank paste writes nothing and exits `3` with the three routes printed
+(016).
+
 ## Interactive commands (`chat`)
 
 | Input | Behaviour |
 |---|---|
 | plain text | starts a turn |
 | `/model <provider>:<id>` or `/model <id>` | switches the active model for subsequent turns (US2) |
+| `/roles` | prints the model each role runs on: plan, act and review (016) |
+| `/review [focus]` | one read-only turn on the reviewer's model, in this transcript; the approval mode and the model are restored afterwards (016) |
 | `/approval <mode>` | changes the approval mode, printing the new effective mode |
 | `/usage` | prints input/output tokens per model for the session, `unknown` where unreported |
 | `/files` | prints the files and commands from the last turn |
@@ -114,5 +130,7 @@ did not (the query is named on stderr), and 2 when it cannot run: no workspace, 
 
 `--help` prints the synopsis, the option table above with defaults, the environment variables, the
 interactive commands, and one worked example per provider. `models` prints one line per model:
-`<provider>:<id>  <display name>  tools=<yes|no>` and, with `--provider`, only that provider's models
-plus a note when the credential variable is unset.
+`<provider>:<id>  <display name>  tools=<yes|no>  images=<yes|no>` and, with `--provider`, only that
+provider's models plus a note when the credential variable is unset. `images=` is the flag `view_image`
+consults before it opens a file (017), so the answer to "will this model see my screenshot?" is on the same
+line as the answer to "can it call a tool?".

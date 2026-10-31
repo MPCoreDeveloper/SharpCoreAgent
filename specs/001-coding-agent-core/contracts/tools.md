@@ -39,6 +39,7 @@ Obligations:
 | `read_file` | ReadOnly | `Read` | `path` (required), `start_line?`, `line_count?` (default 2000) | Numbered lines `  12│text` plus a truncation marker |
 | `search_text` | ReadOnly | `Read` | `pattern` (required, regex-free literal), `glob?` (default `*`), `path?` (default `.`, a file searches that file), `max_matches?` (default 100) | `relative/path:line: text` |
 | `list_roots` | ReadOnly | `Read` | none | `primary` and `read-only` lines with absolute paths (007) |
+| `view_image` | ReadOnly | `Read` | `path` (required) | `'<path>' (<media type> · <n> bytes) is attached to the next message.` and the image itself, on the user message that follows (017) |
 | `write_file` | Destructive | `Created`/`Modified` | `path` (required), `content` (required), `overwrite?` (default `true`) | `wrote N bytes to <path> (<created|overwritten>)` |
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |
 | `run_shell` | Destructive | `CommandRun` | `command` (required), `timeout_seconds?` (default 120, max 600), `working_directory?` | `$ <command>` + exit code + captured output |
@@ -50,7 +51,9 @@ rounds keep their own contracts and are the reference for the tools they add: `r
 `shell_output` and `shell_stop` in `specs/003-terminal-console-agent`, the five index tools in
 `specs/002-code-evidence-index`, `fetch_url` in [`specs/008-web-fetch`](../../008-web-fetch/contracts/web-fetch.md),
 and `dotnet_verify` in [`specs/012-compiler-oracle`](../../012-compiler-oracle/contracts/dotnet-verify.md), and
-`task` in [`specs/011-subagent-task`](../../011-subagent-task/contracts/task-tool.md).
+`task` in [`specs/011-subagent-task`](../../011-subagent-task/contracts/task-tool.md), and `view_image` — with the
+`ImageContent` a user message carries and the wire shape that sends it — in
+[`specs/017-image-view`](../../017-image-view/contracts/view-image.md).
 
 ### JSON Schemas (exact strings returned to the model)
 
@@ -73,6 +76,15 @@ and `dotnet_verify` in [`specs/012-compiler-oracle`](../../012-compiler-oracle/c
 ```json
 {"type":"object","properties":{},"required":[],"additionalProperties":false}
 ```
+
+`view_image` (017)
+```json
+{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}
+```
+Note: the extension alone decides the media type (`.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`), the file is read only
+under 4 MiB, and the model's own `SupportsImages` decides whether the bytes are read at all — a text-only session is
+refused *before* the file is opened, and the refusal says not to describe the picture. The image does not travel on
+the tool role: the loop attaches it to the user message that follows the result.
 
 `fetch_url` (008 — registered only when `--web` is passed)
 ```json
@@ -162,6 +174,32 @@ names and their arguments are:
 Every failure carries a stable code — `FSH001`–`FSH006` from the adapter, `LANG001` for an extension no
 adapter claims, `LANG002` for an adapter that claims a file without implementing the port — and a hint that
 names a registered tool. None of them closes the turn's verification gate: only `dotnet_verify` does.
+
+## Pictures (017)
+
+`view_image` is the only way a picture enters a conversation, and it is registered in every build: reading an image is
+a read, not an opt-in capability, so no flag adds it and none removes it. The full contract — schema, refusal
+sentences, the carrier message and the `image_url` part — is
+[`specs/017-image-view/contracts/view-image.md`](../../017-image-view/contracts/view-image.md). What a reader of this
+catalogue needs is where the tool sits among the others:
+
+- **Safety** — `ReadOnly`, and the only effect is `Read`, on the file, workspace-relative (or relative to the attached
+  root that owns it). A plan turn and a `readonly` session call it and no prompt appears.
+- **Arguments** — one: `path`. There is no crop, no page, no scale, no URL and no base64 input; the developer's file
+  is shown as it is, or refused with the number that says why.
+- **Result** — one sentence naming the file, its media type and its size, plus one `ImageContent` in
+  `ToolResult.Images`. The text is what a model that cannot see, and a person reading the transcript, get instead.
+- **Where the bytes go** — not on the tool role. `CodingAgent` appends a user message carrying
+  `PromptLibrary.ImageAttached` and the image after the tool message, because every compatible provider accepts image
+  parts on the user role and none accepts them on a tool result. The loop reads `ToolResult.Images`, so this is a
+  property of any tool that answers with a picture rather than of this one.
+- **Refusals** — a text-only model, and a context that named no model, are refused before the file is opened, and the
+  refusal forbids describing a picture the model never received. Wrong extension, zero bytes and over 4 MiB are
+  refused with their own numbers. Every one is a failed `ToolResult` the model can act on, never an exception.
+- **Prompt** — operating rule 9 of `PromptLibrary.SystemPrompt` ships with it: call `view_image` when the answer
+  depends on what a picture contains, and say so when the session's model cannot see it.
+- **Not served** — `mcp serve` still publishes the five read-only index tools only. `view_image` is registered and not
+  published, which `McpServerPublishedSetTests` asserts.
 
 ## Delegation (011)
 

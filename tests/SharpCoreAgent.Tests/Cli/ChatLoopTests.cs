@@ -117,15 +117,16 @@ public sealed class ChatLoopTests
     [Fact]
     public async Task NearingTheCeilingSaysSoBeforeTheSessionStops()
     {
-        // Two demo answers bill about 1 500 tokens, which is most of a 1 700 token ceiling: the developer should hear
-        // about it while there is still room to act, not when the prompt is already refusing them. The ceiling moved up
-        // by 300 with `011`'s delegation rule in the system prompt: the demo adapter counts characters, so a longer
-        // prompt is a bigger bill, and the band this test needs is 80% of the ceiling or more, under it.
-        var (exitCode, _, diagnostics) = await ConverseAsync("hello\nhello again\n/exit\n", budget: 1_700);
+        // Two demo answers bill about 1 800 tokens, which is most of a 2 000 token ceiling: the developer should hear
+        // about it while there is still room to act, not when the prompt is already refusing them. The ceiling tracks
+        // the system prompt, because the demo adapter counts characters and bills the prompt with every request: it
+        // moved up by 300 with `011`'s delegation rule, and again to 2 000 with the `view_image` rule, which is a
+        // paragraph rather than a line. What the band has to stay is 80% of the ceiling or more, and under it.
+        var (exitCode, _, diagnostics) = await ConverseAsync("hello\nhello again\n/exit\n", budget: 2_000);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("% of the session budget is spent", diagnostics, StringComparison.Ordinal);
-        Assert.Contains("'/budget +1,700' raises it", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("'/budget +2,000' raises it", diagnostics, StringComparison.Ordinal);
     }
 
     [Fact]

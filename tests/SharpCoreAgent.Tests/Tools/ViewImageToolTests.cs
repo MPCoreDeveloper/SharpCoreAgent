@@ -1,0 +1,235 @@
+using SharpCoreAgent.Domain.Model;
+using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Infrastructure.Tools;
+using Xunit;
+
+namespace SharpCoreAgent.Tests.Tools;
+
+/// <summary>
+/// <c>view_image</c> is the only path by which a picture enters a conversation, so the tests pin what makes it
+/// safe to offer: the file is read only when the model can see it, the extension decides the media type, and
+/// nothing over the ceiling, outside the workspace or of the wrong kind is opened at all.
+/// </summary>
+/// <remarks>
+/// The capability gate is the one assertion worth reading twice. A refused call must not carry an image, because
+/// a tool result that quietly carries bytes is exactly how a text-only model ends up describing a picture — and
+/// the message it is given has to say "do not describe" in as many words, since a model fills silence with an
+/// invented description.
+/// </remarks>
+public sealed class ViewImageToolTests
+{
+    private static readonly byte[] PngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02, 0x03];
+
+    [Fact]
+    public async Task HandsTheFileToTheLoopAsAnImage()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/shot.png", PngBytes);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.False(result.IsTruncated);
+        Assert.Equal(
+            "'shots/shot.png' (image/png · 11 bytes) is attached to the next message.",
+            result.Content);
+
+        var image = Assert.Single(result.Images);
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal(Convert.ToBase64String(PngBytes), image.Base64);
+        Assert.Equal(new ToolEffect(ToolEffectKind.Read, "shots/shot.png"), Assert.Single(result.Effects));
+    }
+
+    [Theory]
+    [InlineData("a.png", "image/png")]
+    [InlineData("a.PNG", "image/png")]
+    [InlineData("a.jpg", "image/jpeg")]
+    [InlineData("a.jpeg", "image/jpeg")]
+    [InlineData("a.gif", "image/gif")]
+    [InlineData("a.webp", "image/webp")]
+    public async Task TheExtensionDecidesTheMediaTypeTheProviderIsTold(string name, string mediaType)
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes(name, PngBytes);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", ToolTestWorkspace.Args(new { path = name })),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.Equal(mediaType, Assert.Single(result.Images).MediaType);
+    }
+
+    [Fact]
+    public async Task AFileThatIsNotAnImageIsAnsweredWithTheListOfKinds()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write("notes.txt", "hello");
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"notes.txt"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains(".png, .jpg, .jpeg, .gif or .webp", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ATextOnlyModelIsRefusedAndToldNotToDescribeWhatItCannotSee()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shot.png", PngBytes);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shot.png"}"""),
+            TextOnly(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Empty(result.Effects);
+        Assert.Contains("deepseek:deepseek-chat", result.Content, StringComparison.Ordinal);
+        Assert.Contains("text-only", result.Content, StringComparison.Ordinal);
+        Assert.Contains("Do not describe what the image contains", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASessionThatNamedNoModelIsRefusedRatherThanAssumedToSee()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shot.png", PngBytes);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shot.png"}"""),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("the session's model", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnEmptyFileIsNothingToShow()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shot.png", []);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shot.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("is empty (0 bytes)", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AFileOverTheCeilingNamesTheLimitAndTheSize()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("huge.png", new byte[TextLimits.MaxImageBytes + 1]);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"huge.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains(
+            $"is {TextLimits.MaxImageBytes + 1} bytes; view_image shows at most {TextLimits.MaxImageBytes} bytes",
+            result.Content,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APathOutsideTheWorkspaceIsRefused()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var outside = Path.Combine(Path.GetDirectoryName(sandbox.Root)!, "outside.png");
+        await File.WriteAllBytesAsync(outside, PngBytes, TestContext.Current.CancellationToken);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"../outside.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsRefused);
+        Assert.Empty(result.Images);
+        Assert.Contains("outside the workspace root", result.Content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AnAttachedRootIsReadableAndNamedRelativeToItsOwnRoot()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var shared = sandbox.AddAttachment("shared");
+        var full = ToolTestWorkspace.WriteUnder(shared, "logo.png", "placeholder");
+        await File.WriteAllBytesAsync(full, PngBytes, TestContext.Current.CancellationToken);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", ToolTestWorkspace.Args(new { path = full })),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Single(result.Images);
+        Assert.Equal(new ToolEffect(ToolEffectKind.Read, "logo.png"), Assert.Single(result.Effects));
+        Assert.StartsWith("'logo.png' (image/png", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ADirectoryIsReportedAsOne()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        Directory.CreateDirectory(sandbox.FullPath("shots.png"));
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Contains("is a directory", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AMissingFileIsReportedByItsRelativeName()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"gone.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Equal("no file at 'gone.png'", result.Content);
+    }
+
+    [Fact]
+    public void IsReadOnlyAndAsksForOnePath()
+    {
+        var tool = new ViewImageTool();
+
+        Assert.Equal(ViewImageTool.Name, tool.Definition.Name);
+        Assert.Equal("view_image", tool.Definition.Name);
+        Assert.Equal(ToolSafety.ReadOnly, tool.Safety);
+        Assert.Contains("\"required\":[\"path\"]", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"additionalProperties\":false", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("never modified", tool.Definition.Description, StringComparison.Ordinal);
+    }
+
+    private static ToolInvocationContext ReadingImages(ToolTestWorkspace sandbox) =>
+        new(sandbox.Workspace) { Model = new ModelDescriptor("grok", "grok-4", "Grok 4", SupportsImages: true) };
+
+    private static ToolInvocationContext TextOnly(ToolTestWorkspace sandbox) =>
+        new(sandbox.Workspace) { Model = new ModelDescriptor("deepseek", "deepseek-chat", "DeepSeek Chat") };
+}

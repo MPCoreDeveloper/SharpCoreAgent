@@ -65,6 +65,13 @@ public sealed class DeepSeekChatModel : OpenAiCompatibleModelBase
     /// because a resumed transcript names one of them and the session file is the authority on which
     /// model a conversation was using.
     /// </para>
+    /// <para>
+    /// None of them declares <see cref="ModelDescriptor.SupportsImages"/>: the vision model this adapter once
+    /// shared a page with was withdrawn, and every identifier the provider lists today reads text. So
+    /// <c>view_image</c> refuses on DeepSeek with a message that names the model, instead of sending an image
+    /// part the endpoint rejects — and the refusal is the reason the model does not invent what a screenshot
+    /// showed.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [

@@ -61,12 +61,18 @@ public sealed class GrokChatModel : OpenAiCompatibleModelBase
     /// tool calling) and the model a turn runs on when none is named. <c>grok-4</c>, <c>grok-3</c> and
     /// <c>grok-3-mini</c> remain listed, and remain resolvable, because a resumed session that used one
     /// must still resolve: the transcript is the authority on which model a conversation was using.
+    /// <para>
+    /// The three multimodal identifiers declare <see cref="ModelDescriptor.SupportsImages"/>; <c>grok-3-mini</c>
+    /// does not, because it is the one entry this build is not willing to promise reads a picture. A capability
+    /// declared too generously sends an image a provider rejects and fails the whole turn, which is worse than a
+    /// refusal that names the model — so the small model stays text-only until a measurement says otherwise.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
-        new(ProviderKey, "grok-4.7", "Grok 4.7", ContextWindow: 500_000),
-        new(ProviderKey, "grok-4", "Grok 4", ContextWindow: 256_000),
-        new(ProviderKey, "grok-3", "Grok 3", ContextWindow: 131_072),
+        new(ProviderKey, "grok-4.7", "Grok 4.7", ContextWindow: 500_000, SupportsImages: true),
+        new(ProviderKey, "grok-4", "Grok 4", ContextWindow: 256_000, SupportsImages: true),
+        new(ProviderKey, "grok-3", "Grok 3", ContextWindow: 131_072, SupportsImages: true),
         new(ProviderKey, "grok-3-mini", "Grok 3 Mini", ContextWindow: 131_072),
     ];
 

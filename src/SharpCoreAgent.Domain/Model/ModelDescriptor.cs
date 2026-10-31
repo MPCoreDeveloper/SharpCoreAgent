@@ -31,10 +31,13 @@ public enum FinishReason
 /// <param name="SupportsTools">Whether the model can emit tool calls at all.</param>
 /// <param name="SupportsStreaming">Whether the provider implements server-sent events for this model.</param>
 /// <param name="EmitsThinking">Whether the provider streams reasoning deltas separately from text.</param>
+/// <param name="SupportsImages">Whether the model can read an image a message carries.</param>
 /// <remarks>
 /// Capabilities are declared, not probed. A turn against a model that cannot call tools is refused
 /// before a request is spent, which turns a class of silent misbehaviour ("the model ignored the
-/// tools") into one clear message.
+/// tools") into one clear message. The same rule governs <paramref name="SupportsImages"/>: a model that
+/// cannot see is refused the tool that shows it a picture, rather than sent a request the provider would
+/// reject — or, worse, asked to describe a picture it never received, which it will invent.
 /// </remarks>
 public sealed record ModelDescriptor(
     string Provider,
@@ -43,7 +46,8 @@ public sealed record ModelDescriptor(
     int? ContextWindow = null,
     bool SupportsTools = true,
     bool SupportsStreaming = true,
-    bool EmitsThinking = false)
+    bool EmitsThinking = false,
+    bool SupportsImages = false)
 {
     /// <summary>Gets the <c>provider:model</c> name used in logs, reports and the CLI.</summary>
     public string QualifiedName => $"{Provider}:{Id}";

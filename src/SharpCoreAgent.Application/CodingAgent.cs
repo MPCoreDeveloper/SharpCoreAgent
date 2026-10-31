@@ -303,6 +303,14 @@ public sealed class CodingAgent
             var result = await InvokeAsync(session, call, sink, cancellationToken).ConfigureAwait(false);
             state.Add(result);
             session.Add(ChatMessage.FromToolResult(result));
+
+            // An image never travels on the tool role: every compatible provider takes image parts on a user message
+            // and none of them on a tool result. So the picture follows the sentence that describes it, and the
+            // sentence says where it came from for the transcript a person reads later.
+            if (result.Images.Count > 0)
+            {
+                session.Add(ChatMessage.User(PromptLibrary.ImageAttached, result.Images));
+            }
         }
 
         // Checked after the tool round too, because one round can add several large results: the loop must not send

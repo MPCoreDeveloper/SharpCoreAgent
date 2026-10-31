@@ -11,7 +11,9 @@ the four paths it may not touch. Those three rounds and `012` are one commit, `a
 cannot be separated: `README.md`, `HelpText.cs`, `CodingAgent.cs` and this roadmap each carry hunks from more
 than one of them, and any split would leave an intermediate commit whose registration tests fail. Round 8 (`016`)
 is specified and implemented in one change: three role flags, two interactive commands and the first-run key
-prompt, with four new test classes and no line added to `Domain` — whole suite 1228/1228 at 0 warnings.
+prompt, with four new test classes and no line added to `Domain`. Round 9 (`017`) closes what round 4 left open as
+T035: `Domain.Conversation` gains an image, `view_image` becomes the eighteenth default tool, and the loop hands a
+picture over on the user message that follows its tool result — whole suite 1256/1256 at 0 warnings.
 
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
@@ -50,13 +52,14 @@ The four gaps a newcomer hits, in the order they hit them.
 | 6 | [`013-evidence-mcp-server`](013-evidence-mcp-server/spec.md) | `mcp serve` — the index's evidence for Copilot, Codex and Claude Code, over stdio | 0 (amended to 1.2.0), and `002` (landed) |
 | 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30 as `a447a4d`) | 0, and `012` (landed) |
 | 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run | 0, `004`, `005`, `006` (all landed) |
+| 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (closes `010` T035) | 0, and `010` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
-repository has not made. If it is made, it becomes `017` and it does not change 007–011. (`012` went to
+repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
 the compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider
-nor a key, `013` is the evidence server, and `015` is F# code intelligence —
+nor a key, `013` is the evidence server, `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
-server, and `016` is model roles.)
+server, `016` is model roles and `017` is the image view.)
 
 ## Decision record
 
@@ -308,6 +311,37 @@ text byte-identical to the in-process answer; a registry-wide test proves `write
 unreachable; and the ratio `mcp bench` prints is pasted into the round's `plan.md` — including if it is
 unflattering.
 
+## Round 9 — `017-image-view` (implemented in this change, not yet merged)
+
+**Status**: implemented, whole suite 1256/1256 in `Release` at 0 warnings. Round 4's T035 asked for this round and
+refused to fake it: *"a screenshot the model could \*see\* is a content-block change in `Domain.Conversation`, which
+is its own round."* So the round changes `Domain.Conversation`: `ImageContent` (media type, base64, `ByteCount`,
+`ToDataUri`), `ChatMessage.Images` on the user role, `ToolResult.Images`, and `ModelDescriptor.SupportsImages` as a
+declared capability. The contract is
+[`017-image-view/contracts/view-image.md`](017-image-view/contracts/view-image.md); the argument is
+[`017-image-view/spec.md`](017-image-view/spec.md) and the measurements are in its `plan.md`.
+
+**Ships**: `view_image` — an eighteenth default tool, `ReadOnly`, one `path`, five extensions
+(`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`), a 4 MiB ceiling, and a capability gate that refuses *before* opening the file
+when the session's model is not declared to read images, naming the model and forbidding a description of a picture
+it never saw. The loop attaches what the tool returned to a user message carrying `PromptLibrary.ImageAttached`,
+because the tool role carries text only on every compatible provider — so the transcript reads: the call, the
+sentence, the picture. The wire is an `image_url` part with a `data:` URI, and a message with no images is still a
+plain string, so no earlier request shape changed. `models` prints `images=yes|no`, and the catalogues say which
+entries can see (Grok's `grok-4.7`/`grok-4`/`grok-3`, every `openai-compatible` id, none of DeepSeek's).
+
+**Does not ship**: images inside MCP results (`McpContent.Flatten` is unchanged, so a browser screenshot is shown by
+calling `view_image` on the path the sink returned), `fetch_url` returning images, OCR or any local vision, PDF/SVG/
+audio/video, pasted or piped images and an `--image` flag, resizing or re-encoding, images in session files, a
+per-turn image budget or deduplication, an image token estimate, and serving `view_image` over `mcp serve`.
+
+**Evidence**: `ViewImageToolTests` (eleven methods, one a six-case theory over the media types), eight other classes
+extended — `CodingAgentTests` (the picture arrives on the next user message, after the tool message, and is in the
+next request), `OpenAiCompatibleTransportTests` (parts vs string), `ConversationImageTests` (the Domain surface,
+including `ToString` never printing the payload), `ModelCatalogTests`, `PromptLibraryTests`, `TaskToolRegistrationTests`
+(eighteen names), `McpServerPublishedSetTests` (`view_image` registered, not published) — and
+`ChatLoopTests`' ceiling moved 1 700 → 2 000 tokens because the prompt grew rule 9. Zero warnings, 1256 passing.
+
 ## Open work, and what is still undecided
 
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
@@ -322,15 +356,16 @@ empty checkbox.
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |
 | 2 | `008` T031–T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch — plus a web search tool, which is the one decision below |
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
-| 4 | `010` T031–T035 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured, and showing the screenshot to the model as an image — the last is the one that matters, and it is a `ToolResult` content change in `Domain.Conversation`, not an artefact sink |
+| 4 | `010` T031–T034 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured — T035 (*showing the screenshot to the model as an image*) is closed by `017` |
 | 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
+| 9 | `017` T024–T033 | images inside MCP results (a screenshot is a file, and `view_image` can name it), `fetch_url` returning images, OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, a per-turn image budget or deduplication, an image token estimate, and serving `view_image` over `mcp serve` |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T016–T018 | a first-run key prompt with restricted permissions, `config edit`, per-provider sections |
 
 The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
-and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `017` and it
-changes no round above it. `012` is no longer spare: it is the compiler oracle, which needs neither a
-provider nor a key, `015` is F# code intelligence, and `016` is model roles.
+and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `018` and it
+changes no round above it. `012` is the compiler oracle, which needs neither a provider nor a key, `015` is
+F# code intelligence, `016` is model roles and `017` is the image view.
 
 ## What stays out of this program
 

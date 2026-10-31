@@ -79,12 +79,21 @@ public sealed class OpenAiCompatibleChatModel : OpenAiCompatibleModelBase
     /// Builds the descriptor for a model identifier.
     /// </summary>
     /// <param name="modelId">The provider's identifier; the catalogue default when null or blank.</param>
-    /// <returns>A descriptor that declares tools and streaming, which every compatible server provides.</returns>
+    /// <returns>A descriptor that declares tools, streaming and images, which every compatible server offers.</returns>
+    /// <remarks>
+    /// Images are declared here for a reason that differs from the other two flags: the adapter cannot interrogate the
+    /// server, so the only honest options are "trust the payload the protocol defines" and "refuse every picture on
+    /// every compatible endpoint". The default model reads images, the <c>image_url</c> part is part of the protocol
+    /// this adapter speaks, and a developer who points it at a text-only model is naming that model on the command
+    /// line — the server answers their request with its own error, which is a better teacher than a refusal this
+    /// build invented on the server's behalf.
+    /// </remarks>
     public static ModelDescriptor DescriptorFor(string? modelId) => new(
         ProviderKey,
         string.IsNullOrWhiteSpace(modelId) ? DefaultModelId : modelId.Trim(),
         "OpenAI-compatible",
-        ContextWindow: 128_000);
+        ContextWindow: 128_000,
+        SupportsImages: true);
 
     /// <summary>
     /// Normalises a base URL into a chat-completions endpoint.
