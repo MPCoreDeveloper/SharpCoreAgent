@@ -9,11 +9,12 @@ whole suite 1190/1190 and no new line in `Domain`, `CodingAgent`, `Domain/Index`
 round 4 (`010`) landed complete the same day, whole suite 1200/1200 at 0 warnings, with no hunk of this round on
 the four paths it may not touch. Those three rounds and `012` are one commit, `a447a4d`, because their diffs
 cannot be separated: `README.md`, `HelpText.cs`, `CodingAgent.cs` and this roadmap each carry hunks from more
-than one of them, and any split would leave an intermediate commit whose registration tests fail. Round 8 (`016`)
-is specified and implemented in one change: three role flags, two interactive commands and the first-run key
-prompt, with four new test classes and no line added to `Domain`. Round 9 (`017`) closes what round 4 left open as
-T035: `Domain.Conversation` gains an image, `view_image` becomes the eighteenth default tool, and the loop hands a
-picture over on the user message that follows its tool result — whole suite 1256/1256 at 0 warnings.
+than one of them, and any split would leave an intermediate commit whose registration tests fail. Rounds 8 and 9
+landed on `main` on 2026-10-31 as `6ac0c90` and `e69cbdc`, with the release workflows behind them as `278eb74`:
+three commits, each of which builds. `PromptLibrary.cs` is the one source file both rounds edit, so the first
+commit carries its round-8 shape — its `ReviewInstruction`, and none of round 9's operating rule 9 or
+`ImageAttached` — and the second restores the rest; every intermediate tree was built and tested before it was
+committed rather than after, 1228/1228 for round 8 and 1256/1256 for round 9, both at 0 warnings.
 
 **Supersedes**: nothing. `001`–`006` stay the record of what was built and why.
 
@@ -51,8 +52,8 @@ The four gaps a newcomer hits, in the order they hit them.
 | 5 | [`011-subagent-task`](011-subagent-task/spec.md) | `task` — delegation with an isolated transcript (landed 2026-10-30 as `a447a4d`: `TaskTool`, `TaskFormat`, `NoPromptApprover`, the registration, prompt rule 8, 23 tests) | — |
 | 6 | [`013-evidence-mcp-server`](013-evidence-mcp-server/spec.md) | `mcp serve` — the index's evidence for Copilot, Codex and Claude Code, over stdio | 0 (amended to 1.2.0), and `002` (landed) |
 | 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30 as `a447a4d`) | 0, and `012` (landed) |
-| 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run | 0, `004`, `005`, `006` (all landed) |
-| 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (closes `010` T035) | 0, and `010` (landed) |
+| 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run (landed 2026-10-31 as `6ac0c90`: `AgentRoles`, `CredentialPrompt`, the upsert in `CredentialFile`, `AgentSession.SessionModel`, 28 tests in 4 new classes) | 0, `004`, `005`, `006` (all landed) |
+| 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (landed 2026-10-31 as `e69cbdc`: `ImageContent`, `ChatMessage.Images`, `ToolResult.Images`, the eighteenth default tool, prompt rule 9, 1256 passing; closes `010` T035) | 0, and `010` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
@@ -112,9 +113,11 @@ Every round, without exception:
 5. `dotnet build .\SharpCoreAgent.slnx -c Release` with zero warnings and `dotnet test` green, before
    the merge and not after it.
 6. One branch off `main`, one merge with `--no-ff`, the branch deleted locally and on the remote, and
-   the suite count in `README.md` corrected to the number the run printed.
-7. The round's `spec.md` metadata switched from `specified` to `implemented`, naming the branch it
-   actually merged from.
+   the suite count in `README.md` corrected to the number the run printed — or, for a round that lands
+   as commits straight on `main`, those commits, with the suite count corrected the same way. Rounds 6,
+   8 and 9 took the second route: no branch and no merge commit, so the commit hash is the record.
+7. The round's `spec.md` metadata switched from `specified` to `implemented` or `landed`, naming the
+   branch it actually merged from or, when there was no branch, the commit it landed as.
 
 ## Round 0 — the amendment (landed in this change)
 
@@ -250,8 +253,8 @@ advertises seventeen tools and `--web` makes eighteen; the shipped prompt carrie
 `specs/011-subagent-task/contracts/task-tool.md`, which the tool catalogue in `001` now points at. The whole suite is
 1190/1190 in `Debug` and again in `Release`, both builds at 0 warnings and 0 errors — it was 1167 — and this round added
 no line to `Domain`, `CodingAgent`, `Domain/Index` or `SharpCoreAgent.Indexing`: the four-path diff is traced line for
-line in `tasks.md` (`T020`), which is also where the one caveat lives, that `HEAD` predates `012` and `015` and both are
-still uncommitted.
+line in `tasks.md` (`T020`), which is also where the one caveat lives, that `HEAD` predated `012` and `015` at the
+time of writing and both have since landed in `a447a4d`.
 
 **Ships**: `task` promoted from `TaskTool.cs.pending` to a registered tool. A sub-agent gets the same
 model, a child registry without `task` (no recursion), `SubAgentPrompt` as its system prompt, and an
@@ -311,13 +314,92 @@ text byte-identical to the in-process answer; a registry-wide test proves `write
 unreachable; and the ratio `mcp bench` prints is pasted into the round's `plan.md` — including if it is
 unflattering.
 
-## Round 9 — `017-image-view` (implemented in this change, not yet merged)
+## Round 7 — `015-fsharp-peer` (landed 2026-10-30 as `a447a4d`)
 
-**Status**: implemented, whole suite 1256/1256 in `Release` at 0 warnings. Round 4's T035 asked for this round and
-refused to fake it: *"a screenshot the model could \*see\* is a content-block change in `Domain.Conversation`, which
-is its own round."* So the round changes `Domain.Conversation`: `ImageContent` (media type, base64, `ByteCount`,
-`ToDataUri`), `ChatMessage.Images` on the user role, `ToolResult.Images`, and `ModelDescriptor.SupportsImages` as a
-declared capability. The contract is
+**Status**: landed, all four phases, whole suite 1167/1167 at 0 warnings with zero diff on the index. Every tool this
+product shipped read bytes — `search_text` matches names, `find_references` follows the index's typed edges,
+`dotnet_verify` asks `dotnet build` for a verdict — and none could answer *where else is this symbol used* or *what
+does this call take, here*. The index cannot answer the first honestly (a method and a field called `Total` on
+different types are one symbol to it) and a build cannot answer the second at all. F# is where this happens first
+because `FSharp.Compiler.Service` is the SDK's own front end published as a library: no server to start, no protocol
+to speak, no second process to supervise, so the round keeps the rule that `Process.Start` lives in exactly two
+places while shipping real code intelligence.
+
+**Ships**: twelve ports and records in `Domain/Code`; the `SharpCoreAgent.Languages.FSharp` adapter over
+`FSharp.Compiler.Service`; `LanguageRouter`, the only type that knows an adapter list exists, choosing one from the
+path's extension alone; and three language-neutral tools `--fsharp` registers — `file_diagnostics` (a path),
+`uses_at` and `signature_at` (line and column). The tools are handed Domain ports and never learn that F# exists. A
+failure is a value rather than an exception, `CodeFailure` carrying `FSH001`–`FSH006` from the adapter and
+`LANG001`/`LANG002` from the router with a hint naming a registered tool. Positions use the editor's convention — a
+1-based line and a 0-based column, printed as `path:line:column`, adjusted by nothing. The capability is off unless
+asked for (`--fsharp` / `SharpCoreAgentOptions.FSharpToolsEnabled`), the prompt rule `PromptLibrary.FSharpRule` ships
+with the tools or not at all, and `dotnet_verify` stays the only gate — a clean `file_diagnostics` does not mark a
+turn verified. A `.fs` edit is gated exactly like a `.cs` one.
+
+**Does not ship**: C# and VB — Roslyn is a bigger surface and `HeuristicSyntaxFactsExtractor` is not the place to grow
+one; `.fsx` scripts, since the adapter answers about a project's compile list and a script has none; edits, fixes and
+formatting, because the ports are read-only by construction; a `dotnet` child process, MSBuild or a restore, all three
+of which are what `dotnet_verify` is for and a third `Process.Start` this product does not want; XML documentation at
+a position, because `GetToolTip` is unusable in the shipped checker (the `tokenTag` path throws or returns empty), so
+`SignatureInfo` is `(Display, Parameters, ActiveParameter)` and the round says so rather than shipping a field that is
+always empty.
+
+**Depends on**: `002` (landed) for the tools' neighbours and the house style of a retrieval answer; `012` (landed) for
+`dotnet_verify`, which stays the authority this round defers to and never replaces.
+
+**Evidence**: 31 new tests — `LanguageRouterTests` (6), `CodeIntelligenceToolTests` (10),
+`FSharpToolRegistrationTests` (4), `FSharpToolTests` (4, end to end through the real adapter), `FSharpOptionTests`
+(3), two prompt tests and the two gate tests. The gate is proved by deleting `".fs"` from
+`VerifyGate.DotnetExtensions` and watching the new test fail. Phase 0's measurements held in the product: the first
+question about a project costs seconds, every later question on the same instance costs milliseconds (3.5–5.2 s cold,
+2 ms warm, one adapter instance per process). Zero warnings; the whole suite 1167/1167.
+
+## Round 8 — `016-model-roles` (landed 2026-10-31 as `6ac0c90`)
+
+**Status**: landed, whole suite 1228/1228 in `Release` at 0 warnings in the tree this commit carries. A session
+used one model for everything; this round gives the three jobs a session does — planning, acting and reviewing —
+a model each, and it closes `006`'s `T016` by offering a missing key as a paste instead of refusing the first run.
+No line was added to `Domain`: a role is a resolution in `CodingAgent`, not a new kind of message. The contract is
+[`016-model-roles/contracts/cli-roles.md`](016-model-roles/contracts/cli-roles.md); the argument is
+[`016-model-roles/spec.md`](016-model-roles/spec.md) and the measurements are in its `plan.md`.
+
+**Ships**: `--planner` / `--executor` / `--reviewer <model>` — and the settings keys and
+`SHARPCOREAGENT_PLANNER_MODEL` / `_EXECUTOR_MODEL` / `_REVIEWER_MODEL` variables of the same names — name the model
+for a plan turn, an act turn and `/review`. A value resolves through the catalogue `/model` uses: `provider:id`, an
+alias, or a bare id that keeps the provider in force at the end of the command line, so flag order cannot change its
+meaning. `AgentSession.SessionModel` records what the developer chose, `ChooseModel` is the one writer of it (and
+what `/model` calls), and a role switch reads it as its fallback, so a plan turn on the planner's model followed by
+`/mode act` returns to the chosen model instead of leaving the planner's in place. `/roles` prints the three and
+says which of them is simply the session model. `/review [focus]` sends `PromptLibrary.ReviewInstruction` as one
+turn on the reviewer's model with approval read-only, then restores the mode and the model. The preflight `004`
+built for the fallback now covers every model the process may use — the session's, each named role's and the
+fallback's — so a missing key on a named role is an exit `3` at startup rather than a failed turn an hour later. On
+a terminal at both ends with nothing configured, that missing key is a prompt instead: read with the echo off, never
+printed, written as `NAME=value` to the file `--credential-file` or `SHARPCOREAGENT_CREDENTIAL_FILE` names, or to
+`credentials.env` beside the settings document — outside every workspace, because a key is not a repository's
+property — keeping every other line, owner-only where the platform has file modes, and recorded in the settings
+document when the developer named no file so the next run reads it too.
+
+**Does not ship**: rotation, revocation or expiry of keys — the file is a `NAME=value` document the developer edits;
+per-role budgets, temperatures or approval modes, because a role names a model and nothing else; a fourth role or a
+role per tool; `config edit` (`006` `T017`) and per-provider sections (`006` `T018`).
+
+**Depends on**: `001` (the loop and the CLI), `004` (the fallback, which taught the preflight to check a second
+model), `005` (`--credential-file` and its variable) and `006` (the settings document, `config`, and `T016`, which
+this round closes).
+
+**Evidence**: 28 tests in four new classes, with no existing test changed — `AgentRoleOptionTests` (parsing, the
+bare-id rule, resolution), `ChatRoleTests` (`/roles`, the mode switch, `/review` restoring the approval mode and the
+model), `CredentialPromptTests` (the paste, the refusal, the default file) and `CredentialFileUpsertTests` (the
+write, the preserved lines, the replaced assignment). Zero warnings; the whole suite 1228/1228.
+
+## Round 9 — `017-image-view` (landed 2026-10-31 as `e69cbdc`)
+
+**Status**: landed, whole suite 1256/1256 in `Release` at 0 warnings, on `main` in one commit and with no merge
+commit — the shape round 6 took. Round 4's T035 asked for this round and refused to fake it: *"a screenshot the model
+could \*see\* is a content-block change in `Domain.Conversation`, which is its own round."* So the round changes
+`Domain.Conversation`: `ImageContent` (media type, base64, `ByteCount`, `ToDataUri`), `ChatMessage.Images` on the user
+role, `ToolResult.Images`, and `ModelDescriptor.SupportsImages` as a declared capability. The contract is
 [`017-image-view/contracts/view-image.md`](017-image-view/contracts/view-image.md); the argument is
 [`017-image-view/spec.md`](017-image-view/spec.md) and the measurements are in its `plan.md`.
 
@@ -360,7 +442,7 @@ empty checkbox.
 | 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
 | 9 | `017` T024–T033 | images inside MCP results (a screenshot is a file, and `view_image` can name it), `fetch_url` returning images, OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, a per-turn image budget or deduplication, an image token estimate, and serving `view_image` over `mcp serve` |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
-| — | `006` T016–T018 | a first-run key prompt with restricted permissions, `config edit`, per-provider sections |
+| — | `006` T017–T018 | `config edit` and per-provider sections. T016 — a first-run key prompt with restricted permissions — is closed by `016`, which ships the paste, the no-echo read, the owner-only file beside the settings document and the settings entry that makes the next run find it; rotation stays out of scope there and is named in `016`'s spec |
 
 The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
 and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `018` and it

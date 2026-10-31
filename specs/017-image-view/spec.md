@@ -1,9 +1,9 @@
 # Spec — 017 image view
 
-**Status**: specified and implemented in one change. Spec number `017`: `009`–`011` are reserved by
-`specs/000-parity-roadmap.md`, `012`–`016` are taken, so `017` is the next free one. It is the round `010`'s T035
-predicted and left for its own round. The branch is `017-image-view`; this line names the merge commit when it
-merges.
+**Status**: landed on `main` as `e69cbdc` (2026-10-31), whole suite 1256/1256 at 0 warnings. Spec number `017`:
+`009`–`011` are reserved by `specs/000-parity-roadmap.md` and `012`–`016` were taken, so `017` was the next free
+one. It is the round `010`'s T035 predicted and left for its own round. It landed in one commit with no merge
+commit, so there is no branch name to record — the commit is the record.
 
 **Depends on**: `001` (the loop, `ChatMessage`, `ToolResult`, the tool seam), `010` (the screenshots the browser
 round writes under `.sharpcoreagent/artifacts/` — the files this round can finally show), and `013` (the served

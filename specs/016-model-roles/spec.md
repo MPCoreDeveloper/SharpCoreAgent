@@ -1,7 +1,8 @@
 # Spec — 016 model roles and the pasted key
 
-**Status**: specified and implemented in this change. Spec number 016: `009`–`011` are reserved by
-`specs/000-parity-roadmap.md` and `016` is the next free one.
+**Status**: landed on `main` as `6ac0c90` (2026-10-31), no merge commit, with the tree that commit carries
+1228/1228 in `Release` at 0 warnings. Spec number `016`: `009`–`011` are reserved by
+`specs/000-parity-roadmap.md` and `016` was the next free one. Round 8 of the parity roadmap.
 
 **Depends on**: `001` (the loop and the CLI), `004` (the fallback, which taught the preflight to check a second
 model), `005` (`--credential-file` and `SHARPCOREAGENT_CREDENTIAL_FILE`), `006` (the settings document, `config`,
