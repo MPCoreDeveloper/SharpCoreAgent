@@ -492,7 +492,7 @@ settings key for the ceiling, a ceiling that varies by model, and anything serve
 `CodingAgentTests` (two calls in one round see ten then seven; a second turn sees ten again). Build 0 warnings; suite
 1,302 passed, 0 failed, which is the figure `README.md` carries.
 
-
+## Open work, and what is still undecided
 
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
