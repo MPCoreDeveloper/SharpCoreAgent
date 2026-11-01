@@ -369,12 +369,15 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Note: this is the only unchecked task in the feature. Everything behavioural — build, five tools,
     refresh, verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing here is
     the throughput and size the criteria promise.
-  - Note (2026-11-01, `research.md` D17): both criteria were measured again and are further away, not closer.
-    12 889 passages took 30 345 s and 350.2 MiB — 59× the clock for 25% more passages than D16's run — because
-    the single-file database is never reclaimed and every per-file transaction pays for the file it is writing
-    into. Two levers, in this order: `InsertBatch` for the row writes, then space the file does not give back.
-    The run also raised two defects that belong to this task rather than to a round of their own: the
-    one-hour `CommandBudget` was overrun by 7 h 20 m, and `build_state` stayed `partial` on a walk that finished.
+  - Note (2026-11-01, `research.md` D17 and D18): both criteria were measured again and are further away, not
+    closer. 12 889 passages took 30 345 s and 350.2 MiB, and the decomposition says where the time is: a build
+    that changes nothing is 5.5 s, a build that writes anything costs ~120 s whatever it wrote, and the same
+    single-file write costs 0.7 s in a 114-passage workspace — so the price is the store being touched, growing
+    faster than the rows it holds. The lever is therefore what the store holds and what a commit costs, not the
+    order the rows are written in, and nothing in the codebase times a build's phases yet: that instrumentation
+    is the first task, before any fix is chosen. The run also raised two defects that belong to this task rather
+    than to a round of their own: the one-hour `CommandBudget` was overrun by 7 h 20 m, and `build_state` stayed
+    `partial` on a walk that finished.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

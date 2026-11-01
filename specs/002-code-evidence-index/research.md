@@ -397,10 +397,14 @@ two timestamps on its log file, which agree; the size is the `.scdb` file afterw
    looks like once the database underneath it has grown to 350 MiB. The run spent 97% of its wall clock
    waiting and 3% on the CPU, which locates the cost in the engine's per-file transaction against a single
    file (D12) rather than in extraction, the vector encode or the community assignment — those would burn CPU.
-2. **Nothing reclaims space, so every build is slower than the last.** `AutoVacuum` is off on the one place a
-   handle is opened, and no code path vacuums a database that is only ever appended to and deleted from, so
-   the file carries every row any build has ever written. That is how a 6 MB tree produces a 350.2 MiB index:
-   61× the source where SC-006 asks for 0.5×, against 4.8× when D16 measured it.
+   *(Both the CPU figure and the "waiting" reading are withdrawn in D18: the number came from sampling the
+   wrapper process. The conclusion survives a proper measurement — the cost is in touching the store, not in
+   the file — but the evidence for it is D18's, not this paragraph's.)*
+2. **Nothing reclaims space.** `AutoVacuum` is off on the one place a handle is opened, and no code path
+   vacuums a database that is only ever appended to and deleted from, so the file keeps whatever earlier builds
+   left in it. That is how a 6 MB tree produces a 350.2 MiB index: 61× the source where SC-006 asks for 0.5×,
+   against 4.8× when D16 measured it. *(D18 measured the other half of this: a later run that rewrote 43 files
+   left the file byte-identical, so "every build adds to it" was too strong — and it still never comes down.)*
 3. **The command's own budget was not honoured.** `IndexCommand.CommandBudget` is one hour; this run took
    8 h 20 m, so the budget is either not consulted on this path or consulted at a granularity coarser than one
    file. The budget is also what sets `build_state`, and the index reports `partial` — so the command tells the
@@ -417,5 +421,60 @@ the row writes first (`InsertBatch` is in the engine's surface, and nothing in t
 adds the second step and the reason for its position — a build that batches its inserts into a 350 MiB file
 still pays for 350 MiB of the file on every transaction, so reclaiming space is not cosmetic work that can wait
 behind the batching. Then the same three numbers are measured again: passages, wall clock, bytes.
+
+## D18 — Same day, properly instrumented: a writing build costs its own index, not its own files
+
+**D17's first point is wrong and this entry retires it.** The "97% waiting, 3% CPU" figure came from sampling
+the process the shell tool started rather than the indexer it spawned; measured on the child
+(`Process.TotalProcessorTime`), the same work is CPU-bound. Everything else in D17 stands — the durations, the
+bytes, the 61×, the budget and `partial` observations — but the mechanism it inferred does not.
+
+**Measured**, five runs on this repository plus two controls in a scratch workspace of ten `.cs` files copied out
+of `SharpCoreAgent.Domain.Index`, all with the release binary and the same 350.2 MiB index unless stated:
+
+| Run | Wall clock | CPU | What it wrote |
+|---|---|---|---|
+| 704 files, nothing changed | 5.5 s | 6.0 s | nothing |
+| `specs/002-code-evidence-index/tasks.md` touched | 123.7 s | 124.9 s | 1 changed |
+| `README.md` touched | 119.3 s | 120.5 s | 1 changed |
+| `src/SharpCoreAgent.Cli/Commands/IndexCommand.cs` touched | 131.7 s | 132.6 s | 1 changed |
+| scratch workspace, first build (114 passages) | 0.9 s | 1.0 s | 10 added |
+| scratch workspace, one file touched | 0.7 s | 0.7 s | 1 changed |
+
+**Three facts, and one that does not fit:**
+
+1. **Walking and opening are not the cost.** A build that changes nothing walks 704 files, opens the store,
+   counts four tables, compares hashes and prints a report in 5.5 s. Whatever the 8 h 20 m was, it was not the
+   scan.
+2. **Writing anything costs about 120 s, and it does not matter what.** A markdown specification, the README and
+   a C# file land within 12 s of each other, so the price is not the file's content, its size or its language.
+   It is the store being touched.
+3. **That price grows with the store, superlinearly.** The same operation — one changed file — costs 0.7 s where
+   114 passages are stored and 120 s where 13 575 are: 119× the rows for roughly 1 000× the time. That is D16's
+   fitted exponent (≈1.5) seen from the other end, and it is the whole explanation of the build duration: a build
+   from scratch touches the store once per file, so its cost is superlinear in the corpus *and* linear in the
+   files, which is why 590 files became 8 h 20 m where the same 590 files cost minutes when the store already
+   holds them.
+4. **The one run that does not fit.** The 43-file run in the warm-up to this measurement (38 added, 5 changed)
+   took 222 s. Forty-three writes at the rate the single-file runs set is 86 minutes, not four. So "≈120 s per
+   writing run, whatever it wrote" is not the rule either; something about the state the 8 h build left behind —
+   free pages to reuse, a `partial` flag, an untouched `build_id` — made that run cheap. It is unresolved, and it
+   is what instrumentation should answer first rather than a model fitted around it.
+
+**What is not yet known, stated so the next round does not inherit a guess:** nothing in this codebase times a
+build's phases. `IndexWriter` has two passes, an edge resolution, a community assignment and a `meta` write;
+below them sits the engine's commit. The 120 s is somewhere in that stack and this measurement cannot put it in
+one place — it can only rule *out* the file, the language and the scan, and rule *in* whatever is proportional to
+the number of stored rows.
+
+**Decision: the criteria do not move; the first lever does.** D17 put `InsertBatch` first because batching helps
+the per-file part. The per-file part is ~2 s of these 120 (222 s in the 43-file run over a 120 s floor), so
+batching is neither where the 8 h is nor where the two minutes a developer pays for editing one file are. What
+the store holds comes first, and it holds far more than the text: 350.2 MiB for 13 575 passages is 27 KB each,
+and the scratch workspace's 6.1 MiB for 114 passages is 56 KB each — which a 650-byte passage of text and a
+512-wide vector of `int8` does not explain, even allowing for a store that rounds up to a floor. Then the two
+cheap structural questions: can a reader stream the snapshot instead of materialising 13 575 rows with their
+vectors, and can a commit cost the delta rather than the file.
+
 
 

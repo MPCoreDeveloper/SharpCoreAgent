@@ -273,7 +273,7 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
   This repository — 459 files, 14.28 MiB — is a 513.5 s cold build, and the no-change rebuild is 4.0 s.
   The criterion stands as the target; `research.md` D16 has the numbers and `tasks.md` T034 is the work.
   Re-measured 2026-11-01: 12 889 passages in 30 345 s — 59× the clock for 25% more passages, because the
-  database is never reclaimed and every per-file transaction pays for the whole file; `research.md` D17.)*
+  store is never reclaimed and touching it costs more the more it holds; `research.md` D17, D18.)*
 - **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95. *(Not measured
   2026-10-27: the index this repository builds holds 10 314 passages, half the size, and no latency harness
   exists. Open, not assumed; `research.md` D16.)*
@@ -283,8 +283,9 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
   workspace.
 - **SC-006**: The index directory stays under 50% of the size of the indexed source tree with int8
   quantisation. *(Measured 2026-10-27: not met — 69.2 MiB for 14.28 MiB of source, 4.8× where this asks for
-  0.5×; `research.md` D16. Re-measured 2026-11-01: 350.2 MiB against 5.98 MB of tracked source, 61×, and
-  growing with every build because nothing vacuums the file — `research.md` D17.)*
+  0.5×; `research.md` D16. Re-measured 2026-11-01: 350.2 MiB against 5.98 MB of tracked source, 61×, and it
+  does not come back down — nothing vacuums the file, though one later run that rewrote 43 files left it
+  byte-identical — `research.md` D17, D18.)*
 - **SC-007**: Two runs over an unchanged workspace produce identical query results and index metadata,
   the build timestamp excepted.
 - **SC-008**: With no network available, every requirement above still holds.
