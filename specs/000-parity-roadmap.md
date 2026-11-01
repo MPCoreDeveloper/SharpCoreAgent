@@ -56,7 +56,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (landed 2026-10-31 as `e69cbdc`: `ImageContent`, `ChatMessage.Images`, `ToolResult.Images`, the eighteenth default tool, prompt rule 9, 1256 passing; closes `010` T035) | 0, and `010` (landed) |
 | 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (landed 2026-10-31 as `83c28ea`; closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
 | 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31 as `051089d`; narrows `017` T031) | 0, `017` and `019` (landed) |
-| 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
+| 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31 as `5a01290`; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
@@ -494,7 +494,7 @@ settings key for the ceiling, a ceiling that varies by model, and anything serve
 `CodingAgentTests` (two calls in one round see ten then seven; a second turn sees ten again). Build 0 warnings; suite
 1,302 passed, 0 failed, which is the figure `README.md` carries.
 
-## Round 12 — `021-image-dedup` (landed 2026-10-31)
+## Round 12 — `021-image-dedup` (landed 2026-10-31 as `5a01290`)
 
 **Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–11 took. Round 11 bounded
 what a turn may add and wrote down what it did not do, and the first item on that list was deduplication. So was the

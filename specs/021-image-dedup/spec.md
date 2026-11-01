@@ -1,7 +1,8 @@
 # Spec — 021 image deduplication
 
-**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–11 took. Spec number `021`:
-`018` is still held for `web_search` by a sentence in `specs/000-parity-roadmap.md`, and `020` was round 11.
+**Status**: landed on `main` as `5a01290` (2026-10-31) in one commit, with no merge commit — the shape rounds 6 and
+9–11 took. Spec number `021`: `018` is still held for `web_search` by a sentence in `specs/000-parity-roadmap.md`, and
+`020` was round 11.
 
 **Depends on**: `017` (`ImageContent`, `ChatMessage.Images`, the loop's hand-over), `019` (`ImagePayload` and the three
 doors that attach a picture), `020` (`ImageBudget`, the per-turn ceiling, and the shapes a door's refusal takes).
