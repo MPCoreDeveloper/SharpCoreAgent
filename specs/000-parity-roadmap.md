@@ -54,7 +54,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30 as `a447a4d`) | 0, and `012` (landed) |
 | 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run (landed 2026-10-31 as `6ac0c90`: `AgentRoles`, `CredentialPrompt`, the upsert in `CredentialFile`, `AgentSession.SessionModel`, 28 tests in 4 new classes) | 0, `004`, `005`, `006` (all landed) |
 | 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (landed 2026-10-31 as `e69cbdc`: `ImageContent`, `ChatMessage.Images`, `ToolResult.Images`, the eighteenth default tool, prompt rule 9, 1256 passing; closes `010` T035) | 0, and `010` (landed) |
-| 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
+| 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (landed 2026-10-31 as `83c28ea`; closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
@@ -427,7 +427,7 @@ including `ToString` never printing the payload), `ModelCatalogTests`, `PromptLi
 (eighteen names), `McpServerPublishedSetTests` (`view_image` registered, not published) — and
 `ChatLoopTests`' ceiling moved 1 700 → 2 000 tokens because the prompt grew rule 9. Zero warnings, 1256 passing.
 
-## Round 10 — `019-image-ingress` (landed 2026-10-31)
+## Round 10 — `019-image-ingress` (landed 2026-10-31 as `83c28ea`)
 
 **Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9 took. Round 9 made a
 picture viewable and left two doors describing one: `McpContent.Flatten` rendered an `image` part as
