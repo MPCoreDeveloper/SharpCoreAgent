@@ -369,15 +369,16 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Note: this is the only unchecked task in the feature. Everything behavioural — build, five tools,
     refresh, verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing here is
     the throughput and size the criteria promise.
-  - Note (2026-11-01, `research.md` D17 and D18): both criteria were measured again and are further away, not
-    closer. 12 889 passages took 30 345 s and 350.2 MiB, and the decomposition says where the time is: a build
-    that changes nothing is 5.5 s, a build that writes anything costs ~120 s whatever it wrote, and the same
-    single-file write costs 0.7 s in a 114-passage workspace — so the price is the store being touched, growing
-    faster than the rows it holds. The lever is therefore what the store holds and what a commit costs, not the
-    order the rows are written in, and nothing in the codebase times a build's phases yet: that instrumentation
-    is the first task, before any fix is chosen. The run also raised two defects that belong to this task rather
-    than to a round of their own: the one-hour `CommandBudget` was overrun by 7 h 20 m, and `build_state` stayed
-    `partial` on a walk that finished.
+  - Note (2026-11-01, `research.md` D17–D19): both criteria were measured again. The 8 h 20 m build that started
+    this was Modern Standby — the machine was suspended from 11:29:57 to 19:40:11 and the run was awake for
+    632 s — so the build is 1.07 s per file against D16's 1.12 s, no regression, and SC-002's cold half misses on
+    the corpus size it names (~89 min for 5 000 files) rather than on a runaway curve. What does cost is a writing
+    run at this index size: 119–132 s for one changed file against 3 s in SC-002's incremental half, of which
+    ~120 s is fixed per run (6–9 ms per stored passage, so it grows with the index) and ~2.4 s is per file
+    written. Nothing in the codebase times a build's phases, so that instrumentation comes before any fix is
+    chosen. `partial` on that run was correct — the wall-clock budget was spent by the suspension and the walk
+    stopped at 666 of 704 files — so the follow-up is reporting, and a budget that counts work rather than
+    suspended time.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

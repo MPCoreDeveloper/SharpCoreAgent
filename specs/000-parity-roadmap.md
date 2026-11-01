@@ -545,7 +545,7 @@ empty checkbox.
 
 | Round | Open | Why it is still open |
 |---|---|---|
-| 0 | `002` T034 | the cold build and the index inside their stated budgets — measured again 2026-11-01 at 30 345 s and 350.2 MiB, both further from the criteria than when they were first measured, and the price of a write grows faster than the rows it stores: one changed file costs 120 s at 13 575 passages and 0.7 s at 114 (`002` `research.md` D17, D18) |
+| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19) |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |

@@ -372,7 +372,13 @@ capability table above). The second is moving community assignment out of the pe
 An engine-level fix is tried through D1's `SharpCoreAgentUseLocalSharpCoreDb=true` switch against a sibling
 checkout before it ships, which is what that switch exists for.
 
-## D17 — Measured again (2026-11-01): twenty-five percent more passages, fifty-nine times the clock
+## D17 — Measured again (2026-11-01): one run, and the wrong conclusion drawn from it
+
+**Withdrawn on its duration, the same day: see D19.** The machine was in Modern Standby from 11:29:57 to
+19:40:11, so the 8 h 20 m is suspension, not work; the run was awake for 632 s. The counts and the bytes below
+stand, the 61× stands, the budget-and-`partial` paragraph is resolved in D19, and every sentence that compares
+this run's clock to D16's is struck. The entry is kept as written because a measurement that looks this
+plausible should stay visible as one that was wrong.
 
 **Measured**: `sharpcoreagent index` on this repository, .NET 11 Release, the machine D16 used. The database it
 started from was the 233.4 MiB one earlier rounds had left behind; the duration is the run's own output and the
@@ -383,34 +389,31 @@ two timestamps on its log file, which agree; the size is the `.scdb` file afterw
 | Files | 459 | 666 indexed (652 scanned: 590 added, 62 unchanged, 14 skipped) |
 | Passages | 10 314 | 12 889 |
 | Symbols · edges · communities | 4 571 · 5 284 · 329 | 6 268 · 8 227 · 582 |
-| Wall clock | 513.5 s | **30 345 s** (8 h 20 m) |
-| CPU time | not recorded | 865 s (14 min) |
+| Wall clock | 513.5 s | **30 345 s**, of which 8 h 10 m was Modern Standby: **632 s awake** (D19) |
+| CPU time | not recorded | 865 s, over those 632 s awake — it was working, at ~1.4 cores |
 | Database | 69.2 MiB | **350.2 MiB** (367 165 440 bytes) |
 | Source, `git ls-files` | 14.28 MiB claimed | 5.98 MB over 519 files |
 | Index ÷ source | 4.8× | **61×** |
-| Per passage | 49.8 ms | **2 354 ms** |
+| Per passage | 49.8 ms | void: 632 s over 590 added files is 1.07 s each (D19) |
 
-**Four things it says, in the order they matter:**
+**Four things it said, in the order they mattered:**
 
-1. **Twenty-five percent more passages cost fifty-nine times the clock.** D16 fitted a power law with an
-   exponent near 1.4 and said the build was not "90 s on a laptop with a slower disk"; this is what that curve
-   looks like once the database underneath it has grown to 350 MiB. The run spent 97% of its wall clock
-   waiting and 3% on the CPU, which locates the cost in the engine's per-file transaction against a single
-   file (D12) rather than in extraction, the vector encode or the community assignment — those would burn CPU.
-   *(Both the CPU figure and the "waiting" reading are withdrawn in D18: the number came from sampling the
-   wrapper process. The conclusion survives a proper measurement — the cost is in touching the store, not in
-   the file — but the evidence for it is D18's, not this paragraph's.)*
+1. ~~**Twenty-five percent more passages cost fifty-nine times the clock.**~~ **Struck (D19).** There is no clock
+   comparison to make: the run was awake for 632 s, and 632 s over 590 added files is 1.07 s each against D16's
+   1.12 s — the same rate, as a linear build should give. The "97% waiting, 3% CPU" figure was the wrapper
+   process, not this one; measured on the child the run is CPU-bound at ~1.4 cores. D18 measures what a writing
+   run actually costs, at a size where the number can be trusted.
 2. **Nothing reclaims space.** `AutoVacuum` is off on the one place a handle is opened, and no code path
    vacuums a database that is only ever appended to and deleted from, so the file keeps whatever earlier builds
    left in it. That is how a 6 MB tree produces a 350.2 MiB index: 61× the source where SC-006 asks for 0.5×,
    against 4.8× when D16 measured it. *(D18 measured the other half of this: a later run that rewrote 43 files
    left the file byte-identical, so "every build adds to it" was too strong — and it still never comes down.)*
-3. **The command's own budget was not honoured.** `IndexCommand.CommandBudget` is one hour; this run took
-   8 h 20 m, so the budget is either not consulted on this path or consulted at a granularity coarser than one
-   file. The budget is also what sets `build_state`, and the index reports `partial` — so the command tells the
-   developer to "run `sharpcoreagent index` to finish" on an index whose walk completed (590 added plus 62
-   unchanged is the 652 it scanned, and no "budget reached" note was printed). Whether the flag is wrong or the
-   budget is wrong is unresolved; both cannot be right, and the flag is the one a developer acts on.
+3. ~~**The command's own budget was not honoured.**~~ **Resolved in D19: it was honoured, and stopping was right.**
+   `IndexCommand.CommandBudget` is one hour of wall clock, the machine spent 8 h 10 m of the run suspended, and
+   the walk was truncated after 666 of the 704 files — of which the next run called exactly 38 "added", the 38
+   this one never reached. So `partial` was true, and the flag is not the defect. What is wrong is the report: it
+   prints 30 345 s and "run `sharpcoreagent index` to finish", which describes a build that ran out of budget
+   rather than a clock that keeps counting while the laptop sleeps.
 4. **D16's source size does not reproduce.** `git ls-files` sums 5.98 MB for the 519 tracked files of this tree
    today, and this tree is larger than the one D16 measured, not smaller. Either D16 summed a different set or
    one of the two figures is wrong. Nothing SC-006 concludes depends on it: 4.8× and 61× both miss 0.5×, and
@@ -422,12 +425,15 @@ adds the second step and the reason for its position — a build that batches it
 still pays for 350 MiB of the file on every transaction, so reclaiming space is not cosmetic work that can wait
 behind the batching. Then the same three numbers are measured again: passages, wall clock, bytes.
 
-## D18 — Same day, properly instrumented: a writing build costs its own index, not its own files
+*(Superseded: D19 took the duration away from under this paragraph, and D18 replaced its premise with a measured
+one. The ordering it argues for survives in D18's decision, for different reasons.)*
 
-**D17's first point is wrong and this entry retires it.** The "97% waiting, 3% CPU" figure came from sampling
-the process the shell tool started rather than the indexer it spawned; measured on the child
-(`Process.TotalProcessorTime`), the same work is CPU-bound. Everything else in D17 stands — the durations, the
-bytes, the 61×, the budget and `partial` observations — but the mechanism it inferred does not.
+## D18 — Same day, at a size that can be trusted: what one writing run costs
+
+**Of D17, this entry keeps the bytes and drops the reasoning.** Its "97% waiting, 3% CPU" came from sampling the
+process the shell tool started rather than the indexer it spawned — measured on the child, writing is CPU-bound —
+and D19 takes its duration away entirely. What D17 could not do, because it lumped one eight-hour run into one
+number, is separate the parts. These six runs separate them.
 
 **Measured**, five runs on this repository plus two controls in a scratch workspace of ten `.cs` files copied out
 of `SharpCoreAgent.Domain.Index`, all with the release binary and the same 350.2 MiB index unless stated:
@@ -441,25 +447,23 @@ of `SharpCoreAgent.Domain.Index`, all with the release binary and the same 350.2
 | scratch workspace, first build (114 passages) | 0.9 s | 1.0 s | 10 added |
 | scratch workspace, one file touched | 0.7 s | 0.7 s | 1 changed |
 
-**Three facts, and one that does not fit:**
+**Four facts, and one rule that covers all six runs:**
 
 1. **Walking and opening are not the cost.** A build that changes nothing walks 704 files, opens the store,
-   counts four tables, compares hashes and prints a report in 5.5 s. Whatever the 8 h 20 m was, it was not the
-   scan.
+   counts four tables, compares hashes and prints a report in 5.5 s. Whatever a slow build turns out to be, the
+   scan is not it.
 2. **Writing anything costs about 120 s, and it does not matter what.** A markdown specification, the README and
-   a C# file land within 12 s of each other, so the price is not the file's content, its size or its language.
-   It is the store being touched.
-3. **That price grows with the store, superlinearly.** The same operation — one changed file — costs 0.7 s where
-   114 passages are stored and 120 s where 13 575 are: 119× the rows for roughly 1 000× the time. That is D16's
-   fitted exponent (≈1.5) seen from the other end, and it is the whole explanation of the build duration: a build
-   from scratch touches the store once per file, so its cost is superlinear in the corpus *and* linear in the
-   files, which is why 590 files became 8 h 20 m where the same 590 files cost minutes when the store already
-   holds them.
-4. **The one run that does not fit.** The 43-file run in the warm-up to this measurement (38 added, 5 changed)
-   took 222 s. Forty-three writes at the rate the single-file runs set is 86 minutes, not four. So "≈120 s per
-   writing run, whatever it wrote" is not the rule either; something about the state the 8 h build left behind —
-   free pages to reuse, a `partial` flag, an untouched `build_id` — made that run cheap. It is unresolved, and it
-   is what instrumentation should answer first rather than a model fitted around it.
+   a C# file land within 12 s of each other (119.3 s, 123.7 s, 131.7 s), so the price is not the file's content,
+   its size or its language.
+3. **The price is fixed per run, and it grows with what the store already holds.** The same operation — one
+   changed file — costs 0.7 s where 114 passages are stored and ~125 s where 13 575 are: 119× the rows for
+   ~185× the fixed charge, which is 6–9 ms per *stored* passage per writing run. It does not scale with what the
+   run writes; it pays for the whole store in order to touch any part of it.
+4. **And the 43-file run stops being a mystery, because I did the arithmetic wrong.** 222 s for 38 added and 5
+   changed is ~120 s of fixed cost plus ~2.4 s per written file — not the 86 minutes that 43 × 120 s implies,
+   because the 120 s is per *run*, not per file. Fixed plus linear-per-file covers every run in the table: one
+   file 120 + 2.4 ≈ 122, forty-three 120 + 43 × 2.4 ≈ 223, and one file in the scratch workspace, where the fixed
+   part is under a second, 0.7.
 
 **What is not yet known, stated so the next round does not inherit a guess:** nothing in this codebase times a
 build's phases. `IndexWriter` has two passes, an edge resolution, a community assignment and a `meta` write;
@@ -467,14 +471,74 @@ below them sits the engine's commit. The 120 s is somewhere in that stack and th
 one place — it can only rule *out* the file, the language and the scan, and rule *in* whatever is proportional to
 the number of stored rows.
 
-**Decision: the criteria do not move; the first lever does.** D17 put `InsertBatch` first because batching helps
-the per-file part. The per-file part is ~2 s of these 120 (222 s in the 43-file run over a 120 s floor), so
-batching is neither where the 8 h is nor where the two minutes a developer pays for editing one file are. What
-the store holds comes first, and it holds far more than the text: 350.2 MiB for 13 575 passages is 27 KB each,
-and the scratch workspace's 6.1 MiB for 114 passages is 56 KB each — which a 650-byte passage of text and a
-512-wide vector of `int8` does not explain, even allowing for a store that rounds up to a floor. Then the two
-cheap structural questions: can a reader stream the snapshot instead of materialising 13 575 rows with their
-vectors, and can a commit cost the delta rather than the file.
+**Decision: instrument before choosing, and do not start with batching.** D16 put `InsertBatch` first because it
+would help the per-file part of a build; the per-file part is 2.4 s of a run that costs 122, so batching optimises
+about 2% of the thing a developer feels when they edit one file. The fixed charge is proportional to the number
+of *stored* passages; whether it is proportional to their *bytes* is not measured, and at 27 KB per passage
+(350.2 MiB over 13 575) — 56 KB in a ten-file workspace, which 650 bytes of text and a 512-wide `int8` vector
+cannot account for even with a store that rounds up to a floor — the bytes are the obvious suspect. So the order
+is: time the phases first, since none of them is instrumented (two passes, edge resolution, community assignment,
+`meta`, and the engine's commit underneath), then choose between trimming what a passage occupies, a commit that
+costs the delta, and a reader that streams the snapshot instead of materialising 13 575 rows with their vectors.
+Picking between those three without the phase numbers is how D17 went wrong, and D19 is why an unexamined
+duration cannot carry a decision either.
+
+## D19 — Where the eight hours went: Modern Standby, not the indexer
+
+**The machine was asleep for 8 h 10 m of the run, and that is all of the missing time.** The evidence, all of it
+from this machine:
+
+- `Microsoft-Windows-Kernel-Power` id 506, *"The system is entering Modern Standby. Reason: Idle Timeout."* at
+  11:29:57 on 2026-11-01, and id 507, *"The system is exiting Modern Standby. Reason: Input Mouse."* at 19:40:11.
+  No ids 42 or 107 in that window, so this was Modern Standby (S0 low-power idle) and not classic S3 — which is
+  exactly why the first check, which filtered on 42 and 107, came back empty and let D17 stand for an hour.
+- The run's log file was created at 11:21:21 and last written at 19:42:07: 8 m 36 s awake before the machine
+  slept, 8 h 10 m 14 s suspended, 1 m 56 s after the mouse woke it.
+- 632 s of awake time against 865 s of CPU is 1.4 cores busy. The process was working whenever it was scheduled
+  and had nothing to do while the system was in S0 idle, because it was not scheduled at all.
+- Both the process's own `Stopwatch` and the supervisor's printed 30 345 s, and both agree with the log's
+  timestamps, so the clock behind that number includes suspended time on this machine. Worth knowing, because
+  that is the clock `CommandBudget` is computed from.
+- This machine enters Modern Standby many times a day — 17 events on 2026-11-01 and 28–34 on each of the three
+  days before, most of them `Reason: Idle Timeout` — so any build longer than the idle timeout is caught by one
+  unless something holds the system awake. Nothing in this repository does.
+
+**What that changes.** The build cost was never 30 345 s; it was 632 s, for a run that added 590 files to a
+corpus of 12 889 passages — **1.07 s per file**, against D16's 1.12 s per file on a smaller tree. D16's per-passage
+figure reproduces at this size (49 ms against 49.8 ms), so nothing here says the build regressed; what D16's rising
+per-passage cost across its small corpora means is a separate question that two large runs cannot answer, and
+D17's "fifty-nine times the clock" is not evidence about it either way. The build looked superlinear in D17
+because D17 was measuring a closed lid.
+
+**It also settles D17's budget paragraph in the code's favour.** `CommandBudget` is one hour of wall clock and
+the run was suspended for 8 h 10 m, so the budget was spent by the time the walk resumed; the walk stopped after
+666 of 704 files, `build_state` went to `partial`, and the next run reported exactly the 38 files this one never
+reached. Both behaviours were right. The defect is narrower than D17 claimed: `partial` is honest, but the report
+prints 30 345 s and "run `sharpcoreagent index` to finish", which reads as a build that is slow and gave up, when
+what happened is that the laptop slept. A wall-clock budget cannot tell work from suspension, and neither can a
+developer reading the number.
+
+**Decision: no measurement of this tool counts unless the machine stayed awake, and the tool should say so.**
+Two rules and one task:
+
+- **For measurements.** Every run recorded here now carries wall clock *and* CPU time, which is what caught this:
+  865 s of CPU inside 30 345 s of wall clock is not a slow indexer, it is a stopped one. Any figure whose wall
+  clock is far above its CPU time is discarded until the standby log is checked. This applies to every slice in
+  this repository, not to `002`.
+- **For the tool.** `index` already has both numbers. It should print them together and say so when they disagree
+  by more than a small multiple, so that a suspended build diagnoses itself instead of sending the next reader
+  into `IndexWriter`. Its budget should count work — files, CPU — rather than a clock that runs while the machine
+  is in S0 idle. A third option, worth naming and not deciding here: hold the system awake for the duration of a
+  build (`SetThreadExecutionState` with `ES_SYSTEM_REQUIRED`, which belongs in the CLI and not in the domain), as
+  a long build on a laptop is exactly the case that call exists for.
+- **For the queue.** The phase instrumentation D18 asks for is cheap and independent of all of the above; the
+  budget and reporting change is a separate small slice that does not need the phase numbers. Neither belongs to
+  `002` T034's current round, which is a measurement round.
+
+**What survives D17 and D18 after this:** the database is 350.2 MiB for 5.98 MB of source — 61× where SC-006 asks
+for 0.5× — it does not shrink, and touching it with any write costs ~125 s at this size plus ~2.4 s per written
+file. Those figures come from three runs at the keyboard with the machine awake, not from the eight hours, and
+they are the ones the next fix should answer.
 
 
 
