@@ -163,7 +163,8 @@ Acceptance:
   model to say what it did not read; an index argument invites a loop of fetches where one summary
   would do. Reconsider if real transcripts show the wall being hit.
 - **A search engine.** Naming a page is the developer's job in this round. A search tool is a ranking
-  policy, a scraping policy and a rate-limit policy, and it belongs to whoever writes that spec.
+  policy, a scraping policy and a rate-limit policy, and it belongs to whoever writes that spec. A search
+  server is reachable today through `--mcp`, which is the shape round 4 chose for a browser.
 
 ## Exit codes
 

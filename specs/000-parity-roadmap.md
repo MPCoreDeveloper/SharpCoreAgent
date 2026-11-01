@@ -58,14 +58,15 @@ The four gaps a newcomer hits, in the order they hit them.
 | 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31 as `051089d`; narrows `017` T031) | 0, `017` and `019` (landed) |
 | 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31 as `5a01290`; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
 
-`web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
-repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
-the compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider
-nor a key, `013` is the evidence server, `015` is F# code intelligence —
+`web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
+rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
+Brave, or any equivalent (decision record below, 2026-10-31). `018` was held for it and is now **released**:
+unassigned rather than reserved, so the next round that needs a number may take it. (`012` went to the
+compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider nor a
+key, `013` is the evidence server, `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
 server, `016` is model roles, `017` is the image view, `019` is image ingress — round 10 — `020` is the turn's image
-budget — round 11 — and `021` is image deduplication — round 12 — because `018` is still held for `web_search` and
-`014` was never assigned.)
+budget — round 11 — `021` is image deduplication — round 12 — and `014` was never assigned.)
 
 ## Decision record
 
@@ -103,6 +104,15 @@ budget — round 11 — and `021` is image deduplication — round 12 — becaus
   still in-process, and what leaves the process is evidence, which is the one thing `002` already argued is
   safe to hand over. It would reverse *back* if a served tool ever needed a write, or if a transport beyond
   stdio became a requirement — either is a new amendment and a new round.
+- **There is no `web_search` tool, and `018` is released.** Decided 2026-10-31, after round 12. A search tool
+  is three policies in one — what is worth ranking, what may be scraped, and how often — and none of them is
+  this repository's to set: the first one written down is a vendor with a key and a price, and the vendor
+  list changes faster than a round does. `--mcp` is the answer, in the shape round 4 chose for a browser: the
+  developer names an official search server (Brave's is the one the README carries), keeps the key in their
+  own environment, and the tools arrive under that server's own names in the same registry as everything
+  else. Nothing here refuses a model an answer — `fetch_url` still reads a page when one is named — only a
+  ranking it did not ask its operator for. It would reverse if a search provider were pinned and shipped the
+  way `--fsharp` pins a compiler: a different decision, with a different owner, and not this round's.
 
 ## Per-round deliverables (the definition of "done")
 
@@ -538,7 +548,7 @@ empty checkbox.
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |
-| 2 | `008` T031–T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch — plus a web search tool, which is the one decision below |
+| 2 | `008` T031, T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch. T032 (a web search tool) is decided against: see the decision record, 2026-10-31 |
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
 | 4 | `010` T031–T034 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured — T035 (*showing the screenshot to the model as an image*) is closed by `017` |
 | 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
@@ -546,11 +556,14 @@ empty checkbox.
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T017–T018 | `config edit` and per-provider sections. T016 — a first-run key prompt with restricted permissions — is closed by `016`, which ships the paste, the no-echo read, the owner-only file beside the settings document and the settings entry that makes the next run find it; rotation stays out of scope there and is named in `016`'s spec |
 
-The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
-and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `018` and it
-changes no round above it. `012` is the compiler oracle, which needs neither a provider nor a key, `015` is
-F# code intelligence, `016` is model roles, `017` is the image view, `019` is image ingress, `020` is the
-picture budget of one turn and `021` is the picture the conversation already carries.
+`web_search` is the one capability this program decided *against*, on 2026-10-31, and the reasoning is in the
+decision record above. The routing answer is `--mcp`: an official search server, or any search server the
+developer already trusts, arrives under its own tool names with its key in their own environment —
+`README.md` carries the command lines. What that costs is named rather than hidden: a search server is a
+program the developer installs and a key the developer keeps. `018`, released with the decision, stays
+unassigned until a round needs it. `012` is the compiler oracle, which needs neither a provider nor a key,
+`015` is F# code intelligence, `016` is model roles, `017` is the image view, `019` is image ingress, `020`
+is the picture budget of one turn and `021` is the picture the conversation already carries.
 
 ## What stays out of this program
 
