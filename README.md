@@ -457,7 +457,8 @@ repository (entities decoded, `script`/`style` removed, tags stripped, whitespac
 response that is a picture becomes the picture instead of text — one of the four types a provider accepts,
 not cut at the ceiling, and only when the session's model can see it. Everything else that is not text is
 refused by type rather than decoded, which is the sentence round 2 fixed and round 10 reworded rather than
-removed. There is no JavaScript, no cookie jar and no search engine:
+removed. There is no JavaScript, no cookie jar and no search engine of its own — `--mcp` with a search
+server supplies one, below:
 
 ```text
 url          https://example.com/docs/changelog
@@ -585,6 +586,78 @@ relative name, and the five index tools stay primary-only: one index describes o
 an attachment path with "not indexed" and point at `read_file` and `search_text` instead. Attachments
 are never written to the settings file and never recorded in the transcript — a resumed session starts
 with the roots its new invocation names.
+
+### Search and GitHub through `--mcp`
+
+**Search is not built-in. Use `--mcp` if you need it.** A search tool is a ranking policy, a scraping
+policy and a rate-limit policy, and none of the three is this repository's to set — the decision, and the
+reason `018` is released rather than held for it, are in
+[`specs/000-parity-roadmap.md`](specs/000-parity-roadmap.md). What `--mcp` gives instead is the server the
+provider already maintains, with its own schema, its own ranking and its own key, and its tools arrive as
+`<server>_<tool>` beside every other tool:
+
+```text
+export BRAVE_API_KEY=...                                  # PowerShell: $env:BRAVE_API_KEY = "..."
+sharpcoreagent chat --mcp "npx -y @brave/brave-search-mcp-server"
+```
+
+The same server in the JSON shape most MCP clients take (`.mcp.json`, and Cline's
+`cline_mcp_settings.json`), for a developer who wants that search in both:
+
+```json
+{
+  "mcpServers": {
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@brave/brave-search-mcp-server"],
+      "env": {
+        "BRAVE_API_KEY": "YOUR_BRAVE_KEY"
+      }
+    }
+  }
+}
+```
+
+GitHub is the other server worth naming, because it answers questions `fetch_url` cannot: a private
+repository is not a URL. The read-only variant is the one to start with — a token with read access to the
+repositories you care about, and `GITHUB_READ_ONLY=1` so no tool that server exposes can write:
+
+```text
+export GITHUB_PERSONAL_ACCESS_TOKEN=...                   # PowerShell: $env:GITHUB_PERSONAL_ACCESS_TOKEN = "..."
+sharpcoreagent chat --mcp "docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN -e GITHUB_READ_ONLY=1 ghcr.io/github/github-mcp-server"
+```
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "-e", "GITHUB_READ_ONLY=1",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Dropping `-e GITHUB_READ_ONLY=1` is what lets that server's tools write — issues, pull requests, comments —
+and it is the variant to choose on purpose: this client approves an unannotated server tool the way it
+approves a write, and `--approval readonly` refuses it outright, but the token is the limit that actually
+holds.
+
+Two things about the key, because a server is the one child process that is *supposed* to have one. It has
+to be in the environment of the shell that starts the agent: a name in `.secrets.env` read through
+`--credential-file` belongs to this agent's credential store and never becomes an environment variable,
+which is why the two lines above export rather than write a file — and why the shell tool and
+`dotnet_verify` run with every `*_API_KEY`, `*_TOKEN`, `*_SECRET` and `*_PASSWORD` name removed while a
+server inherits the environment unchanged. So give a server the narrowest token that does the job, and the
+read-only flag when it has one.
 
 ## Code index
 
