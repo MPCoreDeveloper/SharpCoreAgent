@@ -398,7 +398,7 @@ public sealed class FetchUrlTool : ITool
     /// <returns>The image, or a refusal that names the number that stopped it.</returns>
     /// <remarks>
     /// A truncated picture is refused rather than attached: base64 of half a PNG decodes to a corrupt image, and the
-    /// provider's rejection would arrive as a status code far from the reason. The four conditions are checked
+    /// provider's rejection would arrive as a status code far from the reason. The five conditions are checked
     /// cheapest-first, and each refusal keeps the header block that says what was actually fetched.
     /// </remarks>
     private ToolResult Picture(
@@ -441,6 +441,18 @@ public sealed class FetchUrlTool : ITool
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"{header}\n\nthe response is {imageType}, {CodeIndexFormat.Size(bytes.Length)}, and it was not attached: {context.Model?.QualifiedName ?? "the model for this turn"} is not declared to read images. Do not describe what it contains; cite the URL and let the developer open it."));
+        }
+
+        if (context.ImageBytesRemaining is { } left && !ImageBudget.Fits(bytes.Length, left))
+        {
+            // The turn's ceiling, which no single fetch can see: the body is refused here rather than encoded into a
+            // request the provider would reject for a reason of its own, and both numbers are named.
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{header}\n\nthe response is {imageType}, {CodeIndexFormat.Size(bytes.Length)}, and it was not attached: {ImageBudget.Spent(bytes.Length, left)}. Cite the URL and let the developer open it."));
         }
 
         return ToolResult.Image(

@@ -115,7 +115,9 @@ come from.
   `view_image` can open, which is round 4's contract unchanged.
 - **Pasted, dragged or piped images, and an `--image` flag.** A picture still enters through a tool, with a path or a
   URL a report can name.
-- **Images in session files, a per-turn budget, deduplication, a token estimate.** Round 9's reasoning stands.
+- **Images in session files, deduplication, a token estimate.** Round 9's reasoning stands. The per-turn budget left this
+  list in `020`: it turned out to be a question about one request's size rather than about compaction, and round 11
+  answers it with 16 MiB per turn, counted by the loop and refused by each of the three doors.
 - **`Accept: image/*` negotiation in `fetch_url`.** The request header is unchanged, so a page that content-negotiates
   returns to a text fetch exactly what it returned before this round. A site that only serves images when asked is a
   better `Accept` header, not this slice.

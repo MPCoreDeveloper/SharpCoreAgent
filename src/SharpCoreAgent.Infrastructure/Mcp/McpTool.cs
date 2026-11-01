@@ -94,7 +94,7 @@ public sealed class McpTool : ITool
 
         // The ceiling and the model gate come after the bound, so the description a server wrote arrives whole and the
         // reasons for what could not be attached are appended to it rather than counted against it.
-        var images = Attach(context.Model, answer.Images, ref text);
+        var images = Attach(context.Model, answer.Images, context.ImageBytesRemaining, ref text);
 
         var effects = new List<ToolEffect>();
         if (Safety == ToolSafety.Destructive)
@@ -123,17 +123,19 @@ public sealed class McpTool : ITool
     /// </summary>
     /// <param name="model">The model the conversation is using, or null when the caller did not say.</param>
     /// <param name="images">The parts the server returned, in its order.</param>
+    /// <param name="remaining">What the turn may still attach, or null when the caller did not say.</param>
     /// <param name="text">The result text, to which one line per un-attached picture is appended.</param>
     /// <returns>The pictures to attach, in the server's order, at most <see cref="TextLimits.MaxImagesPerResult"/>.</returns>
     /// <remarks>
-    /// Three reasons a picture does not travel, and each is written down instead of being dropped: a type no provider
-    /// accepts, a payload over the ceiling, and a result that already carries its four. Silence would be worse than any
-    /// of them — a model told only that an image exists describes what it imagines — so a session whose model cannot
-    /// see is told that too, once, in the same shape.
+    /// Four reasons a picture does not travel, and each is written down instead of being dropped: a type no provider
+    /// accepts, a payload over the ceiling, a result that already carries its four, and a turn that has spent its
+    /// budget. Silence would be worse than any of them — a model told only that an image exists describes what it
+    /// imagines — so a session whose model cannot see is told that too, once, in the same shape.
     /// </remarks>
     private static List<ImageContent> Attach(
         ModelDescriptor? model,
         IReadOnlyList<McpImage> images,
+        long? remaining,
         ref string text)
     {
         if (images.Count == 0)
@@ -161,6 +163,7 @@ public sealed class McpTool : ITool
 
         var attached = new List<ImageContent>(Math.Min(images.Count, TextLimits.MaxImagesPerResult));
         var notes = new List<string>();
+        var left = remaining;
 
         foreach (var image in images)
         {
@@ -183,7 +186,18 @@ public sealed class McpTool : ITool
                 continue;
             }
 
+            // The turn's ceiling, last of the four: the first three are facts about this result, and this one is a fact
+            // about the turn — which is why the line says the way out is a new turn rather than another call.
+            if (left is { } budget && !ImageBudget.Fits(content.ByteCount, budget))
+            {
+                notes.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[{content.MediaType}: not attached — {ImageBudget.Spent(content.ByteCount, budget)}]"));
+                continue;
+            }
+
             attached.Add(content);
+            left -= content.ByteCount;
         }
 
         foreach (var note in notes)

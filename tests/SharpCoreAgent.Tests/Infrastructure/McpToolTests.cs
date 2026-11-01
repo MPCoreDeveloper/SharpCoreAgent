@@ -236,6 +236,48 @@ public sealed class McpToolTests
         Assert.Contains("already carries 4 pictures", result.Content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ATurnWithNoBudgetLeftNamesThePictureAndTheReason()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/png", "iVBORw0KGgo=")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading) with { ImageBytesRemaining = 0 },
+            Token);
+
+        // The result is still a success with a description in it: the server did its work. What did not happen is the
+        // attachment, and that is written down rather than left to be guessed at.
+        Assert.False(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("[image/png: not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("0 B of image budget left", result.Content, StringComparison.Ordinal);
+        Assert.Contains("a new turn starts with a fresh budget", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WhatOnePictureSpendsOfTheTurnIsGoneBeforeTheNextOneAsks()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/png", "AAAA"), ("image/png", "BBBB")));
+        var tool = await harness.StartAsync();
+
+        // Four bytes of budget and two pictures of three: the first spends most of it, so the second does not fit.
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading) with { ImageBytesRemaining = 4 },
+            Token);
+
+        var image = Assert.Single(result.Images);
+        Assert.Equal("AAAA", image.Base64);
+        Assert.Contains("[image/png: not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("1 B of image budget left", result.Content, StringComparison.Ordinal);
+    }
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static string Flatten(string json)

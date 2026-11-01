@@ -85,9 +85,11 @@ has a real list rather than a memory.
 - [ ] T030 **Pasted, dragged or piped images, and an `--image` flag on `run`.** Attachment input is a different
       program (`007` T030–T032 says the same thing about roots), and a flag would be a second way for a picture to
       enter a conversation with no path in the transcript.
-- [ ] T031 **A per-turn image budget, deduplication, or transcript trimming.** The transcript grows and stays grown;
-      what would bound it is a compaction feature this product has not decided on — `003` T034 is the same gap seen
-      from the other side.
+- [ ] T031 **Deduplication, and transcript trimming.** The per-turn budget half of this row left it in `020` (round 11):
+      16 MiB of picture per turn, counted by the loop and refused by the three doors with both numbers. What is still
+      open is the other half of the sentence — the transcript grows and stays grown, a repeated screenshot spends that
+      budget twice, and what would bound either is a compaction feature this product has not decided on, which
+      `003` T034 is the same gap seen from the other side.
 - [ ] T032 **An image token estimate before the request.** A provider bills the pixels it decodes; the number
       arrives in `Usage` after the call or not at all, and inventing one would make `/cost` a guess.
 - [ ] T033 **Serving `view_image` over `mcp serve`.** The published set is a compile-time allow-list of the five

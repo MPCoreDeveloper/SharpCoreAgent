@@ -405,6 +405,17 @@ picture. Four pictures per tool result is the ceiling; every one that is not att
 number and its reason, and a session whose model is declared text-only is told the picture was not
 attached rather than left to describe what it was never shown.
 
+Those three doors share one ceiling, and it belongs to the turn rather than to any of them: 16 MiB of
+picture. An attached picture is re-sent on every request that follows it, so a turn that shows four
+screenshots on each of fifteen rounds would pay for sixty of them in its last request — more than a
+provider accepts, refused with a status code that mentions no images. The loop is the only place that
+sees a whole turn, so it counts what has travelled and tells each tool what is left; a picture that does
+not fit is refused with both numbers (`this turn has 1.2 MiB of image budget left and the picture is
+4.0 MiB; a new turn starts with a fresh budget`) instead of being encoded into a request that fails
+later. A new turn starts with all of it, which is what makes that advice actionable. Nothing about a
+picture that *does* fit changes: the file is still written, the path is still named, and the bytes
+travel on the next user message.
+
 `task` delegates one self-contained investigation to a sub-agent. The child starts with an empty transcript and
 sees only the prompt it was given, works with the session's tools minus `task` so it cannot delegate again, and
 answers with one message that comes back as the tool result — with its created, modified, deleted and command
@@ -700,7 +711,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 1,293 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 1,302 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
@@ -849,8 +860,19 @@ the second duplicates settings that would drift.
   keeps. Four pictures per result, and every one that is not attached is named with its number and reason — including
   the one a text-only session was never shown. `fetch_url` refuses a body cut at its own ceiling rather than sending
   half a PNG, and its old promise that nothing binary is ever downloaded is reworded rather than quietly broken.
-  Thirty-seven new tests across `ImagePayloadTests` and five existing classes; the whole suite is 1,293 green in
+  Thirty-seven new tests across `ImagePayloadTests` and five existing classes; the whole suite is 1,302 green in
   `Release` at 0 warnings.
+
+- `specs/020-image-turn-budget` — the pictures a turn shows have a total, and it is a turn's rather than a tool's.
+  Round 10 bounded one result (four pictures) and one picture (4 MiB) and left the sum unbounded, which is the number
+  that matters: an attached picture is re-sent on every request that follows it, so a long browser turn accumulates
+  past a provider's request limit and the failure arrives as a status code that mentions no images.
+  `AgentOptions.MaxTurnImageBytes` is 16 MiB — twenty-one megabytes of base64 inside the smallest request limit this
+  program targets, and four pictures at the per-image ceiling — with zero as the documented off switch. The loop
+  counts what travelled and puts the remainder on `ToolInvocationContext.ImageBytesRemaining`; `ImageBudget` is the
+  one predicate and the one sentence the three doors share, so `view_image`, an MCP `image` part and a `fetch_url`
+  picture all refuse with both numbers and the same advice: a new turn starts with a fresh budget. Nine new cases and
+  no behaviour change for a picture that fits; the whole suite is 1,302 green in `Release` at 0 warnings.
 
 ## Spec-driven development
 

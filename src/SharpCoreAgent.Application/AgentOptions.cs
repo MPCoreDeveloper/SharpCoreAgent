@@ -12,6 +12,7 @@ namespace SharpCoreAgent.Application;
 /// <item><description><see cref="MaxIterations"/> stops a model that keeps calling tools forever;</description></item>
 /// <item><description><see cref="MaxTotalTokens"/> stops a session before it costs real money;</description></item>
 /// <item><description><see cref="MaxToolResultChars"/> stops one <c>list_directory</c> from filling the context;</description></item>
+/// <item><description><see cref="MaxTurnImageBytes"/> stops a turn's pictures from outgrowing the request that carries them;</description></item>
 /// <item><description><see cref="MaxContextMessages"/> keeps a long conversation inside the model's window;</description></item>
 /// <item><description><see cref="TurnTimeout"/> stops a hung provider from hanging the terminal.</description></item>
 /// </list>
@@ -42,6 +43,25 @@ public sealed record AgentOptions
 
     /// <summary>Gets the largest tool result handed back to the model. Default 24 000 characters.</summary>
     public int MaxToolResultChars { get; init; } = 24_000;
+
+    /// <summary>
+    /// Gets the largest total of picture bytes one turn may attach, before base64. Default 16 mebibytes; zero turns
+    /// the ceiling off.
+    /// </summary>
+    /// <remarks>
+    /// The three doors that attach an image each bound what they alone return — one picture per call, four per result,
+    /// four mebibytes each — and none of them can see the turn. The turn is what a provider charges for, because an
+    /// attached picture is re-sent on every request that follows it: four pictures on each of fifteen rounds is sixty
+    /// pictures in the last request, more than a provider accepts, and the failure arrives as a status code with no
+    /// mention of images. Sixteen mebibytes is twenty-one megabytes of base64, which leaves room inside the smallest
+    /// provider request limit this program targets, and it admits four pictures at the per-image ceiling — the worst a
+    /// single tool result can produce. A turn showing ordinary screenshots fits dozens.
+    /// <para>
+    /// The ceiling is per turn and a new turn starts with all of it, which is what makes "ask again next turn" honest
+    /// advice rather than a dead end. Zero is the documented switch, for a host that budgets pictures itself.
+    /// </para>
+    /// </remarks>
+    public int MaxTurnImageBytes { get; init; } = 16 * 1024 * 1024;
 
     /// <summary>Gets the transcript size above which the oldest messages are dropped before a request. Default 120.</summary>
     /// <remarks>
@@ -80,6 +100,15 @@ public sealed record AgentOptions
         Require(MaxOutputTokensPerTurn, 256, 64_000, nameof(MaxOutputTokensPerTurn));
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxTotalTokens, 1_000);
         Require(MaxToolResultChars, 1_000, 1_000_000, nameof(MaxToolResultChars));
+
+        // Zero is the documented "the host budgets pictures itself" switch. Anything else is a ceiling in bytes, and
+        // one byte is a legitimate setting — it means "no picture attaches this turn" — rather than an unusable number,
+        // so the floor is one. The ceiling on the ceiling is a provider's own request limit: 64 MiB of decoded picture
+        // is 85 MB of base64, which no provider this program targets accepts with text beside it.
+        if (MaxTurnImageBytes is not 0)
+        {
+            Require(MaxTurnImageBytes, 1, 64 * 1024 * 1024, nameof(MaxTurnImageBytes));
+        }
 
         // Zero is the documented "do not compact" switch; anything else has to leave a conversation usable, since a
         // window of four messages would keep a single tool round and drop the instruction that asked for it.

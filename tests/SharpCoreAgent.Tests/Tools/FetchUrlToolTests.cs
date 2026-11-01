@@ -223,6 +223,23 @@ public sealed class FetchUrlToolTests
     }
 
     [Fact]
+    public async Task RefusesAPictureTheTurnHasNoBudgetLeftFor()
+    {
+        var handler = new StubHandler().Map(Url, () => RespondBytes(new byte[8 * 1024], "image/png"));
+
+        // A reading model and a turn with a kibibyte left: the body is fine and still does not travel, because a
+        // picture this turn has no room for would make the next request fail somewhere that cannot explain itself.
+        var result = await InvokeAsync(Tool(handler), Url, Reading, imageBytesRemaining: 1024);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("image/png", result.Content, StringComparison.Ordinal);
+        Assert.Contains("8.0 KiB", result.Content, StringComparison.Ordinal);
+        Assert.Contains("1.0 KiB of image budget left", result.Content, StringComparison.Ordinal);
+        Assert.Contains("a new turn starts with a fresh budget", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RefusesAPictureTypeNoProviderCarries()
     {
         // svg is a document rather than a photograph, and the closed table says so instead of sending it on.
@@ -329,12 +346,16 @@ public sealed class FetchUrlToolTests
         IWebAddressResolver? resolver = null) =>
         new(new StubClientFactory(handler), options ?? WebFetchOptions.Default, resolver ?? new StubResolver());
 
-    private static async Task<ToolResult> InvokeAsync(FetchUrlTool tool, string url, ModelDescriptor? model = null)
+    private static async Task<ToolResult> InvokeAsync(
+        FetchUrlTool tool,
+        string url,
+        ModelDescriptor? model = null,
+        long? imageBytesRemaining = null)
     {
         using var sandbox = ToolTestWorkspace.Create();
         return await tool.ExecuteAsync(
             ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url })),
-            sandbox.Context with { Model = model },
+            sandbox.Context with { Model = model, ImageBytesRemaining = imageBytesRemaining },
             CancellationToken.None);
     }
 

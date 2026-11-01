@@ -134,8 +134,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 - **Resizing, re-encoding, rotating or downscaling.** The developer's file is shown as it is, or refused with the
   number that says why.
 - **Images in session files.** Deliberate (FR-009): a transcript people grep is not a blob store.
-- **A per-turn image budget or deduplication.** Two `view_image` calls on one file cost two pictures, and the
-  conversation carries both until something trims a transcript — which this build still does not do.
+- **Deduplication.** Two `view_image` calls on one file cost two pictures, and the conversation carries both until
+  something trims a transcript — which this build still does not do. (The first half of this row — a per-turn budget —
+  was closed by `020`: a turn attaches at most 16 MiB of picture, counted by the loop, before any of it is re-sent.)
 - **An estimate of an image's token cost before the request.** A provider bills pixels it decodes, and the number
   arrives in `Usage` after the call or not at all.
 

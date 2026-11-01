@@ -1,6 +1,7 @@
 using System.Globalization;
 using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Infrastructure.Images;
 
 namespace SharpCoreAgent.Infrastructure.Tools;
 
@@ -19,6 +20,12 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// all: a text-only model that is handed a path answers with an invented description of a picture it never saw,
 /// which is the one failure mode this tool exists to prevent.
 /// </para>
+/// <para>
+/// A third rule belongs to the turn rather than to the tool. Every picture a turn attaches is re-sent on every request
+/// that follows it, so the loop counts what has travelled and puts what is left in
+/// <see cref="ToolInvocationContext.ImageBytesRemaining"/>; a picture that does not fit is refused with both numbers
+/// instead of being sent and failing somewhere further away.
+/// </para>
 /// </remarks>
 public sealed class ViewImageTool : ITool
 {
@@ -29,7 +36,7 @@ public sealed class ViewImageTool : ITool
         """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}""";
 
     private const string Description =
-        "Show an image file to the model: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment, up to 4 MiB. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified.";
+        "Show an image file to the model: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment, up to 4 MiB. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn.";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(Name, Description, Schema);
@@ -105,6 +112,18 @@ public sealed class ViewImageTool : ITool
                 toolCall.Id,
                 Name,
                 $"'{relative}' was not opened: {name} is declared text-only in this build and cannot read images. Do not describe what the image contains — say that you cannot see it, and let the developer switch to a model that reads images.");
+        }
+
+        if (context.ImageBytesRemaining is { } left && !ImageBudget.Fits(length, left))
+        {
+            // Also before a byte is read: a picture the turn has no room for is not worth encoding, and the refusal
+            // names the size and what was left, so a model reads it as a budget rather than as a broken file.
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{relative}' ({mediaType} · {length} bytes) was not attached: {ImageBudget.Spent(length, left)}."));
         }
 
         byte[] bytes;

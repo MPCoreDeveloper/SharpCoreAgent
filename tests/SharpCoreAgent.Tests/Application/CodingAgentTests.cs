@@ -797,6 +797,85 @@ public sealed class CodingAgentTests
         Assert.Equal(2, sent.Images.Count);
     }
 
+    [Fact]
+    public async Task EachToolIsToldWhatIsLeftOfTheTurnsPictureBudget()
+    {
+        using var directory = TempDirectory.Create();
+        var image = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+        var seen = new List<long?>();
+
+        // Two calls in one round, which is the only shape that proves the accounting is not per request: the second
+        // tool asks after the first tool's picture has already been spent.
+        var model = new ScriptedModel(
+            Descriptor,
+            [
+                new StreamCompleted(new ChatResponse(
+                    ChatMessage.Assistant(
+                        string.Empty,
+                        [
+                            new ToolCall("call-1", "shot", "{}"),
+                            new ToolCall("call-2", "report", "{}"),
+                        ]),
+                    FinishReason.ToolCalls,
+                    new TokenUsage(10, 5))),
+            ],
+            [Completed("done")]);
+        var reporter = new ContextTool("report", (call, context) =>
+        {
+            seen.Add(context.ImageBytesRemaining);
+            return ToolResult.Success(call.Id, call.Name, "ok");
+        });
+        var shooter = new ContextTool("shot", (call, context) =>
+        {
+            seen.Add(context.ImageBytesRemaining);
+            return ToolResult.Success(call.Id, call.Name, "a picture is attached to the next message.") with
+            {
+                Images = [image],
+            };
+        });
+        var session = Session(directory.Path);
+
+        var report = await AgentWithOptions(new AgentOptions { MaxTurnImageBytes = 10 }, model, [shooter, reporter])
+            .RunTurnAsync(session, "show me and then tell me", null, TestContext.Current.CancellationToken);
+
+        // Ten bytes of ceiling, a picture of three: the first call is told all ten, the second is told seven. The
+        // picture the loop then attaches is the first tool's, because it is the one that was paid for.
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Equal(new long?[] { 10, 7 }, seen);
+        Assert.Single(session.Messages, message => message.HasImages);
+    }
+
+    [Fact]
+    public async Task ANewTurnStartsWithTheWholePictureBudget()
+    {
+        using var directory = TempDirectory.Create();
+        var image = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+        var seen = new List<long?>();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("shot")],
+            [Completed("shown")],
+            [ToolCallTurn("shot")],
+            [Completed("shown again")]);
+        var tool = new ContextTool("shot", (call, context) =>
+        {
+            seen.Add(context.ImageBytesRemaining);
+            return ToolResult.Success(call.Id, call.Name, "a picture is attached to the next message.") with
+            {
+                Images = [image],
+            };
+        });
+        var agent = AgentWithOptions(new AgentOptions { MaxTurnImageBytes = 10 }, model, [tool]);
+        var session = Session(directory.Path);
+
+        await agent.RunTurnAsync(session, "show me", null, TestContext.Current.CancellationToken);
+        await agent.RunTurnAsync(session, "show me again", null, TestContext.Current.CancellationToken);
+
+        // The ceiling is a turn's, so the second turn is not a continuation of the first: both are told the whole ten.
+        // That is what makes "ask again in a new turn" advice the model can act on.
+        Assert.Equal(new long?[] { 10, 10 }, seen);
+    }
+
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
         AgentWithOptions(new AgentOptions(), model, tools);
 
@@ -1023,6 +1102,23 @@ public sealed class CodingAgentTests
             ToolCall toolCall,
             ToolInvocationContext context,
             CancellationToken cancellationToken) => ValueTask.FromResult(run(toolCall));
+    }
+
+    /// <summary>A tool that answers with whatever the test's lambda says, context and all.</summary>
+    /// <remarks>
+    /// <see cref="StubTool"/> is deliberately blind to its context — most tests care about the result, not the turn
+    /// that asked for it — so the tests that pin what the loop tells a tool need a shape that can read it.
+    /// </remarks>
+    private sealed class ContextTool(string name, Func<ToolCall, ToolInvocationContext, ToolResult> run) : ITool
+    {
+        public ToolDefinition Definition { get; } = new(name, "a test tool", """{"type":"object"}""");
+
+        public ToolSafety Safety => ToolSafety.ReadOnly;
+
+        public ValueTask<ToolResult> ExecuteAsync(
+            ToolCall toolCall,
+            ToolInvocationContext context,
+            CancellationToken cancellationToken) => ValueTask.FromResult(run(toolCall, context));
     }
 
     private sealed class RecordingObserver : IAgentObserver

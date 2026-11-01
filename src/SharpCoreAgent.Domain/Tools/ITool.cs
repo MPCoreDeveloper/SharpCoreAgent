@@ -27,6 +27,19 @@ public sealed record ToolInvocationContext(Workspace Workspace)
     public ModelDescriptor? Model { get; init; }
 
     /// <summary>
+    /// Gets how many more bytes of picture this turn may attach, or null when the caller did not say.
+    /// </summary>
+    /// <remarks>
+    /// A tool that answers with an image reads this before it attaches one, and nothing else on the context is
+    /// affected by it: the count is the loop's, because the loop is the only place that sees a whole turn, and a
+    /// picture is re-sent on every request that follows it rather than once. Null is the documented "no ceiling was
+    /// stated" and the safe default for a context built by hand, exactly as <see cref="Model"/> is for the capability
+    /// gate. A tool that receives zero attaches nothing and says so — silence would leave the model describing a
+    /// picture it was never shown.
+    /// </remarks>
+    public long? ImageBytesRemaining { get; init; }
+
+    /// <summary>
     /// Gets the approval mode in force for the conversation. Default <see cref="ApprovalMode.ReadOnly"/>.
     /// </summary>
     /// <remarks>

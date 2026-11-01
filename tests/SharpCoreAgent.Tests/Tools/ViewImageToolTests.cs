@@ -215,6 +215,53 @@ public sealed class ViewImageToolTests
     }
 
     [Fact]
+    public async Task ATurnWithNoBudgetLeftRefusesThePictureAndNamesBothNumbers()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/shot.png", PngBytes);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox) with { ImageBytesRemaining = 0 },
+            CancellationToken.None);
+
+        // A refusal rather than an image: the turn is what a provider charges for, and a picture it has no room for
+        // fails somewhere further away — as a request the provider rejects for a reason it does not explain.
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("was not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("0 B of image budget left", result.Content, StringComparison.Ordinal);
+        Assert.Contains("the picture is 11 B", result.Content, StringComparison.Ordinal);
+
+        // And the way out, because the ceiling is per turn: asking again in this one cannot work.
+        Assert.Contains("a new turn starts with a fresh budget", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APictureThatExactlyFitsWhatTheTurnHasLeftIsShown()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/shot.png", PngBytes);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox) with { ImageBytesRemaining = PngBytes.Length },
+            CancellationToken.None);
+
+        // The boundary is inclusive: a budget equal to the picture spends it exactly and shows the picture.
+        Assert.False(result.IsError);
+        Assert.Single(result.Images);
+
+        // Nothing stays out of the ceiling by accident: an unstated budget still attaches, which is what every test
+        // written before the ceiling existed already proves.
+        var unstated = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+        Assert.Single(unstated.Images);
+    }
+
+    [Fact]
     public void IsReadOnlyAndAsksForOnePath()
     {
         var tool = new ViewImageTool();

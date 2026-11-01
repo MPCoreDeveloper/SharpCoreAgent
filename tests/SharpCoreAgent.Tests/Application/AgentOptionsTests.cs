@@ -39,6 +39,10 @@ public sealed class AgentOptionsTests
         // The window bounds one request, not the session: it is high enough that a conversation has to be very
         // long before the oldest messages have to go.
         Assert.Equal(120, options.MaxContextMessages);
+
+        // Sixteen mebibytes of picture per turn — four pictures at the per-image ceiling, or dozens of screenshots,
+        // and twenty-one megabytes of base64 inside the smallest provider request limit this program targets.
+        Assert.Equal(16 * 1024 * 1024, options.MaxTurnImageBytes);
     }
 
     [Fact]
@@ -150,5 +154,36 @@ public sealed class AgentOptionsTests
         var options = new AgentOptions { MaxTotalTokens = 999 };
 
         Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void TheImageBudgetMayBeSwitchedOffButNotSetToSomethingARequestCannotCarry()
+    {
+        // Zero is the documented "the host budgets pictures itself" switch.
+        var off = new AgentOptions { MaxTurnImageBytes = 0 };
+        Assert.Same(off, off.Validate());
+
+        // One byte means "no picture attaches this turn", which is a legitimate setting rather than a mistake, so
+        // the floor is one byte and not a mebibyte.
+        var smallest = new AgentOptions { MaxTurnImageBytes = 1 };
+        Assert.Same(smallest, smallest.Validate());
+
+        var largest = new AgentOptions { MaxTurnImageBytes = 64 * 1024 * 1024 };
+        Assert.Same(largest, largest.Validate());
+
+        // Above that the ceiling is a number no provider accepts: 64 MiB of decoded picture is 85 MB of base64.
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentOptions { MaxTurnImageBytes = (64 * 1024 * 1024) + 1 }.Validate());
+        Assert.Equal("MaxTurnImageBytes", exception.ParamName);
+    }
+
+    [Fact]
+    public void RejectsANegativeImageBudget()
+    {
+        // Negative is not the "off" switch — zero is — so it is refused rather than read as one.
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentOptions { MaxTurnImageBytes = -1 }.Validate());
+
+        Assert.Equal("MaxTurnImageBytes", exception.ParamName);
     }
 }

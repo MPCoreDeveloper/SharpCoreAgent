@@ -300,7 +300,7 @@ public sealed class CodingAgent
 
         foreach (var call in response.Message.ToolCalls)
         {
-            var result = await InvokeAsync(session, call, sink, cancellationToken).ConfigureAwait(false);
+            var result = await InvokeAsync(session, call, state, sink, cancellationToken).ConfigureAwait(false);
             state.Add(result);
             session.Add(ChatMessage.FromToolResult(result));
 
@@ -399,6 +399,7 @@ public sealed class CodingAgent
         private readonly List<FallbackUsed> _fallbacks = [];
         private int _lastDotnetEdit = -1;
         private int _lastVerification = -1;
+        private long _imageBytes;
         /// <summary>Gets the model the turn runs on.</summary>
         public ModelDescriptor Model { get; } = model;
 
@@ -427,17 +428,39 @@ public sealed class CodingAgent
         /// <summary>Gets or sets how often the loop has asked the model to verify this turn.</summary>
         public int VerificationNudges { get; set; }
 
+        /// <summary>
+        /// Answers what the turn may still attach, for the one tool call about to run.
+        /// </summary>
+        /// <param name="ceiling">The turn's ceiling in bytes; a non-positive value turns the ceiling off.</param>
+        /// <returns>The bytes still available, or <see langword="null"/> when there is no ceiling.</returns>
+        /// <remarks>
+        /// A number rather than the ceiling, because a tool decides what it alone may attach and must not be handed a
+        /// policy it could reinterpret. Zero is a real answer — it says the turn is spent — and is not the same thing
+        /// as <see langword="null"/>, which says nobody stated a budget at all.
+        /// </remarks>
+        public long? ImageBytesRemaining(long ceiling) => ceiling <= 0 ? null : Math.Max(0, ceiling - _imageBytes);
+
         /// <summary>Records one tool result.</summary>
         /// <param name="result">The result to keep.</param>
         /// <remarks>
         /// The two indices are the whole memory the verify gate needs: what the turn last touched, and what it
         /// last proved. Recording them here rather than re-scanning the list keeps a long turn linear and, more
         /// importantly, makes the order explicit — a verify that arrives before an edit is remembered as such.
+        /// <para>
+        /// The picture total is kept here for the same reason: every result passes through this method, and the
+        /// loop reads the total before the next call in the same round, so a tool that attached a picture has already
+        /// spent that budget by the time its neighbour asks.
+        /// </para>
         /// </remarks>
         public void Add(ToolResult result)
         {
             _results.Add(result);
             var index = _results.Count - 1;
+
+            foreach (var image in result.Images)
+            {
+                _imageBytes += image.ByteCount;
+            }
 
             if (VerifyGate.Verifies(result))
             {
@@ -516,6 +539,7 @@ public sealed class CodingAgent
     private async Task<ToolResult> InvokeAsync(
         AgentSession session,
         ToolCall call,
+        TurnState state,
         IAgentObserver sink,
         CancellationToken cancellationToken)
     {
@@ -543,7 +567,14 @@ public sealed class CodingAgent
         }
         else
         {
-            result = await ExecuteAsync(tool, call, session, sink, cancellationToken).ConfigureAwait(false);
+            result = await ExecuteAsync(
+                    tool,
+                    call,
+                    session,
+                    sink,
+                    state.ImageBytesRemaining(_options.MaxTurnImageBytes),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         result = ToolResultTrimmer.Trim(result, _options.MaxToolResultChars);
@@ -625,6 +656,7 @@ public sealed class CodingAgent
     /// <param name="call">The model's call.</param>
     /// <param name="session">The session, for the workspace.</param>
     /// <param name="sink">Receives the tool's live output while it runs.</param>
+    /// <param name="imageBytesRemaining">What the turn may still attach, or null when its ceiling is off.</param>
     /// <param name="cancellationToken">Cancels the invocation.</param>
     /// <returns>The result, with a readable failure instead of an exception where the tool allows one.</returns>
     private static async Task<ToolResult> ExecuteAsync(
@@ -632,17 +664,21 @@ public sealed class CodingAgent
         ToolCall call,
         AgentSession session,
         IAgentObserver sink,
+        long? imageBytesRemaining,
         CancellationToken cancellationToken)
     {
         // Live output is a courtesy, never a precondition: the tool runs identically whether or not the
         // observer wants the text, and the result it returns is the complete record either way. The model
         // and the approval mode travel with the context because a tool that delegates work needs the
-        // conversation's answers, not the host's startup settings.
+        // conversation's answers, not the host's startup settings. The picture budget travels the same way and for
+        // the same reason: only the turn knows how much of it is spent, and a tool that attaches a picture must say
+        // so in its own result rather than in a message the loop writes afterwards.
         var context = new ToolInvocationContext(session.Workspace)
         {
             Output = new ObserverOutput(sink, call),
             Model = session.ActiveModel,
             Approval = session.Approval,
+            ImageBytesRemaining = imageBytesRemaining,
         };
         try
         {
