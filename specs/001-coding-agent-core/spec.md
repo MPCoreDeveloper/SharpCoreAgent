@@ -4,7 +4,8 @@
 
 **Created**: 2026-10-23
 
-**Status**: Draft
+**Status**: implemented — every task in `tasks.md` is done. This document is the record of what was built and why,
+not a plan: what changed afterwards is recorded round by round in `specs/000-parity-roadmap.md`.
 
 **Input**: User description: "We want to build our own coding agent in C# 15 / .NET 11 that supports
 several AI models, but mainly targets DeepSeek and Grok."

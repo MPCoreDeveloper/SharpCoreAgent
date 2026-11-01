@@ -4,7 +4,9 @@
 
 **Created**: 2026-10-24
 
-**Status**: Draft
+**Status**: implemented, except Phase 4: `T034` — the cold build and the index inside their stated budgets — is the
+one task left, and it is open because it needs a measurement rather than a decision. Everything else in `tasks.md` is
+done.
 
 **Input**: User description: "Give the agent a persistent, local index of the workspace — graph, vectors and
 full text — so it can find the right passage and the right neighbours before it reads a file, and cite
