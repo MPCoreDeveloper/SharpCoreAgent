@@ -179,7 +179,8 @@ cookie. For HTML it returns a readable reduction — entities decoded, `script`/
 stripped, whitespace collapsed — implemented in the BCL, not with a new dependency. The result names
 the final URL after redirects, the status, the content type, and whether the text was truncated.
 
-**Does not ship**: JavaScript execution, cookies, logins, screenshots, a search engine.
+**Does not ship**: JavaScript execution, cookies, logins, screenshots, a search engine — the decision record's entry,
+2026-10-31, is where search went instead.
 
 **Evidence**: a deterministic `HttpMessageHandler` stub replaying recorded responses, in the shape the
 provider adapters are already tested with — no live network in the suite.
@@ -447,8 +448,8 @@ picture viewable and left two doors describing one: `McpContent.Flatten` rendere
 `[image: image/png · 36,912 base64 characters]`, and `fetch_url` refused an `image/*` body by name. The workaround for
 the first was a second tool call on the file the artefact sink had already written; for the second there was none,
 because nothing was written at all. The argument is [`019-image-ingress/spec.md`](019-image-ingress/spec.md) and the
-decisions are in its `plan.md`. The number is `019` because `018` is still held for `web_search` and `014` was never
-assigned.
+decisions are in its `plan.md`. The number is `019` because `018` was held for `web_search` then — released 2026-10-31,
+when the tool was decided against — and `014` was never assigned.
 
 **Ships**: `ImagePayload` (`Infrastructure/Images`) — one normalisation table (five spellings onto four types,
 `image/jpg` → `image/jpeg`), one size estimate (the base64 rule the sink has used since round 4, extracted so the two

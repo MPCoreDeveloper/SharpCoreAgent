@@ -59,7 +59,8 @@ recorded in the commit that carries it.
 - [X] T019 `README.md`: the `view_image` section gains the two other doors, the `fetch_url` paragraph stops promising
       that nothing binary is downloaded, the current suite figure is 1,293, and the spec list has its round-10 entry.
 - [X] T020 `specs/000-parity-roadmap.md`: row 10 in the rounds table, the round-10 section, the open-work row for `017`
-      narrowed to what is genuinely still open, and the note that `018` is still held for `web_search`.
+      narrowed to what is genuinely still open, and the note that `018` was held for `web_search` (`019`'s own spec
+      records that it was released on 2026-10-31).
 - [X] T021 `specs/017-image-view/{spec,tasks}.md`: T024 and T025 closed with the reason, and the "out of scope" lines
       that said MCP images and `fetch_url` images were not this program's business corrected rather than left to
       contradict the code.

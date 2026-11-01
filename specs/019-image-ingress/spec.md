@@ -1,8 +1,9 @@
 # Spec — 019 image ingress
 
 **Status**: landed on `main` as `83c28ea` (2026-10-31) in one commit, with no merge commit — the shape rounds 6 and 9
-took. Spec number `019`: `018` is held for `web_search` by a sentence in `specs/000-parity-roadmap.md`, and `014` was
-never assigned, so `019` is the next number that claims nothing already spoken for.
+took. Spec number `019`: `018` was held for `web_search` by a sentence in `specs/000-parity-roadmap.md`, and `014` was
+never assigned, so `019` is the next number that claims nothing already spoken for. That sentence released `018` on
+2026-10-31, when the tool was decided against and `--mcp` named as the route.
 
 **Depends on**: `017` (`ImageContent`, `ToolResult.Images`, `ModelDescriptor.SupportsImages`, the loop's hand-over),
 `010` (`McpArtefactSink`, the `Flatten` save delegate), `009` (`McpTool`), `008` (`fetch_url` and the shape of its
