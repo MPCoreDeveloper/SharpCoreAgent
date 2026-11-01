@@ -55,7 +55,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run (landed 2026-10-31 as `6ac0c90`: `AgentRoles`, `CredentialPrompt`, the upsert in `CredentialFile`, `AgentSession.SessionModel`, 28 tests in 4 new classes) | 0, `004`, `005`, `006` (all landed) |
 | 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (landed 2026-10-31 as `e69cbdc`: `ImageContent`, `ChatMessage.Images`, `ToolResult.Images`, the eighteenth default tool, prompt rule 9, 1256 passing; closes `010` T035) | 0, and `010` (landed) |
 | 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (landed 2026-10-31 as `83c28ea`; closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
-| 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31; narrows `017` T031) | 0, `017` and `019` (landed) |
+| 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31 as `051089d`; narrows `017` T031) | 0, `017` and `019` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
@@ -461,7 +461,7 @@ methods in `McpToolTests`, five in `FetchUrlToolTests`, one in `CodingAgentTests
 thirty-seven cases in all, and the single assertion that quoted round 2's old refusal moved with the sentence. Build 0
 warnings; suite 1,293 passed, 0 failed, which is the figure `README.md` carries.
 
-## Round 11 — `020-image-turn-budget` (landed 2026-10-31)
+## Round 11 — `020-image-turn-budget` (landed 2026-10-31 as `051089d`)
 
 **Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6, 9 and 10 took. Round 10 gave
 every door a ceiling and left the turn without one: one picture per `view_image` call, four per tool result, 4 MiB per

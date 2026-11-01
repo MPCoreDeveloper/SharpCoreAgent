@@ -1,7 +1,7 @@
 # Spec — 020 image turn budget
 
-**Status**: landed on `main` (2026-10-31) in one commit, with no merge commit — the shape rounds 6, 9 and 10 took.
-Spec number `020`: `018` is still held for `web_search` by a sentence in `specs/000-parity-roadmap.md`.
+**Status**: landed on `main` as `051089d` (2026-10-31) in one commit, with no merge commit — the shape rounds 6, 9 and
+10 took. Spec number `020`: `018` is still held for `web_search` by a sentence in `specs/000-parity-roadmap.md`.
 
 **Depends on**: `001` (`AgentOptions`, `CodingAgent`'s turn loop, `TurnState`), `017` (`ImageContent`,
 `ToolResult.Images`, the loop's hand-over), `019` (`ImagePayload`, the three doors and the ceilings each of them
