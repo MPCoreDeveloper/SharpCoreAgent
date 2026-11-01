@@ -134,9 +134,11 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 - **Resizing, re-encoding, rotating or downscaling.** The developer's file is shown as it is, or refused with the
   number that says why.
 - **Images in session files.** Deliberate (FR-009): a transcript people grep is not a blob store.
-- **Deduplication.** Two `view_image` calls on one file cost two pictures, and the conversation carries both until
-  something trims a transcript — which this build still does not do. (The first half of this row — a per-turn budget —
-  was closed by `020`: a turn attaches at most 16 MiB of picture, counted by the loop, before any of it is re-sent.)
+- **Deduplication.** Closed by `021` (round 12): a picture the conversation already carries is not attached a second
+  time, by any of the three doors, and the answer is a success because the picture is exactly where the model asked for
+  it. The first half of this row — a per-turn budget — was closed by `020`: a turn attaches at most 16 MiB of picture,
+  counted by the loop, before any of it is re-sent. What neither round does is bound the transcript itself; that is
+  T031's remaining clause.
 - **An estimate of an image's token cost before the request.** A provider bills pixels it decodes, and the number
   arrives in `Usage` after the call or not at all.
 

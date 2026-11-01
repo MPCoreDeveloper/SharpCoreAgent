@@ -278,6 +278,57 @@ public sealed class McpToolTests
         Assert.Contains("1 B of image budget left", result.Content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task APictureTheConversationAlreadyCarriesIsNamedRatherThanSentAgain()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/png", "iVBORw0KGgo=")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading) with
+            {
+                ImagesAlreadyShown = new HashSet<ImageContent>
+                {
+                    new ImageContent { MediaType = "image/png", Base64 = "iVBORw0KGgo=" },
+                },
+            },
+            Token);
+
+        // The server did its work, so the result stands and the model is told what was skipped: a second copy of a
+        // picture the transcript holds would be charged for on every request that follows it.
+        Assert.False(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains(
+            "[image/png: not attached — the same picture is already in this conversation",
+            result.Content,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAnswerThatRepeatsAPictureAttachesItOnce()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/png", "AAAA"), ("image/png", "AAAA")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading),
+            Token);
+
+        // One picture, and the repeat is named: the same pixels twice cost twice on every request that follows and show
+        // the model nothing it has not already seen.
+        Assert.Single(result.Images);
+        Assert.Contains(
+            "this result already carries the same picture",
+            result.Content,
+            StringComparison.Ordinal);
+    }
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static string Flatten(string json)

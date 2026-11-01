@@ -40,6 +40,23 @@ public sealed record ToolInvocationContext(Workspace Workspace)
     public long? ImageBytesRemaining { get; init; }
 
     /// <summary>
+    /// Gets the pictures the conversation already carries, or null when the caller did not say.
+    /// </summary>
+    /// <remarks>
+    /// A tool that answers with an image reads this before it attaches one, because an attached picture is re-sent on
+    /// every request that follows it: a conversation that shows one screenshot on each of ten rounds pays for ten copies
+    /// of the same bytes, and the model learns nothing from the ninth. Identity is the picture itself — its type and its
+    /// bytes — rather than the name it arrived under, because two URLs can serve one picture and one path can hold
+    /// different bytes by the time it is asked for a second time.
+    /// <para>
+    /// Null means the caller stated nothing, so a context built by hand in a test attaches and a duplicate is never worse
+    /// than a missing picture — the same safe default <see cref="ImageBytesRemaining"/> and <see cref="Model"/> take. An
+    /// empty set is the loop saying it looked and the conversation holds no picture yet.
+    /// </para>
+    /// </remarks>
+    public IReadOnlySet<ImageContent>? ImagesAlreadyShown { get; init; }
+
+    /// <summary>
     /// Gets the approval mode in force for the conversation. Default <see cref="ApprovalMode.ReadOnly"/>.
     /// </summary>
     /// <remarks>

@@ -398,8 +398,10 @@ public sealed class FetchUrlTool : ITool
     /// <returns>The image, or a refusal that names the number that stopped it.</returns>
     /// <remarks>
     /// A truncated picture is refused rather than attached: base64 of half a PNG decodes to a corrupt image, and the
-    /// provider's rejection would arrive as a status code far from the reason. The five conditions are checked
-    /// cheapest-first, and each refusal keeps the header block that says what was actually fetched.
+    /// provider's rejection would arrive as a status code far from the reason. The conditions are checked
+    /// cheapest-first, and each refusal keeps the header block that says what was actually fetched. A picture the
+    /// conversation already carries is the one condition that answers with a success rather than a refusal: the fetch
+    /// worked, and the body is already where the model can see it.
     /// </remarks>
     private ToolResult Picture(
         ToolCall toolCall,
@@ -443,6 +445,23 @@ public sealed class FetchUrlTool : ITool
                     $"{header}\n\nthe response is {imageType}, {CodeIndexFormat.Size(bytes.Length)}, and it was not attached: {context.Model?.QualifiedName ?? "the model for this turn"} is not declared to read images. Do not describe what it contains; cite the URL and let the developer open it."));
         }
 
+        var picture = new ImageContent { MediaType = imageType, Base64 = Convert.ToBase64String(bytes) };
+
+        // A picture the conversation already carries. This is a success and not a refusal, because the fetch itself
+        // worked: what did not happen is a second copy of something the transcript holds, and a copy would be charged
+        // for on every request that follows it. It comes before the ceiling for the same reason it is not a refusal — a
+        // duplicate spends nothing, so naming a budget here would name a ceiling that stopped nothing.
+        if (ImageShown.Already(context.ImagesAlreadyShown, picture))
+        {
+            return ToolResult.Success(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{header}\n\nthe response is {imageType}, {CodeIndexFormat.Size(bytes.Length)}, and it is not attached again: {ImageShown.Clause}. Cite the URL; the earlier message carries the picture."),
+                new ToolEffect(ToolEffectKind.Read, finalUri.AbsoluteUri));
+        }
+
         if (context.ImageBytesRemaining is { } left && !ImageBudget.Fits(bytes.Length, left))
         {
             // The turn's ceiling, which no single fetch can see: the body is refused here rather than encoded into a
@@ -461,7 +480,7 @@ public sealed class FetchUrlTool : ITool
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"{header}\n\n{imageType} · {CodeIndexFormat.Size(bytes.Length)} is attached to the next message."),
-            new ImageContent { MediaType = imageType, Base64 = Convert.ToBase64String(bytes) })
+            picture)
             with
         {
             Effects = [new ToolEffect(ToolEffectKind.Read, finalUri.AbsoluteUri)],

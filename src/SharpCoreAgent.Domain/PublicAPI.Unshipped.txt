@@ -852,6 +852,8 @@ SharpCoreAgent.Domain.Tools.ToolInvocationContext.Approval.get -> SharpCoreAgent
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Approval.init -> void
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.ImageBytesRemaining.get -> long?
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.ImageBytesRemaining.init -> void
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.ImagesAlreadyShown.get -> System.Collections.Generic.IReadOnlySet<SharpCoreAgent.Domain.Conversation.ImageContent!>?
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.ImagesAlreadyShown.init -> void
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Model.get -> SharpCoreAgent.Domain.Model.ModelDescriptor?
 SharpCoreAgent.Domain.Tools.ToolInvocationContext.Model.init -> void
 static SharpCoreAgent.Domain.Text.FragmentFinder.Find(string! text, string! find) -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Text.FragmentMatch!>!

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
+using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Tools;
@@ -340,6 +341,30 @@ public sealed class FetchUrlToolTests
         Assert.Contains("Refuses loopback", tool.Definition.Description, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RefusesToAttachAPictureTheConversationAlreadyCarries()
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A };
+        var handler = new StubHandler().Map(Url, () => RespondBytes(bytes, "image/png"));
+
+        // The fetch worked and the conversation already holds this body, so the answer is a success that says what it
+        // found: a second copy would be charged for on every request that follows it.
+        var result = await InvokeAsync(
+            Tool(handler),
+            Url,
+            Reading,
+            alreadyShown: [new ImageContent { MediaType = "image/png", Base64 = Convert.ToBase64String(bytes) }]);
+
+        Assert.False(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("is not attached again", result.Content, StringComparison.Ordinal);
+        Assert.Contains("the same picture is already in this conversation", result.Content, StringComparison.Ordinal);
+
+        // Still a read on the URL that answered: fetching it again touched nothing, and the record says so.
+        Assert.Equal(ToolEffectKind.Read, Assert.Single(result.Effects).Kind);
+        Assert.Equal(Url, Assert.Single(result.Effects).Target);
+    }
+
     private static FetchUrlTool Tool(
         StubHandler handler,
         WebFetchOptions? options = null,
@@ -350,12 +375,18 @@ public sealed class FetchUrlToolTests
         FetchUrlTool tool,
         string url,
         ModelDescriptor? model = null,
-        long? imageBytesRemaining = null)
+        long? imageBytesRemaining = null,
+        ImageContent[]? alreadyShown = null)
     {
         using var sandbox = ToolTestWorkspace.Create();
         return await tool.ExecuteAsync(
             ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url })),
-            sandbox.Context with { Model = model, ImageBytesRemaining = imageBytesRemaining },
+            sandbox.Context with
+            {
+                Model = model,
+                ImageBytesRemaining = imageBytesRemaining,
+                ImagesAlreadyShown = alreadyShown is null ? null : new HashSet<ImageContent>(alreadyShown),
+            },
             CancellationToken.None);
     }
 

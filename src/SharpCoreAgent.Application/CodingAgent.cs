@@ -92,7 +92,7 @@ public sealed class CodingAgent
 
         var sink = observer ?? NullAgentObserver.Instance;
         var model = session.ActiveModel;
-        var state = new TurnState(model);
+        var state = new TurnState(model, AlreadyShown(session));
 
         // A model that cannot call tools would answer in prose and silently ignore every tool, so the
         // turn is refused before a request is spent and before the transcript is polluted.
@@ -393,7 +393,8 @@ public sealed class CodingAgent
     /// The running totals of one turn: what it spent, and what its tools reported.
     /// </summary>
     /// <param name="model">The model the turn runs on.</param>
-    private sealed class TurnState(ModelDescriptor model)
+    /// <param name="shown">The pictures the conversation already carries, which the turn adds to as its tools attach more.</param>
+    private sealed class TurnState(ModelDescriptor model, HashSet<ImageContent> shown)
     {
         private readonly List<ToolResult> _results = [];
         private readonly List<FallbackUsed> _fallbacks = [];
@@ -440,6 +441,9 @@ public sealed class CodingAgent
         /// </remarks>
         public long? ImageBytesRemaining(long ceiling) => ceiling <= 0 ? null : Math.Max(0, ceiling - _imageBytes);
 
+        /// <summary>Gets the pictures the conversation already carries, including the ones this turn attached.</summary>
+        public IReadOnlySet<ImageContent> ImagesAlreadyShown => shown;
+
         /// <summary>Records one tool result.</summary>
         /// <param name="result">The result to keep.</param>
         /// <remarks>
@@ -449,7 +453,8 @@ public sealed class CodingAgent
         /// <para>
         /// The picture total is kept here for the same reason: every result passes through this method, and the
         /// loop reads the total before the next call in the same round, so a tool that attached a picture has already
-        /// spent that budget by the time its neighbour asks.
+        /// spent that budget by the time its neighbour asks. The picture itself is recorded in the same pass, so the
+        /// next call of the same round is told not to attach it again.
         /// </para>
         /// </remarks>
         public void Add(ToolResult result)
@@ -460,6 +465,7 @@ public sealed class CodingAgent
             foreach (var image in result.Images)
             {
                 _imageBytes += image.ByteCount;
+                shown.Add(image);
             }
 
             if (VerifyGate.Verifies(result))
@@ -524,6 +530,32 @@ public sealed class CodingAgent
             : session.Messages;
 
     /// <summary>
+    /// Collects the pictures the conversation already carries, so no tool attaches a second copy of one.
+    /// </summary>
+    /// <param name="session">The conversation, as it stands when the turn begins.</param>
+    /// <returns>The pictures in the transcript, which the turn adds to as its tools attach more.</returns>
+    /// <remarks>
+    /// Derived from the transcript rather than remembered in a side table, which is what makes the three awkward cases
+    /// right without a special case for any of them: a compacted conversation has dropped its older messages and may show
+    /// those pictures again, a resumed one carries none at all because a session file holds no images, and a turn that
+    /// attaches a picture adds it here as it goes. Identity is the <see cref="ImageContent"/> itself — type and bytes —
+    /// because that is what a provider is charged for and what the model would otherwise see twice.
+    /// </remarks>
+    private static HashSet<ImageContent> AlreadyShown(AgentSession session)
+    {
+        var shown = new HashSet<ImageContent>();
+        foreach (var message in session.Messages)
+        {
+            foreach (var image in message.Images)
+            {
+                shown.Add(image);
+            }
+        }
+
+        return shown;
+    }
+
+    /// <summary>
     /// Builds the tool list one request advertises.
     /// </summary>
     /// <param name="session">The conversation.</param>
@@ -573,6 +605,7 @@ public sealed class CodingAgent
                     session,
                     sink,
                     state.ImageBytesRemaining(_options.MaxTurnImageBytes),
+                    state.ImagesAlreadyShown,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -657,6 +690,7 @@ public sealed class CodingAgent
     /// <param name="session">The session, for the workspace.</param>
     /// <param name="sink">Receives the tool's live output while it runs.</param>
     /// <param name="imageBytesRemaining">What the turn may still attach, or null when its ceiling is off.</param>
+    /// <param name="imagesAlreadyShown">The pictures the conversation already carries.</param>
     /// <param name="cancellationToken">Cancels the invocation.</param>
     /// <returns>The result, with a readable failure instead of an exception where the tool allows one.</returns>
     private static async Task<ToolResult> ExecuteAsync(
@@ -665,6 +699,7 @@ public sealed class CodingAgent
         AgentSession session,
         IAgentObserver sink,
         long? imageBytesRemaining,
+        IReadOnlySet<ImageContent> imagesAlreadyShown,
         CancellationToken cancellationToken)
     {
         // Live output is a courtesy, never a precondition: the tool runs identically whether or not the
@@ -672,13 +707,16 @@ public sealed class CodingAgent
         // and the approval mode travel with the context because a tool that delegates work needs the
         // conversation's answers, not the host's startup settings. The picture budget travels the same way and for
         // the same reason: only the turn knows how much of it is spent, and a tool that attaches a picture must say
-        // so in its own result rather than in a message the loop writes afterwards.
+        // so in its own result rather than in a message the loop writes afterwards. The pictures already in the
+        // transcript travel with it so no door attaches the same bytes a second time, which is a fact the door has to
+        // state in its own words — a success for a picture that is already there, a note for one that is not sent.
         var context = new ToolInvocationContext(session.Workspace)
         {
             Output = new ObserverOutput(sink, call),
             Model = session.ActiveModel,
             Approval = session.Approval,
             ImageBytesRemaining = imageBytesRemaining,
+            ImagesAlreadyShown = imagesAlreadyShown,
         };
         try
         {

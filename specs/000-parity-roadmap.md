@@ -56,14 +56,16 @@ The four gaps a newcomer hits, in the order they hit them.
 | 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (landed 2026-10-31 as `e69cbdc`: `ImageContent`, `ChatMessage.Images`, `ToolResult.Images`, the eighteenth default tool, prompt rule 9, 1256 passing; closes `010` T035) | 0, and `010` (landed) |
 | 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (landed 2026-10-31 as `83c28ea`; closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
 | 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31 as `051089d`; narrows `017` T031) | 0, `017` and `019` (landed) |
+| 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
 the compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider
 nor a key, `013` is the evidence server, `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
-server, `016` is model roles, `017` is the image view, and `019` is image ingress — round 10 — because `018`
-is still held for `web_search` and `014` was never assigned.)
+server, `016` is model roles, `017` is the image view, `019` is image ingress — round 10 — `020` is the turn's image
+budget — round 11 — and `021` is image deduplication — round 12 — because `018` is still held for `web_search` and
+`014` was never assigned.)
 
 ## Decision record
 
@@ -492,6 +494,38 @@ settings key for the ceiling, a ceiling that varies by model, and anything serve
 `CodingAgentTests` (two calls in one round see ten then seven; a second turn sees ten again). Build 0 warnings; suite
 1,302 passed, 0 failed, which is the figure `README.md` carries.
 
+## Round 12 — `021-image-dedup` (landed 2026-10-31)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–11 took. Round 11 bounded
+what a turn may add and wrote down what it did not do, and the first item on that list was deduplication. So was the
+first item on round 10's. `017` T031 has carried the clause since round 9: *two `view_image` calls on one file cost two
+pictures*. A ceiling bounds that spend without reducing it, and round 11's own advice — ask again in a new turn — is
+exactly what makes a repeated picture worse. The argument is [`021-image-dedup/spec.md`](021-image-dedup/spec.md) and the
+decisions are in its `plan.md`.
+
+**Ships**: `ToolInvocationContext.ImagesAlreadyShown` (`IReadOnlySet<ImageContent>?`) — the pictures the conversation
+already carries, null meaning nobody said, which is the safe default that keeps every earlier expectation
+byte-identical. `ImageShown` (`Infrastructure/Images`) is the one predicate and the one clause, beside the `ImageBudget`
+that owns the turn's sentence. `CodingAgent.AlreadyShown` derives the set from `session.Messages` when a turn starts, and
+`TurnState` adds each picture it records, so the second call of a round is told about the first — before any request has
+carried it. The three doors answer a duplicate in the shapes they already had: `view_image` succeeds with a sentence and
+no image, an MCP result keeps its success and appends one line per skipped picture (and per part the result itself
+repeats), and `fetch_url` succeeds with the header block intact on the URL that answered.
+
+**Does not ship**: transcript trimming and automatic compaction (the transcript still grows and stays grown; `/compact`
+is the manual answer, and `003` T034 is the policy for when), a path-keyed or digest-keyed memory (identity is the
+picture's type and bytes, because that is what a provider is charged by and what a model sees), deduplication across a
+`/compact` that dropped the earlier message (the honest reading of "the conversation carries it"), an image token
+estimate, and anything served over `mcp serve`.
+
+**Evidence**: seven cases in four classes — `ViewImageToolTests` (the duplicate sentence with its `Read` effect kept,
+different bytes still travelling, a duplicate beating a spent budget), `McpToolTests` (the conversation's picture named
+rather than sent; an answer that repeats a picture attaching it once), `FetchUrlToolTests` (the same body twice, still a
+success, still one effect) and `CodingAgentTests` (two calls in one round and then a second turn: nothing, then the
+picture, then the picture). Build 0 warnings; suite 1,309 passed, 0 failed, which is the figure `README.md` carries. The
+one ordering that changed is inside `view_image` — the file is read before the duplicate and the budget are checked,
+because a duplicate cannot be recognised without its bytes — and no existing case observes it.
+
 ## Open work, and what is still undecided
 
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
@@ -508,15 +542,15 @@ empty checkbox.
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
 | 4 | `010` T031–T034 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured — T035 (*showing the screenshot to the model as an image*) is closed by `017` |
 | 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
-| 9 | `017` T024–T033 | OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, transcript trimming or deduplication, an image token estimate, and serving `view_image` over `mcp serve` — T024 (*images inside MCP results*) and T025 (*`fetch_url` returning images*) are closed by `019`, and T031's per-turn budget clause is closed by `020`, which is why the row no longer claims it |
+| 9 | `017` T024–T033 | OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, transcript trimming, an image token estimate, and serving `view_image` over `mcp serve` — T024 (*images inside MCP results*) and T025 (*`fetch_url` returning images*) are closed by `019`, T031's per-turn budget clause by `020`, and T031's deduplication clause by `021`, which is why the row no longer claims any of them |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T017–T018 | `config edit` and per-provider sections. T016 — a first-run key prompt with restricted permissions — is closed by `016`, which ships the paste, the no-echo read, the owner-only file beside the settings document and the settings entry that makes the next run find it; rotation stays out of scope there and is named in `016`'s spec |
 
 The one capability this program has not decided to build is `web_search`: it needs a provider and a key,
 and a key is a decision with an owner. It stays unnumbered; if it is decided, it becomes `018` and it
 changes no round above it. `012` is the compiler oracle, which needs neither a provider nor a key, `015` is
-F# code intelligence, `016` is model roles, `017` is the image view, `019` is image ingress and `020` is the
-picture budget of one turn.
+F# code intelligence, `016` is model roles, `017` is the image view, `019` is image ingress, `020` is the
+picture budget of one turn and `021` is the picture the conversation already carries.
 
 ## What stays out of this program
 

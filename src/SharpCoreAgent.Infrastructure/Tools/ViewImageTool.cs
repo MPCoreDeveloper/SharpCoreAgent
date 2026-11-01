@@ -26,6 +26,13 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// <see cref="ToolInvocationContext.ImageBytesRemaining"/>; a picture that does not fit is refused with both numbers
 /// instead of being sent and failing somewhere further away.
 /// </para>
+/// <para>
+/// A fourth belongs to the conversation: a picture it already carries is not attached a second time. The same
+/// screenshot asked for on ten rounds would otherwise be paid for on every request after the tenth and tell the model
+/// nothing new, so the loop says which pictures are already in the transcript and this tool answers with a sentence
+/// instead of a second copy. That answer is a success, not a refusal — the picture is exactly where the model asked for
+/// it to be.
+/// </para>
 /// </remarks>
 public sealed class ViewImageTool : ITool
 {
@@ -36,7 +43,7 @@ public sealed class ViewImageTool : ITool
         """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}""";
 
     private const string Description =
-        "Show an image file to the model: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment, up to 4 MiB. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn.";
+        "Show an image file to the model: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment, up to 4 MiB. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(Name, Description, Schema);
@@ -114,18 +121,6 @@ public sealed class ViewImageTool : ITool
                 $"'{relative}' was not opened: {name} is declared text-only in this build and cannot read images. Do not describe what the image contains — say that you cannot see it, and let the developer switch to a model that reads images.");
         }
 
-        if (context.ImageBytesRemaining is { } left && !ImageBudget.Fits(length, left))
-        {
-            // Also before a byte is read: a picture the turn has no room for is not worth encoding, and the refusal
-            // names the size and what was left, so a model reads it as a budget rather than as a broken file.
-            return ToolResult.Failure(
-                toolCall.Id,
-                Name,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"'{relative}' ({mediaType} · {length} bytes) was not attached: {ImageBudget.Spent(length, left)}."));
-        }
-
         byte[] bytes;
         try
         {
@@ -141,6 +136,36 @@ public sealed class ViewImageTool : ITool
             MediaType = mediaType,
             Base64 = Convert.ToBase64String(bytes),
         };
+
+        // Before the budget, and after the read, and both are deliberate: a duplicate can only be recognised by its
+        // bytes, and once it is recognised there is nothing left to spend — the picture the turn would have paid for is
+        // already in the transcript, so a budget refusal here would name a ceiling that stopped nothing. The answer is a
+        // success because the request is met: the model can see the picture, one message earlier.
+        if (ImageShown.Already(context.ImagesAlreadyShown, image))
+        {
+            return ToolResult.Success(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{relative}' ({mediaType} · {bytes.Length} bytes) is not attached again: {ImageShown.Clause}. That earlier message is the copy to read — asking for the same file twice shows nothing new."))
+                with
+            {
+                Effects = [new ToolEffect(ToolEffectKind.Read, relative)],
+            };
+        }
+
+        if (context.ImageBytesRemaining is { } left && !ImageBudget.Fits(bytes.Length, left))
+        {
+            // Before the picture is put on the wire: the refusal names the size and what was left, so a model reads it
+            // as a budget rather than as a broken file, and learns that a new turn is the way out.
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{relative}' ({mediaType} · {bytes.Length} bytes) was not attached: {ImageBudget.Spent(bytes.Length, left)}."));
+        }
 
         var note = string.Create(
             CultureInfo.InvariantCulture,

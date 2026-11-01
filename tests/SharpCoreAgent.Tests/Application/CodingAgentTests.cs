@@ -876,6 +876,67 @@ public sealed class CodingAgentTests
         Assert.Equal(new long?[] { 10, 10 }, seen);
     }
 
+    [Fact]
+    public async Task EachToolIsToldWhichPicturesTheConversationAlreadyCarries()
+    {
+        using var directory = TempDirectory.Create();
+        var image = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+        var seen = new List<string>();
+
+        // Two calls in one round and then a second turn, which is the only shape that proves the answer is the
+        // conversation's rather than the request's: the second call is told about the first call's picture before any
+        // request has carried it, and the next turn still knows about it.
+        var model = new ScriptedModel(
+            Descriptor,
+            [
+                new StreamCompleted(new ChatResponse(
+                    ChatMessage.Assistant(
+                        string.Empty,
+                        [
+                            new ToolCall("call-1", "shot", "{}"),
+                            new ToolCall("call-2", "report", "{}"),
+                        ]),
+                    FinishReason.ToolCalls,
+                    new TokenUsage(10, 5))),
+            ],
+            [Completed("shown")],
+            [ToolCallTurn("report")],
+            [Completed("reported")]);
+        var shot = new ContextTool("shot", (call, context) =>
+        {
+            seen.Add(Describe(context.ImagesAlreadyShown));
+            return ToolResult.Success(call.Id, call.Name, "a picture is attached to the next message.") with
+            {
+                Images = [image],
+            };
+        });
+        var report = new ContextTool("report", (call, context) =>
+        {
+            seen.Add(Describe(context.ImagesAlreadyShown));
+            return ToolResult.Success(call.Id, call.Name, "nothing new");
+        });
+        var agent = Agent(model, [shot, report]);
+        var session = Session(directory.Path);
+
+        await agent.RunTurnAsync(session, "show me, then report", null, TestContext.Current.CancellationToken);
+        await agent.RunTurnAsync(session, "report again", null, TestContext.Current.CancellationToken);
+
+        // Nothing yet; then the picture the same round attached; then the picture an earlier turn attached. A tool that
+        // was told nothing attaches — the empty set is the loop saying it looked.
+        Assert.Equal(new[] { "nothing", "the picture", "the picture" }, seen);
+        Assert.Single(session.Messages, message => message.HasImages);
+    }
+
+    private static string Describe(IReadOnlySet<ImageContent>? shown)
+    {
+        if (shown is null)
+        {
+            return "unstated";
+        }
+
+        return shown.Count == 0 ? "nothing" : "the picture";
+    }
+
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
         AgentWithOptions(new AgentOptions(), model, tools);
 

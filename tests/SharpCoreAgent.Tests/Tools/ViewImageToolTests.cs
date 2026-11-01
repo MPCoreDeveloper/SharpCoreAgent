@@ -1,3 +1,4 @@
+using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Tools;
@@ -259,6 +260,82 @@ public sealed class ViewImageToolTests
             ReadingImages(sandbox),
             CancellationToken.None);
         Assert.Single(unstated.Images);
+    }
+
+    [Fact]
+    public async Task APictureTheConversationAlreadyCarriesIsNotAttachedAgain()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/shot.png", PngBytes);
+
+        var first = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+        var shown = Assert.Single(first.Images);
+
+        var second = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox) with { ImagesAlreadyShown = new HashSet<ImageContent> { shown } },
+            CancellationToken.None);
+
+        // A success, not a refusal: the picture is exactly where the model asked for it to be — one message earlier,
+        // and attached there once. A refusal would read as "you cannot see it", which is the opposite of the truth.
+        Assert.False(second.IsError);
+        Assert.Empty(second.Images);
+        Assert.Contains("is not attached again", second.Content, StringComparison.Ordinal);
+        Assert.Contains("the same picture is already in this conversation", second.Content, StringComparison.Ordinal);
+
+        // The file was opened to recognise it, so the effect still says so, even though nothing travelled.
+        Assert.Equal(new ToolEffect(ToolEffectKind.Read, "shots/shot.png"), Assert.Single(second.Effects));
+    }
+
+    [Fact]
+    public async Task APictureTheConversationDoesNotCarryStillTravels()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        byte[] edited = [.. PngBytes, 0x04];
+        sandbox.WriteBytes("shots/shot.png", edited);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox) with
+            {
+                // The same path, and different bytes: a file rewritten between two calls is a new picture, and identity
+                // is what the provider would be charged for rather than the name it arrived under.
+                ImagesAlreadyShown = new HashSet<ImageContent>
+                {
+                    new ImageContent { MediaType = "image/png", Base64 = Convert.ToBase64String(PngBytes) },
+                },
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Equal(Convert.ToBase64String(edited), Assert.Single(result.Images).Base64);
+    }
+
+    [Fact]
+    public async Task ADuplicateIsAnsweredAsShownEvenWhenTheTurnHasNoBudgetLeft()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/shot.png", PngBytes);
+        var picture = new ImageContent { MediaType = "image/png", Base64 = Convert.ToBase64String(PngBytes) };
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/shot.png"}"""),
+            ReadingImages(sandbox) with
+            {
+                ImagesAlreadyShown = new HashSet<ImageContent> { picture },
+                ImageBytesRemaining = 0,
+            },
+            CancellationToken.None);
+
+        // A duplicate spends nothing, so the budget is not what stopped anything and is not named: the reason a model
+        // reads has to be the reason that applies.
+        Assert.False(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("is not attached again", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("budget", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]

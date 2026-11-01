@@ -416,6 +416,20 @@ later. A new turn starts with all of it, which is what makes that advice actiona
 picture that *does* fit changes: the file is still written, the path is still named, and the bytes
 travel on the next user message.
 
+A picture the conversation already carries is not attached a second time. Asking for the same
+screenshot on ten rounds — or a page that answers with the same image on every fetch — used to add ten
+copies of the same bytes, and every request after the tenth paid for all of them; round 11's ceiling
+bounded that spend without reducing it, and asking again in a new turn is precisely what made it worse.
+The loop collects what the transcript holds when a turn starts and tells every tool, so `view_image`, an
+MCP `image` part and a `fetch_url` picture all answer a duplicate with a sentence and no second copy
+(`'shots/shot.png' (image/png · 400,000 bytes) is not attached again: the same picture is already in this
+conversation, attached to an earlier message`). That answer is a *success*, because the picture is exactly
+where the model asked for it to be, one message earlier: a refusal would read as "you cannot see it", and
+a model told that describes what it imagines. Identity is the picture — its type and its bytes — and never
+the name it arrived under, so a file rewritten in place or a page that changed is a new picture and
+travels. The set is derived from the transcript rather than remembered, which is what makes `/compact`,
+`--resume` and the boundary between two turns right without a special case for any of them.
+
 `task` delegates one self-contained investigation to a sub-agent. The child starts with an empty transcript and
 sees only the prompt it was given, works with the session's tools minus `task` so it cannot delegate again, and
 answers with one message that comes back as the tool result — with its created, modified, deleted and command
@@ -711,7 +725,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 1,302 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 1,309 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
@@ -873,6 +887,18 @@ the second duplicates settings that would drift.
   one predicate and the one sentence the three doors share, so `view_image`, an MCP `image` part and a `fetch_url`
   picture all refuse with both numbers and the same advice: a new turn starts with a fresh budget. Nine new cases and
   no behaviour change for a picture that fits; the whole suite is 1,302 green in `Release` at 0 warnings.
+
+- `specs/021-image-dedup` — a picture the conversation already carries is not attached again. Round 11 bounded what a
+  turn may add; it did not reduce it, and a model that asks for the same screenshot on three rounds still pays for three
+  copies of it in every request after the third. `ToolInvocationContext.ImagesAlreadyShown` is the set of pictures the
+  transcript holds, derived by the loop from `session.Messages` when a turn starts — which is what makes `/compact`
+  (messages dropped, pictures gone, shown again), `--resume` (no pictures at all) and the next turn (everything still
+  there) right without a side table. `ImageShown` is the one predicate and the one clause the three doors share, and each
+  answers a duplicate in the shape it already had: a success line from `view_image`, a bracketed note from an MCP result,
+  a header block from `fetch_url`. A duplicate is a success rather than a refusal, because the picture is exactly where
+  the model asked for it to be, and it is checked before the turn's budget because it spends nothing. Identity is the
+  picture's type and bytes, never the path or the URL. Seven new cases; the whole suite is 1,309 green in `Release` at 0
+  warnings.
 
 ## Spec-driven development
 

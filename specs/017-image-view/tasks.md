@@ -85,11 +85,12 @@ has a real list rather than a memory.
 - [ ] T030 **Pasted, dragged or piped images, and an `--image` flag on `run`.** Attachment input is a different
       program (`007` T030–T032 says the same thing about roots), and a flag would be a second way for a picture to
       enter a conversation with no path in the transcript.
-- [ ] T031 **Deduplication, and transcript trimming.** The per-turn budget half of this row left it in `020` (round 11):
-      16 MiB of picture per turn, counted by the loop and refused by the three doors with both numbers. What is still
-      open is the other half of the sentence — the transcript grows and stays grown, a repeated screenshot spends that
-      budget twice, and what would bound either is a compaction feature this product has not decided on, which
-      `003` T034 is the same gap seen from the other side.
+- [ ] T031 **Transcript trimming.** Two clauses of this row were closed around it: `020` (round 11) put a per-turn ceiling
+      of 16 MiB on what a turn may add, and `021` (round 12) stopped a picture the conversation already carries from being
+      attached a second time — the row's *deduplication* half, by all three doors, as a success rather than a refusal.
+      What is still open is the transcript itself: it grows and stays grown. Manual compaction exists —
+      `AgentSession.Compact(int keepRecent)` behind `/compact [n]`, shipped in `003` T029–T031 — so the gap is a policy
+      for *when* to trim rather than a missing feature, which is what `003` T034 names from the other side.
 - [ ] T032 **An image token estimate before the request.** A provider bills the pixels it decodes; the number
       arrives in `Usage` after the call or not at all, and inventing one would make `/cost` a guess.
 - [ ] T033 **Serving `view_image` over `mcp serve`.** The published set is a compile-time allow-list of the five
