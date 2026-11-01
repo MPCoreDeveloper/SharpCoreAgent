@@ -84,15 +84,34 @@ indexing d:/repos/SharpCoreAgent (lean, hashed-local/512)
   scanned 1 240 files · 412 changed · 828 unchanged · 3 skipped
   passages 1 908 · symbols 1 122 · edges 2 640 · 7 documents
   communities 38 · centers 38
-  wrote .sharpcoreagent/index/sharpcoreagent.scdb in 6.4 s (14.2 MiB)
+  wrote .sharpcoreagent/index/sharpcoreagent.scdb in 6.4 s wall · 6.1 s cpu (14.2 MiB)
   state fresh
 ```
+
+The `wrote` line carries two clocks over one window: the wall clock the run took, and the processor time that same
+window cost, process-wide. On an ordinary build they agree. When the wall clock is more than twice the processor
+time and the difference is at least a minute, one extra line appears between `wrote` and `state`:
+
+```
+  clock the wall clock is 35× the processor time — the machine was asleep or the process was never scheduled, not
+        the index being slow; check the power events (Kernel-Power 506/507 under Modern Standby) before believing
+        the duration
+```
+
+That line is the report of a real run: `research.md` D19's eight hours were Modern Standby, and the number that
+blamed the indexer was a laptop that had been asleep since eleven minutes into the build. The `clock` line only
+fires on that shape, so its presence is a diagnosis and its absence is not a claim.
 
 With `--prune` the first line says `pruning` and the counters report `N removed`, `0 changed`.
 
 When the budget stops a turn-start refresh instead of a command, the closing line is
 ``state partial · 214 files not yet indexed; run `sharpcoreagent index` to finish`` and `--json` carries
 `"incomplete": true`.
+
+The command's own horizon is one hour of **processor time**, not of wall clock, for the reason the `clock` line
+exists: a process that was suspended has not spent the work it was given, so a build that naps is resumed rather
+than reported `partial` (`research.md`, D20). The turn-start refresh keeps a wall-clock budget — `--index-budget`
+— because what waits for that one is a model.
 
 ## Output — `--verify`
 
@@ -116,7 +135,9 @@ One object, stable key order, no trailing prose:
 ```
 
 For a build, `action` is `build`/`rebuild`/`prune` and the object adds `added`, `changed`, `removed`,
-`unchanged`, `elapsedMs`, `incomplete` and `notes`. For `--verify`, `action` is `verify` and the object
+`unchanged`, `elapsedMs`, `cpuMs`, `incomplete` and `notes`. `elapsedMs` is the wall clock and `cpuMs` the
+processor time over the same window; a script that compares the two can tell a slow build from a suspended
+machine without reading prose. For `--verify`, `action` is `verify` and the object
 adds `healthy`, `filesMissingFromIndex`, `filesMissingOnDisk`, `hashMismatches`, `orphans` and
 `details`.
 

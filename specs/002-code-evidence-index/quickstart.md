@@ -49,6 +49,11 @@ more than the digits. Two things in it are easy to misread:
   `skipped 0`. A file is skipped for being binary, larger than 1 MiB, or unreadable, and the notes
   under the block name it as `path: reason` (20 recorded, 10 printed).
 - `wrote` names the **directory**, `.sharpcoreagent/index`, not the database file inside it.
+- The block above predates the second clock on that line. It now prints both — `in 10 m 32 s wall · 9 m 41 s cpu` —
+  and the pair is the point: the eight-hour run of `research.md` D19 renders as `in 8 h 25 m wall · 14 m 25 s cpu`,
+  and a wall clock that dwarfs the processor time means the machine was suspended, not the index slow. When the gap
+  is that large the report adds a `clock` line naming the cause, and `--json` carries both as `elapsedMs` and
+  `cpuMs`.
 
 **This is not a two-second command.** A first build hashes and chunks every file, extracts every
 symbol, writes roughly 31 000 rows (files, passages, symbols, edges and their vectors) into one

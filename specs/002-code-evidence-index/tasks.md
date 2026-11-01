@@ -379,6 +379,16 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     chosen. `partial` on that run was correct — the wall-clock budget was spent by the suspension and the walk
     stopped at 666 of 704 files — so the follow-up is reporting, and a budget that counts work rather than
     suspended time.
+  - Note (2026-11-01, `research.md` D20): the reporting half of that follow-up landed. `IndexBudgetClock` names the
+    clock a budget is measured on; `index` and `--rebuild` pass `ProcessorTime` and the turn-start refresh keeps
+    `WallClock`, because what waits for a refresh is a model. `IndexWriter` compares against
+    `Environment.CpuUsage.TotalTime` when asked, so a suspended process no longer spends its allowance on a nap, and
+    the wait for the writer lock stays wall clock either way (`LockWaitBudget`, 30 s) because queueing behind another
+    writer is not work done. The build report prints both clocks — `… in 120.5 s wall · 118.2 s cpu` — and adds one
+    `clock` line when the wall clock is more than twice the processor time by at least a minute; `--json` gains
+    `cpuMs` beside `elapsedMs`. Ten new tests (six in `BuildTimingTests`, two in `IndexCommandTests`, two in
+    `RefreshBudgetTests`); suite 1 309 → 1 319, build clean. This changes no measurement: the 120 s fixed cost and
+    SC-006's 61× are untouched, and the phase instrumentation T034 opens with is still the next step.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

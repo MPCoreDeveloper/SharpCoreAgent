@@ -415,11 +415,16 @@ SharpCoreAgent.Domain.Index.ICodeIndex.GetContextAsync(string! target, int hops,
 SharpCoreAgent.Domain.Index.ICodeIndex.GetStatusAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexStatus!>
 SharpCoreAgent.Domain.Index.ICodeIndex.SearchAsync(SharpCoreAgent.Domain.Index.CodeQuery! query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
 SharpCoreAgent.Domain.Index.ICodeIndexMaintainer
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.EnsureFreshAsync(System.TimeSpan budget, SharpCoreAgent.Domain.Index.IndexBudgetClock clock, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
 SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.EnsureFreshAsync(System.TimeSpan budget, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
 SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.PruneAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.RebuildAsync(SharpCoreAgent.Domain.Index.IndexBudgetClock clock, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
 SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.RebuildAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexBuildReport!>
 SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.VerifyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexVerification!>
 SharpCoreAgent.Domain.Index.IndexBuildReport
+SharpCoreAgent.Domain.Index.IndexBudgetClock
+SharpCoreAgent.Domain.Index.IndexBudgetClock.ProcessorTime = 1 -> SharpCoreAgent.Domain.Index.IndexBudgetClock
+SharpCoreAgent.Domain.Index.IndexBudgetClock.WallClock = 0 -> SharpCoreAgent.Domain.Index.IndexBudgetClock
 SharpCoreAgent.Domain.Index.IndexBuildReport.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexBuildReport!
 SharpCoreAgent.Domain.Index.IndexBuildReport.Added.get -> int
 SharpCoreAgent.Domain.Index.IndexBuildReport.Added.init -> void

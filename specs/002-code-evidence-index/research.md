@@ -560,5 +560,52 @@ is set for AC only. None of this is a fix: it is one laptop's state, it does not
 is why the reporting change in the decision above matters more than the setting — a build that prints how much of
 its wall clock was spent on the CPU diagnoses the next machine's surprise instead of inheriting it.
 
+## D20 — The budget counts work, and the build report prints both clocks
+
+**Decision**: a budget now names the clock it is measured on. `IndexBudgetClock.WallClock` is the default and what
+the turn-start refresh passes — the thing waiting for it is a model, so its three seconds are the request's, not the
+processor's. `ProcessorTime` is what `sharpcoreagent index` and `--rebuild` pass: an hour of processor time cannot be
+spent by a machine that is not running the process. The report prints both numbers for the same window
+(`wrote .sharpcoreagent/index in 120.5 s wall · 118.2 s cpu`), `--json` carries `cpuMs` beside `elapsedMs`, and a
+`clock` line appears when the wall clock is more than twice the processor time by at least a minute.
+
+**Why the clock is the caller's choice rather than a property of the indexer.** Both callers exist and want opposite
+things. `--index-budget` bounds how long a model waits; measuring that in processor time would let a loaded machine
+hold a turn for longer than the developer allowed. A command bounds how much work may happen; measuring that in wall
+clock is what D19 destroyed, because the allowance was spent while the process was not running at all. So
+`EnsureFreshAsync` and `RebuildAsync` grew an overload that takes the clock, and the two-argument forms remain the
+wall-clock shorthand they always were. The wait for the writer lock is the one place the two disagree *inside* a
+build, and it is settled by charging neither: a wall-clock caller spends the wait from its budget because it is
+waiting, and a processor-time caller gets `LockWaitBudget` (30 s, the number a rebuild already used) and then its
+whole allowance, because queueing behind another process is not work done.
+
+**Why `Environment.CpuUsage`.** It is BCL, it needs no process handle, and in `net11.0` it returns an
+`Environment.ProcessCpuUsage` whose `TotalTime` is what a budget wants — the first draft subtracted the values
+themselves and the compiler refused, which is the one thing that API is not. The process-wide figure is the honest
+one for a command, which is one process doing one thing, and it includes the engine's threads and the GC: exactly
+the "what did this cost" question a report asks. Reading it once per scanned file is one call more per file at 704
+files, invisible next to the per-file work it guards.
+
+**Why the report has a floor and a factor.** A line that fired on every build would be a line nobody reads, and a
+build that waits on storage is ordinary here — the per-file commit looks cheap and is the expensive part. Below a
+minute of difference, the thread pool and one blocking read explain everything, so the `clock` line needs both a
+minute and a factor of two. Above that the shape is unambiguous: `8 h 25 m` of wall clock against `14 m 25 s` of
+processor time is 35×, and the sentence names the power events to check instead of asking the reader to remember
+D19. The refresh line still prints only the wall clock, because a three-second wait for a model is a wall-clock
+quantity by definition and the extra token buys nothing there.
+
+**What it does not do.** It changes no measurement and fixes no cost. The 120 s fixed charge per writing run and
+SC-006's 61× are untouched; the walk still stops when the allowance runs out, it just cannot be spent by a nap any
+more; and the phase instrumentation T034 opens with is still the next thing to write. What this buys is that the
+next surprise is printed rather than inherited: the eight hours cost half a day because the only number on screen
+was the one that lied.
+
+**What proves it.** `BuildTimingTests` pins the arithmetic and the renditions — `2 m 2 s wall · 1 m 58 s cpu` for an
+ordinary run, 35× for D19's, nothing under the floor, nothing when several cores make processor time exceed the wall
+clock. `IndexCommandTests` asserts the line and the JSON key from a real build. `RefreshBudgetTests` proves the
+processor clock stops the walk at a zero allowance, and that a generous one still finishes the workspace. Suite
+1 309 → 1 319, build clean at zero warnings.
+
+
 
 

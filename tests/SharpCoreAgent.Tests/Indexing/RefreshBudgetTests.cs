@@ -58,6 +58,47 @@ public sealed class RefreshBudgetTests
     }
 
     [Fact]
+    public async Task AProcessorTimeBudgetStopsEarlyAndLeavesAUsableIndex()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        await using var maintainer = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
+
+        // Zero of a clock that has not moved yet: deterministic, unlike a millisecond, which the scan may or may
+        // not have spent by the time the first file is reached.
+        var report = await maintainer.EnsureFreshAsync(
+            TimeSpan.Zero,
+            IndexBudgetClock.ProcessorTime,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(report.Incomplete);
+        Assert.Equal(IndexFreshness.Partial, report.Status.Freshness);
+        Assert.Contains(
+            report.Notes,
+            note => note.Contains("budget reached after 0 of 50 files", StringComparison.Ordinal));
+        Assert.Equal(IndexSchema.PartialState, ReadMeta(sandbox.Workspace)["build_state"]);
+    }
+
+    [Fact]
+    public async Task AProcessorTimeBudgetStillFinishesTheWorkspace()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        await using var maintainer = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
+        var report = await maintainer.EnsureFreshAsync(
+            TimeSpan.FromMinutes(10),
+            IndexBudgetClock.ProcessorTime,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(report.Incomplete);
+        Assert.Equal(FileCount, report.Status.Files);
+        Assert.Equal(IndexFreshness.Fresh, report.Status.Freshness);
+    }
+
+
+    [Fact]
     public async Task NoOpRefreshWritesNothing()
     {
         using var sandbox = ToolTestWorkspace.Create();

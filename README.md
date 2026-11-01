@@ -684,6 +684,13 @@ and the seven workspace tools still answer.
 fail: exit code `6` means it could not be created, written or read, and `state corrupt` means
 `--rebuild` is the repair.
 
+A build report carries two clocks, the wall clock and the processor time over the same window, because
+one number cannot tell a slow index from a laptop that went to sleep in the middle of one. A wall clock
+an order of magnitude larger than the processor time is a machine that was suspended, and the report
+says so on the line below and names the power events to check. For the same reason the command's horizon
+is an hour of *processor* time — a suspended process has not spent the work it was given — while
+`run` and `chat` keep `--index-budget` in wall clock, because what waits for that refresh is a model.
+
 ### Serving it to another agent
 
 `sharpcoreagent mcp serve` turns the argument around: instead of this program calling another agent's MCP

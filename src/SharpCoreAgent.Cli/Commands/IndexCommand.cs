@@ -26,12 +26,18 @@ internal static class IndexCommand
     private const int LabelWidth = 12;
 
     /// <summary>
-    /// Gets the wall-clock horizon a command-line build gets.
+    /// Gets the processor time a command-line build gets.
     /// </summary>
     /// <remarks>
     /// The three-second budget belongs to a turn-start refresh, where a model is waiting. A command is a developer
     /// asking for the work, so it gets a horizon instead: long enough that nothing real hits it, short enough that a
     /// build which somehow never finishes still returns a report a script can branch on.
+    /// <para>
+    /// It is a horizon of <em>work</em>, not of clock, and that distinction was learned the hard way: the same hour
+    /// once measured wall clock, a laptop spent eight hours of one run in Modern Standby, and a ten-minute build
+    /// stopped a sixth of the way through with a report that blamed the index (spec 002, D19). Processor time
+    /// cannot be spent by a machine that is not running this process.
+    /// </para>
     /// </remarks>
     private static readonly TimeSpan CommandBudget = TimeSpan.FromHours(1);
 
@@ -88,13 +94,12 @@ internal static class IndexCommand
             {
                 // A bare `index` builds, which is what the "run `sharpcoreagent index`" hint in every other message
                 // promises. It is incremental, so running it against a fresh index costs one scan and reports zeros.
-                var built = await index
-                    .EnsureFreshAsync(CommandBudget, cancellationToken)
-                    .ConfigureAwait(false);
+                var (built, timing) = await MeasureAsync(() =>
+                    index.EnsureFreshAsync(CommandBudget, IndexBudgetClock.ProcessorTime, cancellationToken)).ConfigureAwait(false);
 
                 exitCode = Math.Max(
                     exitCode,
-                    await ReportAsync(options, output, workspace, index, "build", "indexing", built, cancellationToken).ConfigureAwait(false));
+                    await ReportAsync(options, output, workspace, index, "build", "indexing", built, timing, cancellationToken).ConfigureAwait(false));
             }
 
             if (options.IndexStatus)
@@ -113,18 +118,19 @@ internal static class IndexCommand
 
             if (options.IndexPrune)
             {
-                var report = await index.PruneAsync(cancellationToken).ConfigureAwait(false);
+                var (report, timing) = await MeasureAsync(() => index.PruneAsync(cancellationToken)).ConfigureAwait(false);
                 exitCode = Math.Max(
                     exitCode,
-                    await ReportAsync(options, output, workspace, index, "prune", "pruning", report, cancellationToken).ConfigureAwait(false));
+                    await ReportAsync(options, output, workspace, index, "prune", "pruning", report, timing, cancellationToken).ConfigureAwait(false));
             }
 
             if (options.IndexRebuild)
             {
-                var report = await index.RebuildAsync(cancellationToken).ConfigureAwait(false);
+                var (report, timing) = await MeasureAsync(() =>
+                    index.RebuildAsync(IndexBudgetClock.ProcessorTime, cancellationToken)).ConfigureAwait(false);
                 exitCode = Math.Max(
                     exitCode,
-                    await ReportAsync(options, output, workspace, index, "rebuild", "indexing", report, cancellationToken).ConfigureAwait(false));
+                    await ReportAsync(options, output, workspace, index, "rebuild", "indexing", report, timing, cancellationToken).ConfigureAwait(false));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -405,6 +411,28 @@ internal static class IndexCommand
     }
 
     /// <summary>
+    /// Runs one write action, measuring the processor time it cost beside the wall clock it reports.
+    /// </summary>
+    /// <param name="work">The action to run.</param>
+    /// <returns>The report and the two clocks over the same window.</returns>
+    /// <remarks>
+    /// The wall clock is taken from the report rather than from a second stopwatch here: the maintainer already
+    /// measures from before the wait for the writer lock, and two stopwatches would be two answers to one question.
+    /// The processor time is read around the call, which is the same window, and it is process-wide because a
+    /// command is one process doing one thing.
+    /// </remarks>
+    private static async Task<(IndexBuildReport Report, BuildTiming Timing)> MeasureAsync(
+        Func<ValueTask<IndexBuildReport>> work)
+    {
+        var processorStarted = Environment.CpuUsage;
+        var report = await work().ConfigureAwait(false);
+
+        return (report, new BuildTiming(
+            TimeSpan.FromMilliseconds(report.ElapsedMilliseconds),
+            Environment.CpuUsage.TotalTime - processorStarted.TotalTime));
+    }
+
+    /// <summary>
     /// Prints the result of a build or a prune.
     /// </summary>
     /// <param name="options">The parsed command line.</param>
@@ -414,6 +442,7 @@ internal static class IndexCommand
     /// <param name="action">The JSON action name: <c>build</c>, <c>rebuild</c> or <c>prune</c>.</param>
     /// <param name="verb">The word the prose form starts with: <c>indexing</c> or <c>pruning</c>.</param>
     /// <param name="report">What the work did.</param>
+    /// <param name="timing">The wall clock the report carries, beside the processor time the same window cost.</param>
     /// <param name="cancellationToken">Unused; kept so the signature matches the other actions.</param>
     /// <returns><see cref="ExitCodes.Success"/>, or <see cref="ExitCodes.Failed"/> when the build stopped early.</returns>
     private static async Task<int> ReportAsync(
@@ -424,6 +453,7 @@ internal static class IndexCommand
         string action,
         string verb,
         IndexBuildReport report,
+        BuildTiming timing,
         CancellationToken cancellationToken)
     {
         var exitCode = report.Incomplete ? ExitCodes.Failed : ExitCodes.Success;
@@ -452,6 +482,7 @@ internal static class IndexCommand
                 ["removed"] = report.Removed,
                 ["unchanged"] = report.Unchanged,
                 ["elapsedMs"] = report.ElapsedMilliseconds,
+                ["cpuMs"] = (long)timing.Processor.TotalMilliseconds,
                 ["incomplete"] = report.Incomplete,
                 ["notes"] = report.Notes,
             });
@@ -481,7 +512,14 @@ internal static class IndexCommand
 
         builder.Append(Line("wrote", string.Create(
             CultureInfo.InvariantCulture,
-            $"{Directory(workspace, index)} in {Seconds(report.ElapsedMilliseconds)} ({Size(report.Status.SizeBytes)})"))).Append('\n');
+            $"{Directory(workspace, index)} in {timing.Render()} ({Size(report.Status.SizeBytes)})"))).Append('\n');
+
+        // Only when the two clocks disagree enough to be the story: a line that fired on every ordinary build
+        // would be a line nobody reads.
+        if (timing.Divergence is { } divergence)
+        {
+            builder.Append(Line("clock", divergence)).Append('\n');
+        }
 
         builder.Append(Line("state", report.Incomplete
             ? "partial · run `sharpcoreagent index` to finish"
@@ -535,12 +573,16 @@ internal static class IndexCommand
     };
 
     /// <summary>
-    /// Renders a duration in seconds.
+    /// Renders a duration in milliseconds.
     /// </summary>
     /// <param name="milliseconds">The elapsed time.</param>
     /// <returns>For example <c>0.4 s</c>.</returns>
+    /// <remarks>
+    /// The rendering itself lives on <see cref="BuildTiming.Span(TimeSpan)"/> so the refresh line and the build report
+    /// print one duration one way.
+    /// </remarks>
     private static string Seconds(long milliseconds) =>
-        string.Create(CultureInfo.InvariantCulture, $"{milliseconds / 1000d:0.0} s");
+        BuildTiming.Span(TimeSpan.FromMilliseconds(milliseconds));
 
     /// <summary>
     /// Renders the freshness word the blocks use.

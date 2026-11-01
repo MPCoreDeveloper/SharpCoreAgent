@@ -185,7 +185,15 @@ public sealed class IndexRefreshGateTests
             return work();
         }
 
+        public ValueTask<IndexBuildReport> EnsureFreshAsync(
+            TimeSpan budget,
+            IndexBudgetClock clock,
+            CancellationToken cancellationToken) => EnsureFreshAsync(budget, cancellationToken);
+
         public ValueTask<IndexBuildReport> RebuildAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException("the gate never rebuilds an index");
+
+        public ValueTask<IndexBuildReport> RebuildAsync(IndexBudgetClock clock, CancellationToken cancellationToken) =>
             throw new NotSupportedException("the gate never rebuilds an index");
 
         public ValueTask<IndexVerification> VerifyAsync(CancellationToken cancellationToken) =>

@@ -13,9 +13,9 @@ namespace SharpCoreAgent.Indexing;
 /// </summary>
 /// <remarks>
 /// The maintainer owns three things a reader does not: the writer lock, the build id and the clock. Every write
-/// path in M1 enters through <see cref="EnsureFreshAsync"/>, which is what makes "a second process sees
-/// <see cref="IndexFreshness.Building"/>" a property of the design instead of a race someone has to reason
-/// about later.
+/// path in M1 enters through <see cref="EnsureFreshAsync(TimeSpan, CancellationToken)"/>, which is what makes
+/// "a second process sees <see cref="IndexFreshness.Building"/>" a property of the design instead of a race
+/// someone has to reason about later.
 /// <para>
 /// The interface it grows into is <see cref="ICodeIndexMaintainer"/>: rebuild, verify and prune land with the
 /// write path (T012, T014, T015), and shipping them as methods that quietly do nothing would be worse than not
@@ -27,8 +27,12 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     /// <summary>The line a caller prints when another process is mid-build.</summary>
     internal const string BuildingNote = "another SharpCoreAgent process is building this index; the last complete build is still readable";
 
-    /// <summary>How long <see cref="RebuildAsync"/> waits for the writer lock before giving up.</summary>
-    private static readonly TimeSpan RebuildLockBudget = TimeSpan.FromSeconds(30);
+    /// <summary>How long a caller waits for the writer lock before the wait is called a lost one.</summary>
+    /// <remarks>
+    /// A rebuild and a processor-time build share this rather than the caller's budget, because neither one is paying
+    /// for the wait: a lock held by another process says nothing about how much work this build may do.
+    /// </remarks>
+    private static readonly TimeSpan LockWaitBudget = TimeSpan.FromSeconds(30);
 
     /// <summary>The budget a rebuild runs under; a rebuild finishes the workspace or reports itself incomplete.</summary>
     private static readonly TimeSpan RebuildBudget = TimeSpan.FromHours(1);
@@ -132,29 +136,47 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     /// <summary>
     /// Brings the index up to date, waiting no longer than <paramref name="budget"/> for the writer lock.
     /// </summary>
-    /// <param name="budget">The time the caller is willing to spend; the lock wait is part of it.</param>
+    /// <param name="budget">The wall-clock time the caller is willing to spend; the lock wait is part of it.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
     /// <returns>
     /// The report of the run, or a report whose status is <see cref="IndexFreshness.Building"/> when another
     /// writer kept the lock for the whole budget.
     /// </returns>
-    public async ValueTask<IndexBuildReport> EnsureFreshAsync(TimeSpan budget, CancellationToken cancellationToken)
+    public ValueTask<IndexBuildReport> EnsureFreshAsync(TimeSpan budget, CancellationToken cancellationToken) =>
+        EnsureFreshAsync(budget, IndexBudgetClock.WallClock, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The two clocks differ in one place that matters: what the wait for the writer lock costs the caller. A
+    /// wall-clock caller is waiting, so the wait is spent from its budget. A processor-time caller asked for work,
+    /// and queueing is not work, so it waits at most <see cref="LockWaitBudget"/> and then gets its whole allowance —
+    /// which is also what stops a suspended machine from spending the allowance on a nap (spec 002, D19).
+    /// </remarks>
+    public async ValueTask<IndexBuildReport> EnsureFreshAsync(
+        TimeSpan budget,
+        IndexBudgetClock clock,
+        CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
+        var lockWait = clock == IndexBudgetClock.WallClock ? budget : LockWaitBudget;
 
-        if (!await AcquireWriterAsync(budget, cancellationToken).ConfigureAwait(false))
+        if (!await AcquireWriterAsync(lockWait, cancellationToken).ConfigureAwait(false))
         {
             return await BlockedAsync(started, cancellationToken).ConfigureAwait(false);
         }
 
         try
         {
-            // The lock wait is part of the budget the caller gave, so a build that spent it queuing gets what is
-            // left rather than a fresh allowance.
-            var remaining = budget - Stopwatch.GetElapsedTime(started);
+            // The lock wait is part of a wall-clock budget, so a build that spent it queuing gets what is left
+            // rather than a fresh allowance. Processor time is not deducted for the same reason it is not paid.
+            var remaining = clock == IndexBudgetClock.WallClock
+                ? budget - Stopwatch.GetElapsedTime(started)
+                : budget;
+
             return await BuildAsync(
                 started,
                 remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero,
+                clock,
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -173,11 +195,15 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     /// and on Windows that handle is what makes a delete-and-recreate fail while an ordinary delete of every row
     /// succeeds. Everything a rebuild needs — the schema, the seed rows and the counters — survives.
     /// </remarks>
-    public async ValueTask<IndexBuildReport> RebuildAsync(CancellationToken cancellationToken)
+    public ValueTask<IndexBuildReport> RebuildAsync(CancellationToken cancellationToken) =>
+        RebuildAsync(IndexBudgetClock.WallClock, cancellationToken);
+
+    /// <inheritdoc />
+    public async ValueTask<IndexBuildReport> RebuildAsync(IndexBudgetClock clock, CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
 
-        if (!await AcquireWriterAsync(RebuildLockBudget, cancellationToken).ConfigureAwait(false))
+        if (!await AcquireWriterAsync(LockWaitBudget, cancellationToken).ConfigureAwait(false))
         {
             return await BlockedAsync(started, cancellationToken).ConfigureAwait(false);
         }
@@ -185,7 +211,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         try
         {
             ClearRows();
-            return await BuildAsync(started, RebuildBudget, cancellationToken).ConfigureAwait(false);
+            return await BuildAsync(started, RebuildBudget, clock, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -233,6 +259,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     private async ValueTask<IndexBuildReport> BuildAsync(
         long started,
         TimeSpan budget,
+        IndexBudgetClock clock,
         CancellationToken cancellationToken)
     {
         var buildId = IndexBuildId.NewId();
@@ -252,7 +279,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
 
         var result = await IndexWriter
             .For(_workspace, database)
-            .WriteAsync(budget, buildId, cancellationToken)
+            .WriteAsync(budget, clock, buildId, cancellationToken)
             .ConfigureAwait(false);
 
         lock (_gate)
@@ -382,7 +409,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     {
         var started = Stopwatch.GetTimestamp();
 
-        if (!await AcquireWriterAsync(RebuildLockBudget, cancellationToken).ConfigureAwait(false))
+        if (!await AcquireWriterAsync(LockWaitBudget, cancellationToken).ConfigureAwait(false))
         {
             return await BlockedAsync(started, cancellationToken).ConfigureAwait(false);
         }

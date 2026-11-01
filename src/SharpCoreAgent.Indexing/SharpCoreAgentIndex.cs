@@ -98,8 +98,19 @@ public sealed class SharpCoreAgentIndex : ICodeIndex, ICodeIndexMaintainer, IDis
         _writer.EnsureFreshAsync(budget, cancellationToken);
 
     /// <inheritdoc />
+    public ValueTask<IndexBuildReport> EnsureFreshAsync(
+        TimeSpan budget,
+        IndexBudgetClock clock,
+        CancellationToken cancellationToken) =>
+        _writer.EnsureFreshAsync(budget, clock, cancellationToken);
+
+    /// <inheritdoc />
     public ValueTask<IndexBuildReport> RebuildAsync(CancellationToken cancellationToken) =>
         _writer.RebuildAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public ValueTask<IndexBuildReport> RebuildAsync(IndexBudgetClock clock, CancellationToken cancellationToken) =>
+        _writer.RebuildAsync(clock, cancellationToken);
 
     /// <inheritdoc />
     public ValueTask<IndexVerification> VerifyAsync(CancellationToken cancellationToken) =>

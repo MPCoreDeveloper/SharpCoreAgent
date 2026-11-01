@@ -47,6 +47,39 @@ public sealed class IndexCommandTests
     }
 
     [Fact]
+    public async Task TheReportPrintsTheWallClockBesideTheProcessorTime()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains(" wall · ", output, StringComparison.Ordinal);
+        Assert.Contains(" cpu (", output, StringComparison.Ordinal);
+
+        // Two files are not a nap: the diagnosis line only appears when the two clocks disagree.
+        Assert.DoesNotContain("clock ", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuildJsonCarriesTheProcessorTimeBesideTheWallClock()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (_, output, _) = await RunAsync(sandbox, "index", "--json");
+
+        using var document = JsonDocument.Parse(output);
+        var root = document.RootElement;
+
+        Assert.True(root.TryGetProperty("cpuMs", out var cpuMs), "missing key 'cpuMs'");
+        Assert.True(cpuMs.GetInt64() >= 0);
+        Assert.True(root.GetProperty("elapsedMs").GetInt64() >= 0);
+    }
+
+
+    [Fact]
     public async Task StatusJsonIsOneLineWithTheDocumentedKeys()
     {
         using var sandbox = ToolTestWorkspace.Create();

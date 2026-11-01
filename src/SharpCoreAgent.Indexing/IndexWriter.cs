@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using SharpCoreAgent.Domain;
+using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Indexing.Extraction;
 using SharpCoreAgent.Indexing.Graph;
 using SharpCoreDB.Interfaces;
@@ -46,9 +47,10 @@ internal sealed record IndexWriteResult
 /// maintainer creates a new one per call rather than resetting fields between runs, because a build that threw
 /// halfway must not leave anything behind that the next one reads.
 /// <para>
-/// Two passes, both bounded by the same budget. The first writes each changed file's rows and remembers its
-/// relations; the second resolves those relations into edges once every declaration of the build is stored.
-/// Splitting them is what makes an edge from file 1 to a symbol declared in file 5 possible at all.
+/// Two passes, both bounded by the same budget, measured on the clock the caller named. The first writes each
+/// changed file's rows and remembers its relations; the second resolves those relations into edges once every
+/// declaration of the build is stored. Splitting them is what makes an edge from file 1 to a symbol declared in
+/// file 5 possible at all.
 /// </para>
 /// </remarks>
 internal sealed class IndexWriter
@@ -95,24 +97,40 @@ internal sealed class IndexWriter
     /// <summary>
     /// Brings the index up to date, stopping when the budget expires.
     /// </summary>
-    /// <param name="budget">The wall-clock time the walk and the writes may take.</param>
+    /// <param name="budget">The time the walk and the writes may take, measured on <paramref name="clock"/>.</param>
+    /// <param name="clock">
+    /// Which clock <paramref name="budget"/> is measured on. Wall clock is what a caller who is waiting measures;
+    /// processor time is what a caller who asked for work measures, and it is the one that does not move while the
+    /// machine is suspended.
+    /// </param>
     /// <param name="buildId">The id written to <c>meta['build_id']</c> when the build finishes.</param>
     /// <param name="cancellationToken">Cancels the build.</param>
     /// <returns>The counters and notes of the run.</returns>
-    public async ValueTask<IndexWriteResult> WriteAsync(TimeSpan budget, string buildId, CancellationToken cancellationToken)
+    public async ValueTask<IndexWriteResult> WriteAsync(
+        TimeSpan budget,
+        IndexBudgetClock clock,
+        string buildId,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buildId);
 
         var started = Stopwatch.GetTimestamp();
+        var processorStarted = Environment.CpuUsage;
         var scanned = WorkspaceFileScanner.For(_workspace).Scan(cancellationToken);
         var stored = IndexStoredFile.LoadAll(_database);
         var indexedUtc = IndexTimestamps.Format(DateTimeOffset.UtcNow);
+
+        // Process-wide on purpose: a build is one process doing one thing, and the number a developer reads for
+        // "how much work did this cost" is the process's, not one thread's.
+        bool Spent() => clock == IndexBudgetClock.ProcessorTime
+            ? Environment.CpuUsage.TotalTime - processorStarted.TotalTime >= budget
+            : Stopwatch.GetElapsedTime(started) >= budget;
 
         foreach (var file in scanned)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (Stopwatch.GetElapsedTime(started) >= budget)
+            if (Spent())
             {
                 _incomplete = true;
                 _notes.Add(string.Create(
