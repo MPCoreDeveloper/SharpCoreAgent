@@ -540,5 +540,25 @@ for 0.5× — it does not shrink, and touching it with any write costs ~125 s at
 file. Those figures come from three runs at the keyboard with the machine awake, not from the eight hours, and
 they are the ones the next fix should answer.
 
+**Machine state afterwards, recorded so the next reader does not re-derive it (2026-11-01).** `powercfg /a` lists
+Modern Standby only — no S3, no hibernation — so S0 idle is the one way this machine can stop a build. The active
+scheme is *High performance*, and `powercfg /change standby-timeout-ac 0` has been applied: `Sleep after` now reads
+AC 0 (never), DC 240 s, with the laptop on AC. Two settings that can still suspend are hidden from
+`powercfg /query` and could not be read back without unhiding them first: **Lid close action** (a shut lid still
+sleeps) and **System unattended sleep timeout** (`UNATTENDSLEEP`, which fires independently of the sleep-after
+timer and is the usual reason a build sleeps on a Modern Standby machine even when sleep-after is *never*). If it
+matters again:
+
+```
+powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP UNATTENDSLEEP 0
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0   # 0 = do nothing, AC only
+powercfg /setactive SCHEME_CURRENT
+```
+
+That second line means a shut lid keeps running, which is fine on a desk and is not fine on battery in a bag, so it
+is set for AC only. None of this is a fix: it is one laptop's state, it does not travel with the repository, and it
+is why the reporting change in the decision above matters more than the setting — a build that prints how much of
+its wall clock was spent on the CPU diagnoses the next machine's surprise instead of inheriting it.
+
 
 
