@@ -372,4 +372,50 @@ capability table above). The second is moving community assignment out of the pe
 An engine-level fix is tried through D1's `SharpCoreAgentUseLocalSharpCoreDb=true` switch against a sibling
 checkout before it ships, which is what that switch exists for.
 
+## D17 — Measured again (2026-11-01): twenty-five percent more passages, fifty-nine times the clock
+
+**Measured**: `sharpcoreagent index` on this repository, .NET 11 Release, the machine D16 used. The database it
+started from was the 233.4 MiB one earlier rounds had left behind; the duration is the run's own output and the
+two timestamps on its log file, which agree; the size is the `.scdb` file afterwards.
+
+| | D16 (2026-10-27) | this run (2026-11-01) |
+|---|---|---|
+| Files | 459 | 666 indexed (652 scanned: 590 added, 62 unchanged, 14 skipped) |
+| Passages | 10 314 | 12 889 |
+| Symbols · edges · communities | 4 571 · 5 284 · 329 | 6 268 · 8 227 · 582 |
+| Wall clock | 513.5 s | **30 345 s** (8 h 20 m) |
+| CPU time | not recorded | 865 s (14 min) |
+| Database | 69.2 MiB | **350.2 MiB** (367 165 440 bytes) |
+| Source, `git ls-files` | 14.28 MiB claimed | 5.98 MB over 519 files |
+| Index ÷ source | 4.8× | **61×** |
+| Per passage | 49.8 ms | **2 354 ms** |
+
+**Four things it says, in the order they matter:**
+
+1. **Twenty-five percent more passages cost fifty-nine times the clock.** D16 fitted a power law with an
+   exponent near 1.4 and said the build was not "90 s on a laptop with a slower disk"; this is what that curve
+   looks like once the database underneath it has grown to 350 MiB. The run spent 97% of its wall clock
+   waiting and 3% on the CPU, which locates the cost in the engine's per-file transaction against a single
+   file (D12) rather than in extraction, the vector encode or the community assignment — those would burn CPU.
+2. **Nothing reclaims space, so every build is slower than the last.** `AutoVacuum` is off on the one place a
+   handle is opened, and no code path vacuums a database that is only ever appended to and deleted from, so
+   the file carries every row any build has ever written. That is how a 6 MB tree produces a 350.2 MiB index:
+   61× the source where SC-006 asks for 0.5×, against 4.8× when D16 measured it.
+3. **The command's own budget was not honoured.** `IndexCommand.CommandBudget` is one hour; this run took
+   8 h 20 m, so the budget is either not consulted on this path or consulted at a granularity coarser than one
+   file. The budget is also what sets `build_state`, and the index reports `partial` — so the command tells the
+   developer to "run `sharpcoreagent index` to finish" on an index whose walk completed (590 added plus 62
+   unchanged is the 652 it scanned, and no "budget reached" note was printed). Whether the flag is wrong or the
+   budget is wrong is unresolved; both cannot be right, and the flag is the one a developer acts on.
+4. **D16's source size does not reproduce.** `git ls-files` sums 5.98 MB for the 519 tracked files of this tree
+   today, and this tree is larger than the one D16 measured, not smaller. Either D16 summed a different set or
+   one of the two figures is wrong. Nothing SC-006 concludes depends on it: 4.8× and 61× both miss 0.5×, and
+   the fixed-floor argument D16 makes is untouched by either.
+
+**Decision: the criteria stay, and the order of the fix is now measured rather than guessed.** D16 put batching
+the row writes first (`InsertBatch` is in the engine's surface, and nothing in the index uses it yet); this run
+adds the second step and the reason for its position — a build that batches its inserts into a 350 MiB file
+still pays for 350 MiB of the file on every transaction, so reclaiming space is not cosmetic work that can wait
+behind the batching. Then the same three numbers are measured again: passages, wall clock, bytes.
+
 

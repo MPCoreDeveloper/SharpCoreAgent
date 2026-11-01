@@ -369,6 +369,12 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Note: this is the only unchecked task in the feature. Everything behavioural — build, five tools,
     refresh, verify, prune, rebuild, exit codes — is covered and green (T033, 460 tests); what is missing here is
     the throughput and size the criteria promise.
+  - Note (2026-11-01, `research.md` D17): both criteria were measured again and are further away, not closer.
+    12 889 passages took 30 345 s and 350.2 MiB — 59× the clock for 25% more passages than D16's run — because
+    the single-file database is never reclaimed and every per-file transaction pays for the file it is writing
+    into. Two levers, in this order: `InsertBatch` for the row writes, then space the file does not give back.
+    The run also raised two defects that belong to this task rather than to a round of their own: the
+    one-hour `CommandBudget` was overrun by 7 h 20 m, and `build_state` stayed `partial` on a walk that finished.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

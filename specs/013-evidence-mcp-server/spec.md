@@ -268,6 +268,17 @@ TOML-shaped for the third) and names the running binary.
   therefore: **a served call costs no more than the same call in-process** (parity, measured 12/12), and the
   300 ms budget is recorded as missed, with 4 425 ms published as the latency. Cheapening the lease is left
   open rather than claimed; the roadmap carries it as open work.
+  **Re-measured 2026-11-01, on a full index** (666 files, 12 889 passages, 350.2 MiB): p95 **3 199 ms**,
+  parity 12/12, evidence-to-source ratio 0.021, and the two sides differ by 6 to 283 ms on calls of
+  2.5–3.2 s with neither consistently the slower one — the hop is still free and the criterion is still missed
+  by about ten. The mechanism is now named rather than
+  guessed: `LeasedCodeIndex` builds a new `SharpCoreDbCodeIndex` per operation, the `build_id`-keyed cache in
+  `IndexReader` lives inside that instance, and every served call therefore reloads all 12 889 chunk rows with
+  their text and their 512-wide embeddings before it can rank anything. Opening the same database costs 0.36 s
+  end to end (`sharpcoreagent index --status`), which rules the open out as the cost. What is left is work
+  rather than measurement: share one snapshot across per-call handles, and say what `warm` means in the
+  harness — with twelve samples the nearest-rank p95 *is* the slowest one, and the call that pays the load is
+  the first after a cold start.
 - **SC-006**: The evidence-to-source ratio is published as a measured number, not a projection: for a
   checked-in set of fixture queries, the characters an answer spends are compared with the characters of
   the files it cites, and the ratio is recorded in `plan.md`. There is no vendor percentage in this
