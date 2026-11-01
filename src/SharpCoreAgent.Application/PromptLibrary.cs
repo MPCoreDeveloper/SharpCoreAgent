@@ -189,18 +189,34 @@ public static class PromptLibrary
         """;
 
     /// <summary>
-    /// Gets the message the loop adds when a tool answered with an image.
+    /// Gets the message the loop adds when a tool answered with exactly one image.
     /// </summary>
     /// <remarks>
     /// Not part of the system prompt, for the reason <see cref="VerifyNudge"/> is not: the sentence is only true
     /// after the tool result that produced the image, and a turn that looked at no picture has no business reading
     /// it. The second sentence is for the transcript, not for the turn: a session file stores text and not
     /// megabytes of base64, so a resumed conversation keeps this sentence with no image behind it, and the model
-    /// that reads it must know that the way to see the picture again is one more tool call.
+    /// that reads it must know that the way to see the picture again is one more tool call. The way back names the
+    /// rule rather than one tool, because a picture can now arrive from three doors: a file <c>view_image</c> reads,
+    /// a path an MCP server's artefact sink wrote, and a URL <c>fetch_url</c> followed.
     /// </remarks>
     public const string ImageAttached =
         """
-        Here is the image a tool just returned, attached to this message. If the transcript was reloaded from disk, the sentence survived and the image did not: call view_image again rather than describing what you remember.
+        Here is the image a tool just returned, attached to this message. If the transcript was reloaded from disk, the sentence survived and the image did not: call the tool again — view_image if the picture is a file on disk — rather than describing what you remember.
+        """;
+
+    /// <summary>
+    /// Gets the message the loop adds when a tool answered with more than one image.
+    /// </summary>
+    /// <remarks>
+    /// The same sentence with the count implied, because one MCP answer can carry a screenshot, a full-page capture and
+    /// a console image in the same <c>content[]</c>. Both constants say the same thing about a reloaded transcript,
+    /// which a test pins: two sentences that disagreed would make the recovery rule depend on how many pictures a
+    /// server happened to return.
+    /// </remarks>
+    public const string ImagesAttached =
+        """
+        Here are the images a tool just returned, attached to this message in the order the tool returned them. If the transcript was reloaded from disk, the sentence survived and the images did not: call the tool again — view_image if the pictures are files on disk — rather than describing what you remember.
         """;
 
     /// <summary>

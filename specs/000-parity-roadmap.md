@@ -54,13 +54,15 @@ The four gaps a newcomer hits, in the order they hit them.
 | 7 | [`015-fsharp-peer`](015-fsharp-peer/spec.md) | `file_diagnostics`, `uses_at`, `signature_at` — a compiler's view of a file, behind `--fsharp` (landed 2026-10-30 as `a447a4d`) | 0, and `012` (landed) |
 | 8 | [`016-model-roles`](016-model-roles/spec.md) | `--planner` / `--executor` / `--reviewer`, `/roles`, `/review`, and a pasted key instead of a failed first run (landed 2026-10-31 as `6ac0c90`: `AgentRoles`, `CredentialPrompt`, the upsert in `CredentialFile`, `AgentSession.SessionModel`, 28 tests in 4 new classes) | 0, `004`, `005`, `006` (all landed) |
 | 9 | [`017-image-view`](017-image-view/spec.md) | `view_image` — a picture the model can actually see, and the `ImageContent` on `Domain.Conversation` that carries it (landed 2026-10-31 as `e69cbdc`: `ImageContent`, `ChatMessage.Images`, `ToolResult.Images`, the eighteenth default tool, prompt rule 9, 1256 passing; closes `010` T035) | 0, and `010` (landed) |
+| 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
 
 `web_search` is deliberately unnumbered: it needs a provider and a key, which is a decision this
 repository has not made. If it is made, it becomes `018` and it does not change 007–011. (`012` went to
 the compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — which needs neither a provider
 nor a key, `013` is the evidence server, `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
-server, `016` is model roles and `017` is the image view.)
+server, `016` is model roles, `017` is the image view, and `019` is image ingress — round 10 — because `018`
+is still held for `web_search` and `014` was never assigned.)
 
 ## Decision record
 
@@ -413,9 +415,10 @@ plain string, so no earlier request shape changed. `models` prints `images=yes|n
 entries can see (Grok's `grok-4.7`/`grok-4`/`grok-3`, every `openai-compatible` id, none of DeepSeek's).
 
 **Does not ship**: images inside MCP results (`McpContent.Flatten` is unchanged, so a browser screenshot is shown by
-calling `view_image` on the path the sink returned), `fetch_url` returning images, OCR or any local vision, PDF/SVG/
-audio/video, pasted or piped images and an `--image` flag, resizing or re-encoding, images in session files, a
-per-turn image budget or deduplication, an image token estimate, and serving `view_image` over `mcp serve`.
+calling `view_image` on the path the sink returned — closed by `019`, which attaches the part and keeps the sentence),
+`fetch_url` returning images (also `019`), OCR or any local vision, PDF/SVG/audio/video, pasted or piped images and an
+`--image` flag, resizing or re-encoding, images in session files, a per-turn image budget or deduplication, an image
+token estimate, and serving `view_image` over `mcp serve`.
 
 **Evidence**: `ViewImageToolTests` (eleven methods, one a six-case theory over the media types), eight other classes
 extended — `CodingAgentTests` (the picture arrives on the next user message, after the tool message, and is in the
@@ -423,6 +426,38 @@ next request), `OpenAiCompatibleTransportTests` (parts vs string), `Conversation
 including `ToString` never printing the payload), `ModelCatalogTests`, `PromptLibraryTests`, `TaskToolRegistrationTests`
 (eighteen names), `McpServerPublishedSetTests` (`view_image` registered, not published) — and
 `ChatLoopTests`' ceiling moved 1 700 → 2 000 tokens because the prompt grew rule 9. Zero warnings, 1256 passing.
+
+## Round 10 — `019-image-ingress` (landed 2026-10-31)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9 took. Round 9 made a
+picture viewable and left two doors describing one: `McpContent.Flatten` rendered an `image` part as
+`[image: image/png · 36,912 base64 characters]`, and `fetch_url` refused an `image/*` body by name. The workaround for
+the first was a second tool call on the file the artefact sink had already written; for the second there was none,
+because nothing was written at all. The argument is [`019-image-ingress/spec.md`](019-image-ingress/spec.md) and the
+decisions are in its `plan.md`. The number is `019` because `018` is still held for `web_search` and `014` was never
+assigned.
+
+**Ships**: `ImagePayload` (`Infrastructure/Images`) — one normalisation table (five spellings onto four types,
+`image/jpg` → `image/jpeg`), one size estimate (the base64 rule the sink has used since round 4, extracted so the two
+ceilings cannot drift apart), and one closed list that keeps `image/bmp`, `image/svg+xml` and `image/tiff` out of a
+request body a provider would reject. `McpCallResult.Images` and `McpContent.FlattenWithImages` carry a server's image
+parts beside the text that describes them, and `McpTool` attaches what qualifies: at most four per result, every
+un-attached picture named with its reason, and a session whose model is declared text-only told once that the pictures
+were not attached rather than left to describe them. `fetch_url` returns a picture for the four provider types when the
+body arrived whole, it fits inside 4 MiB, and the session's model can see it; it refuses a body cut at its own 2 MiB
+ceiling rather than sending half a PNG, and its old promise that nothing binary is ever downloaded is reworded rather
+than quietly broken. `PromptLibrary.ImagesAttached` is the plural hand-over, and `ImageAttached` was reworded to name
+the rule — call the tool again, `view_image` if the picture is a file — because a third door made "call `view_image`
+again" false for two of them.
+
+**Does not ship**: OCR or local vision, downscaling and re-encoding, PDF/SVG/audio/video, MCP `resource` blobs and
+`resource_link`s (still a path `view_image` can open), pasted or piped images, `Accept: image/*` negotiation, images in
+session files, a per-turn budget, deduplication or a token estimate, and anything served over `mcp serve`.
+
+**Evidence**: `ImagePayloadTests` (26 cases: two theories, the estimate, the ceiling boundary, both refusals) plus four
+methods in `McpToolTests`, five in `FetchUrlToolTests`, one in `CodingAgentTests` and one in `PromptLibraryTests` —
+thirty-seven cases in all, and the single assertion that quoted round 2's old refusal moved with the sentence. Build 0
+warnings; suite 1,293 passed, 0 failed, which is the figure `README.md` carries.
 
 ## Open work, and what is still undecided
 
@@ -440,7 +475,7 @@ empty checkbox.
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
 | 4 | `010` T031–T034 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured — T035 (*showing the screenshot to the model as an image*) is closed by `017` |
 | 6 | `013` SC-005 → the index lease | the served call costs 4.4 s at p95 against a 300 ms budget: the hop costs nothing and the per-call lease on a 233 MiB index costs the rest. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is still open is the work the restatement does not do — making the lease cheap enough that the budget could be met, which is index work (`002`) rather than MCP work, and needs a measurement of its own |
-| 9 | `017` T024–T033 | images inside MCP results (a screenshot is a file, and `view_image` can name it), `fetch_url` returning images, OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, a per-turn image budget or deduplication, an image token estimate, and serving `view_image` over `mcp serve` |
+| 9 | `017` T024–T033 | OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, a per-turn image budget or deduplication, an image token estimate, and serving `view_image` over `mcp serve` — T024 (*images inside MCP results*) and T025 (*`fetch_url` returning images*) are closed by `019` |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T017–T018 | `config edit` and per-provider sections. T016 — a first-run key prompt with restricted permissions — is closed by `016`, which ships the paste, the no-echo read, the owner-only file beside the settings document and the settings entry that makes the next run find it; rotation stays out of scope there and is named in `016`'s spec |
 

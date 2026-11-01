@@ -316,7 +316,9 @@ public sealed class McpServerConnection : IAsyncDisposable
             // remaining artefacts are not written and the caller, who cancelled, sees the cancellation.
             cancellationToken.ThrowIfCancellationRequested();
 
-            return new McpCallResult(isError, McpContent.Flatten(result, Name, save));
+            var flattened = McpContent.FlattenWithImages(result, Name, save);
+
+            return new McpCallResult(isError, flattened.Text) { Images = flattened.Images };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

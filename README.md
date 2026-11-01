@@ -390,8 +390,20 @@ view_image · .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (image
 
 A session file keeps the transcript's text and not its images: a screenshot is megabytes of base64 on one
 line of a document people grep, and the file it came from is still on disk and one `view_image` call away —
-the sentence "call view_image again rather than describing what you remember" is what survives the
-reload.
+the sentence `call the tool again — view_image if the picture is a file on disk — rather than describing what
+you remember` is what survives the reload.
+
+A picture arrives through two other doors, and since round 10 it arrives whole through them as well. An MCP
+server that answers with an `image` part has it attached beside the sentence that describes it: the sink
+still writes the file and still names the path, because that is what a resumed transcript keeps, but the
+bytes also go to the model that can see them instead of costing a `view_image` call on a screenshot the
+client already had in hand. `fetch_url` returns a picture when the response is one of the four types a
+provider accepts (`image/png`, `image/jpeg`, `image/gif`, `image/webp`), the body arrived whole, and the
+session's model can see — an `image/jpg` is relabelled `image/jpeg`, an `image/svg+xml` is still refused by
+name, and a body cut at the fetch ceiling is refused rather than attached, because half a PNG is not a
+picture. Four pictures per tool result is the ceiling; every one that is not attached is named with its
+number and its reason, and a session whose model is declared text-only is told the picture was not
+attached rather than left to describe what it was never shown.
 
 `task` delegates one self-contained investigation to a sub-agent. The child starts with an empty transcript and
 sees only the prompt it was given, works with the session's tools minus `task` so it cannot delegate again, and
@@ -416,9 +428,11 @@ redirects, and answers with the final URL, the status, the content type, the byt
 text was cut. It sends one `User-Agent` and nothing else — no cookie, no referer, no credential — and it
 refuses a host that resolves to a loopback, private, link-local or cloud-metadata address unless
 `--web-allow` names it, on every hop rather than only the first. HTML is reduced to readable text in this
-repository (entities decoded, `script`/`style` removed, tags stripped, whitespace collapsed), and
-anything that is not text is refused by type rather than decoded. There is no JavaScript, no cookie jar
-and no search engine:
+repository (entities decoded, `script`/`style` removed, tags stripped, whitespace collapsed), and a
+response that is a picture becomes the picture instead of text — one of the four types a provider accepts,
+not cut at the ceiling, and only when the session's model can see it. Everything else that is not text is
+refused by type rather than decoded, which is the sentence round 2 fixed and round 10 reworded rather than
+removed. There is no JavaScript, no cookie jar and no search engine:
 
 ```text
 url          https://example.com/docs/changelog
@@ -686,7 +700,7 @@ the second duplicates settings that would drift.
 - **Where the project stands:** 9 824 lines analysed, 0 bugs, 0 vulnerabilities, 0 security hotspots, A for
   reliability, security and maintainability, 0% duplication, **0 code smells**, and 83.7% coverage
   (89.8% of lines, 72.6% of branches) across the 389 tests that scan ran. Those are the figures of that
-  scan; the suite has since grown to 1,256 tests — the five retrieval tools, the `index` command, the
+  scan; the suite has since grown to 1,293 tests — the five retrieval tools, the `index` command, the
   colour palette, fragment edits, plan mode, streaming shell output and multi-block edits, `/cost` with
   its dated price table, `--fallback` and the replay that reports both attempts, the credential file,
   the settings file, the bare-start rules, the scripted conversations that prove a session keeps
@@ -823,6 +837,19 @@ the second duplicates settings that would drift.
   `image_url` part with a `data:` URI, and a message with no images is still a plain string, so no request shape that
   existed before the round changed. Sixteen tests in two new classes, five new cases in four existing ones, and three
   more whose assertions moved; a session file keeps the text and not the pictures. The whole suite is 1,256 green in
+  `Release` at 0 warnings.
+
+- `specs/019-image-ingress` — a picture arrives through every door the agent already opens. An MCP server's `image`
+  part and a `fetch_url` response whose type is a picture are both attached to the next user message, beside the
+  sentence that describes them, instead of being flattened into `[image: image/png · 36,912 base64 characters]`. The
+  rule is one class, `ImagePayload`: four media types (five spellings — `image/jpg` becomes `image/jpeg`), the
+  `TextLimits.MaxImageBytes` ceiling measured from the base64 length before anything is decoded, and the closed list
+  that keeps `image/bmp`, `image/svg+xml` and `image/tiff` out of a request body a provider would reject. Attachment
+  is additive: the artefact sink still writes the file and names the path, because that is what a resumed transcript
+  keeps. Four pictures per result, and every one that is not attached is named with its number and reason — including
+  the one a text-only session was never shown. `fetch_url` refuses a body cut at its own ceiling rather than sending
+  half a PNG, and its old promise that nothing binary is ever downloaded is reworded rather than quietly broken.
+  Thirty-seven new tests across `ImagePayloadTests` and five existing classes; the whole suite is 1,293 green in
   `Release` at 0 warnings.
 
 ## Spec-driven development

@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
+using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Tools;
 using SharpCoreAgent.Infrastructure.Web;
@@ -210,12 +212,86 @@ public sealed class FetchUrlToolTests
     [Fact]
     public async Task RefusesABinaryContentType()
     {
-        var handler = new StubHandler().Map(Url, () => Respond("binary", "image/png"));
+        var handler = new StubHandler().Map(Url, () => Respond("binary", "application/pdf"));
         var result = await InvokeAsync(Tool(handler), Url);
 
         Assert.True(result.IsError);
+        Assert.Contains("application/pdf", result.Content, StringComparison.Ordinal);
+        Assert.Contains("was not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("image/png, image/jpeg, image/gif, image/webp", result.Content, StringComparison.Ordinal);
+        Assert.Empty(result.Images);
+    }
+
+    [Fact]
+    public async Task RefusesAPictureTypeNoProviderCarries()
+    {
+        // svg is a document rather than a photograph, and the closed table says so instead of sending it on.
+        var handler = new StubHandler().Map(Url, () => Respond("<svg/>", "image/svg+xml"));
+        var result = await InvokeAsync(Tool(handler), Url, Reading);
+
+        Assert.True(result.IsError);
+        Assert.Contains("image/svg+xml", result.Content, StringComparison.Ordinal);
+        Assert.Contains("was not attached", result.Content, StringComparison.Ordinal);
+        Assert.Empty(result.Images);
+    }
+
+    [Fact]
+    public async Task ReadsAPictureAndAttachesIt()
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A };
+        var handler = new StubHandler().Map(Url, () => RespondBytes(bytes, "image/png"));
+        var result = await InvokeAsync(Tool(handler), Url, Reading);
+
+        Assert.False(result.IsError);
+
+        // The bytes are the answer, base64'd once, and the sentence is the half a transcript keeps.
+        var image = Assert.Single(result.Images);
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal(Convert.ToBase64String(bytes), image.Base64);
+        Assert.Contains($"url          {Url}", result.Content, StringComparison.Ordinal);
+        Assert.Contains("type         image/png", result.Content, StringComparison.Ordinal);
+        Assert.Contains("is attached to the next message", result.Content, StringComparison.Ordinal);
+
+        // Read, on the URL that answered: a fetch that hands over a picture still touched nothing else.
+        Assert.Equal(ToolEffectKind.Read, Assert.Single(result.Effects).Kind);
+        Assert.Equal(Url, Assert.Single(result.Effects).Target);
+    }
+
+    [Fact]
+    public async Task AnImageJpgIsAttachedAsJpeg()
+    {
+        // Servers send image/jpg; providers document image/jpeg. The alias is normalised, the bytes are not touched.
+        var handler = new StubHandler().Map(Url, () => RespondBytes([0xFF, 0xD8, 0xFF], "image/jpg"));
+        var result = await InvokeAsync(Tool(handler), Url, Reading);
+
+        Assert.Equal("image/jpeg", Assert.Single(result.Images).MediaType);
+    }
+
+    [Fact]
+    public async Task RefusesAPictureForASessionWhoseModelCannotSeeIt()
+    {
+        var handler = new StubHandler().Map(Url, () => RespondBytes([1, 2, 3], "image/png"));
+        var result = await InvokeAsync(Tool(handler), Url, TextOnly);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
         Assert.Contains("image/png", result.Content, StringComparison.Ordinal);
-        Assert.Contains("does not read", result.Content, StringComparison.Ordinal);
+        Assert.Contains("is not declared to read images", result.Content, StringComparison.Ordinal);
+        Assert.Contains("Do not describe", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RefusesAPictureTheFetchCeilingCutInHalf()
+    {
+        // A truncated PNG decodes to a corrupt picture, and the provider's 400 would arrive far from the reason.
+        var handler = new StubHandler().Map(Url, () => RespondBytes(new byte[64], "image/png"));
+        var result = await InvokeAsync(Tool(handler, new WebFetchOptions { MaxBytes = 16 }), Url, Reading);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("only", result.Content, StringComparison.Ordinal);
+        Assert.Contains("cut in half", result.Content, StringComparison.Ordinal);
+        Assert.Contains("16 B", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -253,14 +329,19 @@ public sealed class FetchUrlToolTests
         IWebAddressResolver? resolver = null) =>
         new(new StubClientFactory(handler), options ?? WebFetchOptions.Default, resolver ?? new StubResolver());
 
-    private static async Task<ToolResult> InvokeAsync(FetchUrlTool tool, string url)
+    private static async Task<ToolResult> InvokeAsync(FetchUrlTool tool, string url, ModelDescriptor? model = null)
     {
         using var sandbox = ToolTestWorkspace.Create();
         return await tool.ExecuteAsync(
             ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url })),
-            sandbox.Context,
+            sandbox.Context with { Model = model },
             CancellationToken.None);
     }
+
+    /// <summary>A model declared to read pictures, and one declared not to.</summary>
+    private static ModelDescriptor Reading { get; } = new("grok", "grok-4", "Grok 4", SupportsImages: true);
+
+    private static ModelDescriptor TextOnly { get; } = new("deepseek", "deepseek-chat", "DeepSeek Chat");
 
     private static HttpResponseMessage Respond(
         string body,
@@ -270,6 +351,16 @@ public sealed class FetchUrlToolTests
         {
             Content = new StringContent(body, Encoding.UTF8, mediaType),
             ReasonPhrase = reason,
+        };
+
+    /// <summary>One response whose body is bytes rather than text, which is what a picture looks like to HttpClient.</summary>
+    private static HttpResponseMessage RespondBytes(
+        byte[] body,
+        string mediaType,
+        HttpStatusCode status = HttpStatusCode.OK) => new(status)
+        {
+            Content = new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue(mediaType) } },
+            ReasonPhrase = "OK",
         };
 
     /// <summary>One request as it was actually sent, copied before the tool disposes it.</summary>

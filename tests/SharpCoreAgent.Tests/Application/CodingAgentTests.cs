@@ -760,6 +760,43 @@ public sealed class CodingAgentTests
         Assert.Equal(2, model.Requests.Count);
     }
 
+    [Fact]
+    public async Task AResultCarryingTwoImagesArrivesInOnePluralMessage()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(ViewImageTool.Name)],
+            [Completed("two screenshots")]);
+        var first = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+        var second = new ImageContent { MediaType = "image/jpeg", Base64 = "BBBB" };
+        var tool = new StubTool(
+            ViewImageTool.Name,
+            ToolSafety.ReadOnly,
+            call => ToolResult.Success(call.Id, call.Name, "two pictures are attached to the next message.") with
+            {
+                Images = [first, second],
+            });
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [tool]).RunTurnAsync(
+            session, "look at both screenshots", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+
+        // One message carrying both, in the tool's order: two messages would ask the model the same question twice,
+        // and the plural sentence is the one that says the recovery rule without naming a count.
+        var carrier = Assert.Single(session.Messages, message => message.HasImages);
+        Assert.Equal(PromptLibrary.ImagesAttached, carrier.Content);
+        Assert.Equal(new[] { first, second }, carrier.Images);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.ImageAttached);
+
+        // And the request the model actually received carries both, on the user role like every other picture.
+        var sent = Assert.Single(model.Requests[1].Messages, message => message.HasImages);
+        Assert.Equal(ChatRole.User, sent.Role);
+        Assert.Equal(2, sent.Images.Count);
+    }
+
     private static CodingAgent Agent(IStreamingChatModel model, IEnumerable<ITool> tools) =>
         AgentWithOptions(new AgentOptions(), model, tools);
 

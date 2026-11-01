@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Errors;
+using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Mcp;
 using Xunit;
@@ -141,6 +142,100 @@ public sealed class McpToolTests
         Assert.Equal(ToolSafety.Destructive, tool.Safety);
     }
 
+    [Fact]
+    public async Task AnImagePartIsAttachedBesideTheSentenceThatDescribesIt()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/png", "iVBORw0KGgo=")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading),
+            Token);
+
+        Assert.False(result.IsError);
+
+        // The bytes travel exactly as the server sent them, and the type is the one a provider documents.
+        var image = Assert.Single(result.Images);
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal("iVBORw0KGgo=", image.Base64);
+
+        // The description stays beside it: it is what a text-only model reads and what a person grepping a transcript
+        // finds once the image is gone.
+        Assert.Contains("[image: image/png", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("not attached", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ATextOnlyModelIsToldThePictureWasNotAttached()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/png", "iVBORw0KGgo=")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(TextOnly),
+            Token);
+
+        Assert.False(result.IsError);
+        Assert.Empty(result.Images);
+
+        // Round 9's refusal, moved to the door the picture came through: saying nothing would leave a model free to
+        // describe a picture it was never shown.
+        Assert.Contains("were not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("declared text-only", result.Content, StringComparison.Ordinal);
+        Assert.Contains("Do not describe", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APictureOfATypeNoProviderAcceptsIsNamedWithItsReason()
+    {
+        // The sink saves a bmp; a provider will not carry one. The answer says which and why rather than losing it.
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(("image/bmp", "Qk0=")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading),
+            Token);
+
+        Assert.Empty(result.Images);
+        Assert.Contains("[image/bmp: not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("image/png, image/jpeg, image/gif, image/webp", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AResultAttachesFourPicturesAndNamesTheFifth()
+    {
+        await using var harness = new Harness(
+            Tool("screenshot", readOnly: true),
+            () => Images(
+                ("image/png", "AAAA"),
+                ("image/png", "BBBB"),
+                ("image/jpg", "CCCC"),
+                ("image/gif", "DDDD"),
+                ("image/webp", "EEEE")));
+        var tool = await harness.StartAsync();
+
+        var result = await tool.ExecuteAsync(
+            new ToolCall("call-1", "npx_screenshot", "{}"),
+            Context(Reading),
+            Token);
+
+        Assert.Equal(4, result.Images.Count);
+        Assert.Equal("image/jpeg", result.Images[2].MediaType);
+
+        // The fifth is named, so a model knows a picture it cannot see exists and is not free to invent it.
+        Assert.Contains("image/webp: not attached", result.Content, StringComparison.Ordinal);
+        Assert.Contains("already carries 4 pictures", result.Content, StringComparison.Ordinal);
+    }
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static string Flatten(string json)
@@ -149,7 +244,25 @@ public sealed class McpToolTests
         return McpContent.Flatten(document.RootElement, "npx");
     }
 
-    private static ToolInvocationContext Context() => new(Workspace.Create(Path.GetTempPath()));
+    private static ToolInvocationContext Context(ModelDescriptor? model = null) =>
+        new(Workspace.Create(Path.GetTempPath())) { Model = model };
+
+    /// <summary>A model declared to read pictures, and one declared not to.</summary>
+    private static ModelDescriptor Reading { get; } = new("grok", "grok-4", "Grok 4", SupportsImages: true);
+
+    private static ModelDescriptor TextOnly { get; } = new("deepseek", "deepseek-chat", "DeepSeek Chat");
+
+    /// <summary>One answer whose content is nothing but image parts, as a browser server sends them.</summary>
+    private static JsonObject Images(params (string Mime, string Data)[] parts)
+    {
+        var content = new JsonArray();
+        foreach (var (mime, data) in parts)
+        {
+            content.Add(new JsonObject { ["type"] = "image", ["mimeType"] = mime, ["data"] = data });
+        }
+
+        return new JsonObject { ["content"] = content, ["isError"] = false };
+    }
 
     private static JsonObject Tool(string name, bool readOnly) => new()
     {

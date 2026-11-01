@@ -219,6 +219,25 @@ public sealed class PromptLibraryTests
     }
 
     [Fact]
+    public void ThePluralHandOverSaysTheSameThingAboutAReload()
+    {
+        // One MCP answer can carry several pictures, and the recovery rule must not depend on how many a server
+        // happened to return: both sentences say the picture is gone after a reload and that the tool is the way back.
+        Assert.StartsWith("Here is", PromptLibrary.ImageAttached, StringComparison.Ordinal);
+        Assert.StartsWith("Here are", PromptLibrary.ImagesAttached, StringComparison.Ordinal);
+
+        foreach (var sentence in new[] { PromptLibrary.ImageAttached, PromptLibrary.ImagesAttached })
+        {
+            Assert.Contains("reloaded from disk", sentence, StringComparison.Ordinal);
+            Assert.Contains("call the tool again", sentence, StringComparison.Ordinal);
+            Assert.Contains("view_image", sentence, StringComparison.Ordinal);
+
+            // Neither sentence is part of the shipped prompt: a turn that looked at no picture reads neither.
+            Assert.False(PromptLibrary.SystemPrompt.Contains(sentence, StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
     public void TheSubAgentIsToldItSeesNothingElse()
     {
         // The child's own prompt has to say it first, or its opening move is a question the developer answered one

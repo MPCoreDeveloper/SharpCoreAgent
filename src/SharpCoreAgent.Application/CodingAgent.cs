@@ -306,10 +306,13 @@ public sealed class CodingAgent
 
             // An image never travels on the tool role: every compatible provider takes image parts on a user message
             // and none of them on a tool result. So the picture follows the sentence that describes it, and the
-            // sentence says where it came from for the transcript a person reads later.
+            // sentence says where it came from for the transcript a person reads later. A tool that answered with
+            // several pictures — one MCP call can — gets the plural sentence, which says the same thing about a reload.
             if (result.Images.Count > 0)
             {
-                session.Add(ChatMessage.User(PromptLibrary.ImageAttached, result.Images));
+                session.Add(ChatMessage.User(
+                    result.Images.Count == 1 ? PromptLibrary.ImageAttached : PromptLibrary.ImagesAttached,
+                    result.Images));
             }
         }
 

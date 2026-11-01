@@ -121,10 +121,12 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 
 - **Reading a picture without a model that can.** There is no OCR, no local vision, no captioning. The bytes go to
   the model that was chosen; if it cannot see, the tool says so.
-- **Images inside MCP results.** `McpContent.Flatten` still describes an `image` as a MIME type and a size, and
-  round 4's contract stands unchanged. A browser screenshot is shown by calling `view_image` on the file
-  `McpArtefactSink` wrote — one tool call and no new sink.
-- **`fetch_url` returning images**, a `Content-Type: image/*` branch, or a download tool.
+- **Images inside MCP results.** `McpContent.Flatten` still described an `image` as a MIME type and a size, and
+  round 4's contract stood unchanged. A browser screenshot was shown by calling `view_image` on the file
+  `McpArtefactSink` wrote — one tool call and no new sink. **Closed by `019`**, which attaches the part and keeps the
+  sentence, the sink and the path.
+- **`fetch_url` returning images**, a `Content-Type: image/*` branch, or a download tool. **Closed by `019`** for the
+  four types a provider accepts; every other binary keeps this round's refusal.
 - **PDF, SVG, audio and video.** Five extensions are the whole table, and a format whose extension would lie is
   refused by name rather than relabelled.
 - **Pasted, dragged or piped images**, and an `--image` flag on `run`. A picture enters a conversation the way any

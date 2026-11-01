@@ -53,3 +53,13 @@ pass has a real list rather than a memory.
 - [ ] T031 Paging a long page (`start_index`), refused in the spec until transcripts show the character ceiling being hit.
 - [ ] T032 A web search tool. Naming a page is the developer's job in this round.
 - [ ] T033 `robots.txt` handling. Refused in the spec: politeness is the developer's call, not a second request per fetch.
+
+## Amended after the round landed
+
+- **T034 (2026-10-31, by `019`)** FR-012's refusal narrowed, because it was telling a larger truth than the code. The
+  four picture types a provider accepts (`image/png`, `image/jpeg`, `image/gif`, `image/webp`) are now returned as the
+  picture — attached to the next user message, base64'd once, behind the session's `SupportsImages` gate, the 4 MiB
+  ceiling and the condition that the body arrived whole. Every other binary keeps T019's refusal, and its sentence was
+  reworded because "never downloads a binary" stopped being true: it names the four types instead. Five cases in
+  `FetchUrlToolTests` cover the door, and one existing assertion moved with the sentence.
+

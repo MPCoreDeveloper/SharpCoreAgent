@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using SharpCoreAgent.Infrastructure.Images;
 
 namespace SharpCoreAgent.Infrastructure.Mcp;
 
@@ -10,11 +11,37 @@ namespace SharpCoreAgent.Infrastructure.Mcp;
 /// <param name="Text">The flattened content, or the reason the call could not be made.</param>
 public sealed record McpCallResult(bool IsError, string Text)
 {
+    /// <summary>Gets the image parts the server returned, in the order it returned them.</summary>
+    /// <remarks>
+    /// Every <c>image</c> entry with data, including the ones no provider would accept: the decision about what can be
+    /// attached belongs to the tool, which is the only place that knows which model is reading. Empty on every failure
+    /// this client reports, because there is nothing to attach to a call that did not happen.
+    /// </remarks>
+    public IReadOnlyList<McpImage> Images { get; init; } = [];
+
     /// <summary>Creates a failure that this client, rather than the server, is reporting.</summary>
     /// <param name="message">Why the call could not be made, phrased for the model.</param>
     /// <returns>A result with <see cref="IsError"/> set.</returns>
     public static McpCallResult Failure(string message) => new(true, message);
 }
+
+/// <summary>
+/// One <c>image</c> part as the server sent it: the type it claimed, and the payload undecoded.
+/// </summary>
+/// <param name="MimeType">The part's <c>mimeType</c>, or the empty string when it named none.</param>
+/// <param name="Base64">The part's <c>data</c>, exactly as the server sent it.</param>
+/// <remarks>
+/// Not an <see cref="Domain.Conversation.ImageContent"/>, because nothing has decided yet that this payload is going
+/// anywhere: a <c>image/bmp</c>, an oversized capture and a part from a session whose model cannot see all stop here.
+/// </remarks>
+public sealed record McpImage(string MimeType, string Base64);
+
+/// <summary>
+/// One flattened answer: the text, and the pictures that arrived beside it.
+/// </summary>
+/// <param name="Text">The entries joined by a blank line, or a sentence saying the server sent nothing.</param>
+/// <param name="Images">The <c>image</c> parts with data, in the order the server returned them.</param>
+internal sealed record McpFlattened(string Text, IReadOnlyList<McpImage> Images);
 
 /// <summary>
 /// One binary entry a server returned, offered to a sink that can make it durable.
@@ -69,34 +96,62 @@ internal static class McpContent
     /// describe binaries exactly as <see cref="Flatten(JsonElement, string)"/> does.
     /// </param>
     /// <returns>The entries joined by a blank line, or a sentence saying the server sent nothing.</returns>
-    public static string Flatten(JsonElement result, string serverName, Func<McpArtefact, string>? save)
+    public static string Flatten(JsonElement result, string serverName, Func<McpArtefact, string>? save) =>
+        FlattenWithImages(result, serverName, save).Text;
+
+    /// <summary>
+    /// Flattens the <c>content</c> member, and keeps the picture parts beside the text that describes them.
+    /// </summary>
+    /// <param name="result">The whole <c>result</c> object.</param>
+    /// <param name="serverName">The server's prefix, used in the empty-case sentence.</param>
+    /// <param name="save">
+    /// Turns a binary entry into the sentence that replaces its description, or <see langword="null"/> to describe
+    /// binaries the way <see cref="Flatten(JsonElement, string)"/> does.
+    /// </param>
+    /// <returns>The text, and every <c>image</c> part that carried data.</returns>
+    /// <remarks>
+    /// The text is identical to what <see cref="Flatten(JsonElement, string, Func{McpArtefact, string})"/> returns:
+    /// collecting a part changes nothing about the sentence the sink writes or the description a text-only model reads.
+    /// Whether the payload can actually be attached is decided by the caller, because only the caller knows which model
+    /// is reading and what a result may spend.
+    /// </remarks>
+    public static McpFlattened FlattenWithImages(
+        JsonElement result,
+        string serverName,
+        Func<McpArtefact, string>? save)
     {
+        var images = new List<McpImage>();
+
         if (result.ValueKind != JsonValueKind.Object ||
             !result.TryGetProperty("content", out var content) ||
             content.ValueKind != JsonValueKind.Array)
         {
-            return string.Create(
-                CultureInfo.InvariantCulture,
-                $"(the {serverName} server answered without content)");
+            return new McpFlattened(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"(the {serverName} server answered without content)"),
+                images);
         }
 
         var parts = new List<string>();
         var ordinal = 0;
         foreach (var entry in content.EnumerateArray())
         {
-            var part = Describe(entry, save, ref ordinal);
+            var part = Describe(entry, save, images, ref ordinal);
             if (!string.IsNullOrWhiteSpace(part))
             {
                 parts.Add(part);
             }
         }
 
-        return parts.Count == 0
-            ? string.Create(CultureInfo.InvariantCulture, $"(the {serverName} server returned no content)")
-            : string.Join("\n\n", parts);
+        return new McpFlattened(
+            parts.Count == 0
+                ? string.Create(CultureInfo.InvariantCulture, $"(the {serverName} server returned no content)")
+                : string.Join("\n\n", parts),
+            images);
     }
 
-    private static string Describe(JsonElement entry, Func<McpArtefact, string>? save, ref int ordinal)
+    private static string Describe(JsonElement entry, Func<McpArtefact, string>? save, List<McpImage> images, ref int ordinal)
     {
         if (entry.ValueKind != JsonValueKind.Object)
         {
@@ -108,7 +163,7 @@ internal static class McpContent
         return type switch
         {
             "text" => String(entry, "text") ?? "[empty text]",
-            "image" => Saveable(type, entry, save, ref ordinal),
+            "image" => Saveable(type, entry, save, images, ref ordinal),
             "audio" => Binary(type, entry),
             "resource" => Resource(entry, save, ref ordinal),
             "resource_link" => Link(entry),
@@ -123,6 +178,7 @@ internal static class McpContent
     /// <param name="type">The entry type, which is the first word of the description.</param>
     /// <param name="entry">The entry.</param>
     /// <param name="save">The sink, or null when nothing can be written.</param>
+    /// <param name="images">The collection the image parts are added to, in the order the server returned them.</param>
     /// <param name="ordinal">Counts the saveable entries of the call.</param>
     /// <returns>The sink's sentence, or the description unchanged.</returns>
     /// <remarks>
@@ -130,8 +186,20 @@ internal static class McpContent
     /// audio is described because saving it would be a claim the client cannot keep. The ordinal advances
     /// for every offered entry, saved or not, so the same answer names the same files on every call.
     /// </remarks>
-    private static string Saveable(string type, JsonElement entry, Func<McpArtefact, string>? save, ref int ordinal)
+    private static string Saveable(
+        string type,
+        JsonElement entry,
+        Func<McpArtefact, string>? save,
+        List<McpImage> images,
+        ref int ordinal)
     {
+        // Collected before any decision about it: every image part with data is offered to the caller, which is the
+        // only place that knows whether a model can read it and whether the result has room for another picture.
+        if (String(entry, "mimeType") is { } mime && ImagePayload.IsImage(mime) && String(entry, "data") is { } payload)
+        {
+            images.Add(new McpImage(mime, payload));
+        }
+
         if (save is null || !IsImage(String(entry, "mimeType")) || String(entry, "data") is not { } data)
         {
             return Binary(type, entry);
@@ -197,8 +265,7 @@ internal static class McpContent
     private static string DataSize(string base64) =>
         string.Create(CultureInfo.InvariantCulture, $"{base64.Length} base64 characters");
 
-    private static bool IsImage(string? mimeType) =>
-        mimeType is not null && mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+    private static bool IsImage(string? mimeType) => ImagePayload.IsImage(mimeType);
 
     private static string? String(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

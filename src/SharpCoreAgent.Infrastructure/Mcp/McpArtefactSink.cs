@@ -1,6 +1,7 @@
 using System.Globalization;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Infrastructure.Images;
 using SharpCoreAgent.Infrastructure.Tools;
 
 namespace SharpCoreAgent.Infrastructure.Mcp;
@@ -285,26 +286,18 @@ internal sealed class McpArtefactSink
     }
 
     /// <summary>
-    /// Computes the decoded size of a base64 string without decoding it.
+    /// The decoded size of a base64 string, estimated without decoding it.
     /// </summary>
     /// <param name="base64">The payload as the server sent it.</param>
-    /// <returns>The number of bytes the string decodes to, or an upper bound when it will not decode.</returns>
+    /// <returns>The estimate, which is an upper bound for well-formed base64.</returns>
     /// <remarks>
-    /// <c>Length / 4 * 3</c> is FR-006's estimate; the trailing <c>=</c> padding is subtracted because it is
-    /// visible before the decode. Without that subtraction an artefact of exactly the ceiling size would be
-    /// refused as two bytes over it — a false refusal the rule does not intend. A string that is not base64
-    /// at all lands near its own length, which is why the measured check after the decode still exists.
+    /// <c>Length / 4 * 3</c> is FR-006's estimate; the trailing <c>=</c> padding is subtracted because it is visible
+    /// before the decode, and without that an artefact of exactly the ceiling size would be refused as two bytes over
+    /// it. The rule itself lives in <see cref="ImagePayload.EstimateBytes"/> since round 10, because the attach ceiling
+    /// and this one must not drift apart; it is kept as a one-line delegation so the ordering above still reads as one
+    /// decision.
     /// </remarks>
-    private static long Estimate(string base64)
-    {
-        var padding = 0;
-        for (var index = base64.Length - 1; index >= 0 && padding < 2 && base64[index] == '='; index--)
-        {
-            padding++;
-        }
-
-        return ((long)base64.Length / 4 * 3) - padding;
-    }
+    private static long Estimate(string base64) => ImagePayload.EstimateBytes(base64);
 
     private static void TryDelete(string path)
     {

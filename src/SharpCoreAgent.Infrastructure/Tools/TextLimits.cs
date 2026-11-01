@@ -45,6 +45,15 @@ public static class TextLimits
     /// </remarks>
     public const int MaxImageBytes = 4 * 1024 * 1024;
 
+    /// <summary>Gets the largest number of images one tool result attaches, whatever the tool returned.</summary>
+    /// <remarks>
+    /// Four. A browser server can answer one call with a screenshot, a full-page capture and a console image or two,
+    /// and four is a turn a developer can still read and a request a provider still accepts. A fifth picture is named
+    /// in the result's text with the reason rather than dropped: an image that silently failed to arrive invites the
+    /// model to invent it, which is the failure round 9 was built to prevent.
+    /// </remarks>
+    public const int MaxImagesPerResult = 4;
+
     /// <summary>Gets how many leading bytes are inspected when deciding whether a file is binary.</summary>
     public const int BinarySniffBytes = 8 * 1024;
 

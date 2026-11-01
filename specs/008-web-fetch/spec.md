@@ -110,6 +110,11 @@ Acceptance:
   elements become line breaks, and runs of whitespace collapse. Implemented here, with no new dependency.
 - **FR-012** Other text types (`text/*`, JSON, XML, JavaScript, YAML, TOML, form data) are returned as
   they are. Anything else is refused by media type, or by a binary sniff when the type is absent.
+  *Amended 2026-10-31 by `019`:* the four picture types a provider accepts (`image/png`, `image/jpeg`,
+  `image/gif`, `image/webp`) are returned as the picture, attached to the message that follows, when the body
+  arrived whole, it fits inside `TextLimits.MaxImageBytes` and the session's model is declared to read images.
+  Everything else — `image/svg+xml`, `image/bmp`, `application/pdf`, audio, video — keeps this refusal, whose
+  sentence no longer promises that the tool never downloads a binary.
 - **FR-013** The result opens with labelled lines — `url`, `status`, `type`, `bytes` and, when either
   applies, `truncated` and `redirected` — then a blank line, then the text.
 - **FR-014** A status of 400 or above is a failed result carrying the same header block and the body, so
@@ -199,6 +204,7 @@ the turn continues and the model reads why.
 3. **Read-only, so plan mode may fetch.** It changes nothing locally; the network is governed by `--web`
    rather than by the approval mode.
 4. **Text, never a binary and never JavaScript.** The reduction is in this repository, which keeps the
-   dependency list as it is.
+   dependency list as it is. *`019` carved out the four picture types a provider accepts: a picture is handed
+   over rather than decoded here, so the dependency list — the real point of this decision — is unchanged.*
 5. **The result states what it is.** Final URL, status, type, bytes, truncation: the model can tell a
    whole page from a fragment, and so can the developer reading the transcript.

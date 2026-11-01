@@ -61,13 +61,19 @@ has a real list rather than a memory.
 
 ## Refused, and why
 
-- [ ] T024 **Images in MCP results.** `McpContent.Flatten` describes an `image` part as a MIME type and a size and
-      keeps doing so; round 4's `contracts/mcp-content.md` is untouched. A screenshot the browser wrote is shown by
-      calling `view_image` on the path the sink returned, which is one tool call and no second sink. It would
-      reverse if a server returned an image with no file behind it — a stream, or a URL — because then there is
-      nothing on disk to name.
-- [ ] T025 **`fetch_url` returning images.** Round `008`'s contract refuses a non-text content type by name, and a
-      picture fetched from the network is a second capability with its own ceiling and its own address rules.
+- [X] T024 **Images in MCP results — closed by `019` (round 10).** The round refused this because a screenshot the
+      browser wrote is shown by calling `view_image` on the path the sink returned, and it named the condition that
+      would reverse the decision: *a server returning an image with no file behind it*. `019` found the milder reason
+      the refusal had missed — the bytes were already in memory, so the second call bought a copy and not a picture —
+      and closed it without removing the sentence or the sink: an `image` part is now collected by
+      `McpContent.FlattenWithImages`, attached by `McpTool` only when the session's model is declared to read images,
+      and still described and still written to `.sharpcoreagent/artifacts/`, because that path is what a resumed
+      transcript keeps. `contracts/mcp-content.md` stands: the text is byte-identical.
+- [X] T025 **`fetch_url` returning images — closed by `019` (round 10).** The reasoning held for every binary and was
+      wrong for exactly four: `019` attaches `image/png`, `image/jpeg`, `image/gif` and `image/webp` when the body
+      arrived whole and the session's model can see, and keeps `008`'s refusal-by-name for everything else — which now
+      names those four types instead of promising that the tool never downloads a binary. The ceiling is the same
+      4 MiB a file goes through, and the fetch's own 2 MiB cut is refused rather than sent as half a picture.
 - [ ] T026 **OCR, local vision, captioning.** The bytes go to the model the developer chose. A local decoder is a
       dependency, a licence and a second opinion nobody asked for.
 - [ ] T027 **PDF, SVG, audio and video.** Five extensions are the whole table; a format whose extension would lie is

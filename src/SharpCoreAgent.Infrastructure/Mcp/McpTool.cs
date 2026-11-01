@@ -1,6 +1,8 @@
 using System.Globalization;
 using SharpCoreAgent.Domain.Conversation;
+using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Infrastructure.Images;
 using SharpCoreAgent.Infrastructure.Tools;
 
 namespace SharpCoreAgent.Infrastructure.Mcp;
@@ -90,6 +92,10 @@ public sealed class McpTool : ITool
             return ToolResult.Failure(toolCall.Id, Definition.Name, text) with { IsTruncated = truncated };
         }
 
+        // The ceiling and the model gate come after the bound, so the description a server wrote arrives whole and the
+        // reasons for what could not be attached are appended to it rather than counted against it.
+        var images = Attach(context.Model, answer.Images, ref text);
+
         var effects = new List<ToolEffect>();
         if (Safety == ToolSafety.Destructive)
         {
@@ -105,8 +111,90 @@ public sealed class McpTool : ITool
             effects.Add(new ToolEffect(ToolEffectKind.Created, relative));
         }
 
-        return ToolResult.Success(toolCall.Id, Definition.Name, text, [.. effects]) with { IsTruncated = truncated };
+        return ToolResult.Success(toolCall.Id, Definition.Name, text, [.. effects]) with
+        {
+            IsTruncated = truncated,
+            Images = images,
+        };
     }
+
+    /// <summary>
+    /// Turns the server's image parts into the pictures the loop will attach, and says why the rest were not.
+    /// </summary>
+    /// <param name="model">The model the conversation is using, or null when the caller did not say.</param>
+    /// <param name="images">The parts the server returned, in its order.</param>
+    /// <param name="text">The result text, to which one line per un-attached picture is appended.</param>
+    /// <returns>The pictures to attach, in the server's order, at most <see cref="TextLimits.MaxImagesPerResult"/>.</returns>
+    /// <remarks>
+    /// Three reasons a picture does not travel, and each is written down instead of being dropped: a type no provider
+    /// accepts, a payload over the ceiling, and a result that already carries its four. Silence would be worse than any
+    /// of them — a model told only that an image exists describes what it imagines — so a session whose model cannot
+    /// see is told that too, once, in the same shape.
+    /// </remarks>
+    private static List<ImageContent> Attach(
+        ModelDescriptor? model,
+        IReadOnlyList<McpImage> images,
+        ref string text)
+    {
+        if (images.Count == 0)
+        {
+            return [];
+        }
+
+        if (model is { SupportsImages: false })
+        {
+            // Only a declared text-only model is worth telling: a caller that named no model at all — a test, a host
+            // that never filled the context in — is not a session whose reader was chosen, and round 4's description
+            // is already the whole answer for it.
+            text = Append(
+                text,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[{images.Count} image(s) in this result were not attached: {model.QualifiedName} is declared text-only in this build and cannot read images. Do not describe what they contain; name the file and let the developer look.]"));
+            return [];
+        }
+
+        if (model is not { SupportsImages: true })
+        {
+            return [];
+        }
+
+        var attached = new List<ImageContent>(Math.Min(images.Count, TextLimits.MaxImagesPerResult));
+        var notes = new List<string>();
+
+        foreach (var image in images)
+        {
+            if (!ImagePayload.TryCreate(
+                    image.MimeType,
+                    image.Base64,
+                    TextLimits.MaxImageBytes,
+                    out var content,
+                    out var reason))
+            {
+                notes.Add(string.Create(CultureInfo.InvariantCulture, $"[{image.MimeType}: not attached — {reason}]"));
+                continue;
+            }
+
+            if (attached.Count == TextLimits.MaxImagesPerResult)
+            {
+                notes.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[{content.MediaType}: not attached — this result already carries {TextLimits.MaxImagesPerResult} pictures, which is the most one answer shows]"));
+                continue;
+            }
+
+            attached.Add(content);
+        }
+
+        foreach (var note in notes)
+        {
+            text = Append(text, note);
+        }
+
+        return attached;
+    }
+
+    private static string Append(string text, string line) => string.Concat(text, "\n\n", line);
 
     private static string Describe(McpToolInfo info, McpServerConnection connection) =>
         string.IsNullOrWhiteSpace(info.Description)

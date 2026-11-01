@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Infrastructure.Images;
 using SharpCoreAgent.Infrastructure.Web;
 
 namespace SharpCoreAgent.Infrastructure.Tools;
@@ -24,6 +25,12 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// this tool is given is not the model adapters' client, so a provider key cannot be attached to it. The third is that
 /// the answer says exactly what happened: the final URL after redirects, the status, the type, how many bytes were read
 /// and whether the text was cut, so the model can tell a whole page from a fragment.
+/// </para>
+/// <para>
+/// The one binary it returns is a picture, for the four media types a provider accepts, a body that arrived whole, a
+/// payload inside the ceiling and a session whose model declared it can see — round 10's rule, applied here rather than
+/// in a second table. Every other binary keeps the refusal round 2 fixed, which is why that refusal names the four
+/// types now instead of promising that nothing binary is ever downloaded.
 /// </para>
 /// </remarks>
 public sealed class FetchUrlTool : ITool
@@ -58,7 +65,7 @@ public sealed class FetchUrlTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Fetch one absolute http or https URL and return the page as readable text. Reports the final URL after redirects, the status, the content type and whether the text was cut. Refuses loopback, private, link-local and cloud-metadata addresses unless the developer named the host. Sends no cookie and no credential, and never runs JavaScript.",
+        "Fetch one absolute http or https URL and return the page as readable text — or, when the response is a picture and this session's model can see images, the picture itself, attached to the next message. Reports the final URL after redirects, the status, the content type and whether the text was cut. Refuses loopback, private, link-local and cloud-metadata addresses unless the developer named the host. Sends no cookie and no credential, and never runs JavaScript.",
         Schema);
 
     /// <inheritdoc />
@@ -140,7 +147,7 @@ public sealed class FetchUrlTool : ITool
                     continue;
                 }
 
-                return await AnswerAsync(toolCall, requested, current, hops, response, maxChars, token).ConfigureAwait(false);
+                return await AnswerAsync(toolCall, context, requested, current, hops, response, maxChars, token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -250,15 +257,17 @@ public sealed class FetchUrlTool : ITool
     /// Turns a finished response into the result the model reads.
     /// </summary>
     /// <param name="toolCall">The call being answered.</param>
+    /// <param name="context">The turn the call belongs to, whose model decides whether a picture can be attached.</param>
     /// <param name="requested">The URL the model wrote.</param>
     /// <param name="finalUri">The URL that answered, after redirects.</param>
     /// <param name="hops">How many redirects were followed.</param>
     /// <param name="response">The response, headers read and body not yet consumed.</param>
     /// <param name="maxChars">The character ceiling in force for this call.</param>
     /// <param name="cancellationToken">Cancels the body read.</param>
-    /// <returns>The result: the header block, then the text.</returns>
+    /// <returns>The result: the header block, then the text or the picture.</returns>
     private async ValueTask<ToolResult> AnswerAsync(
         ToolCall toolCall,
+        ToolInvocationContext context,
         Uri requested,
         Uri finalUri,
         int hops,
@@ -293,12 +302,16 @@ public sealed class FetchUrlTool : ITool
             header.Append('\n').Append("redirected   from ").Append(requested.AbsoluteUri);
         }
 
+        // A picture is the one binary this tool returns, and only when everything about it lines up: a type a provider
+        // accepts, a body that arrived whole, a payload inside the ceiling, and a session whose model can see.
+        if (ImagePayload.IsImage(mediaType))
+        {
+            return Picture(toolCall, context, header.ToString(), finalUri, mediaType!, bytes, stoppedByBytes);
+        }
+
         if (!IsTextual(mediaType, bytes))
         {
-            return ToolResult.Failure(
-                toolCall.Id,
-                Name,
-                $"{header}\n\nthe response is {mediaType ?? "of an unknown type"}, which fetch_url does not read: it returns text and never downloads a binary. Cite the URL and let the developer open it.");
+            return ToolResult.Failure(toolCall.Id, Name, NotAttached(header.ToString(), mediaType));
         }
 
         var text = EncodingFor(contentType?.CharSet, bytes)
@@ -371,6 +384,88 @@ public sealed class FetchUrlTool : ITool
             await collected.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Answers with the picture the response carried, or with the reason it was not attached.
+    /// </summary>
+    /// <param name="toolCall">The call being answered.</param>
+    /// <param name="context">The turn the call belongs to, whose model decides whether a picture can be attached.</param>
+    /// <param name="header">The block of facts every answer begins with.</param>
+    /// <param name="finalUri">The URL that answered, after redirects.</param>
+    /// <param name="mediaType">The type the response claimed.</param>
+    /// <param name="bytes">The body, as read.</param>
+    /// <param name="stoppedByBytes">Whether the body was cut at the fetch ceiling.</param>
+    /// <returns>The image, or a refusal that names the number that stopped it.</returns>
+    /// <remarks>
+    /// A truncated picture is refused rather than attached: base64 of half a PNG decodes to a corrupt image, and the
+    /// provider's rejection would arrive as a status code far from the reason. The four conditions are checked
+    /// cheapest-first, and each refusal keeps the header block that says what was actually fetched.
+    /// </remarks>
+    private ToolResult Picture(
+        ToolCall toolCall,
+        ToolInvocationContext context,
+        string header,
+        Uri finalUri,
+        string mediaType,
+        byte[] bytes,
+        bool stoppedByBytes)
+    {
+        if (!ImagePayload.TryMediaType(mediaType, out var imageType))
+        {
+            return ToolResult.Failure(toolCall.Id, Name, NotAttached(header, mediaType));
+        }
+
+        if (stoppedByBytes || bytes.Length > TextLimits.MaxImageBytes)
+        {
+            var reason = stoppedByBytes
+                ? string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"only {CodeIndexFormat.Size(bytes.Length)} of it arrived, because this fetch stops at {CodeIndexFormat.Size(_options.MaxBytes)} and a picture cut in half is not one")
+                : string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"it is {CodeIndexFormat.Size(bytes.Length)} decoded, over the {CodeIndexFormat.Size(TextLimits.MaxImageBytes)} ceiling a request accepts");
+
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{header}\n\nthe response is {imageType} and it was not attached: {reason}. Cite the URL and let the developer open it."));
+        }
+
+        if (context.Model is not { SupportsImages: true })
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{header}\n\nthe response is {imageType}, {CodeIndexFormat.Size(bytes.Length)}, and it was not attached: {context.Model?.QualifiedName ?? "the model for this turn"} is not declared to read images. Do not describe what it contains; cite the URL and let the developer open it."));
+        }
+
+        return ToolResult.Image(
+            toolCall.Id,
+            Name,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{header}\n\n{imageType} · {CodeIndexFormat.Size(bytes.Length)} is attached to the next message."),
+            new ImageContent { MediaType = imageType, Base64 = Convert.ToBase64String(bytes) })
+            with
+        {
+            Effects = [new ToolEffect(ToolEffectKind.Read, finalUri.AbsoluteUri)],
+        };
+    }
+
+    /// <summary>
+    /// The sentence for a body this tool read and did not attach.
+    /// </summary>
+    /// <param name="header">The block of facts every answer begins with.</param>
+    /// <param name="mediaType">The type the response claimed, or null when it named none.</param>
+    /// <returns>The header block, then one sentence naming what fetch_url does return.</returns>
+    private static string NotAttached(string header, string? mediaType) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{header}\n\nthe response is {mediaType ?? "of an unknown type"} and it was not attached: fetch_url returns text and the four picture types ({ImagePayload.AcceptedList}), and nothing else. Cite the URL and let the developer open it.");
 
     private static bool IsHtml(string? mediaType) =>
         mediaType is not null &&
