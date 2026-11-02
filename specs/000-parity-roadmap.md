@@ -59,6 +59,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31 as `5a01290`; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
 | 13 | [`022-ide-client-config`](022-ide-client-config/spec.md) | `mcp config --client visualstudio`, and `--write` — the block merged into the one `.mcp.json` two IDEs read, instead of a redirect that truncates (landed 2026-11-02 as `ab07988`: `McpClientKind.VisualStudio`, `McpClientSnippets.TryShape`/`Entry`, `McpConfigWriter`, 25 tests) | 0, and `013` (landed) |
 | 14 | [`023-ide-surface`](023-ide-surface/spec.md) | `ui --serve` — the index as a page on `127.0.0.1`, from one builder both it and `index --status --json` read (landed 2026-11-02 as `1eb0164`: `UiCommand`, `UiServer`, `UiPage`, `UiEndpoint`, `IndexStatusDocument`, 62 tests) | 0, `002` and `013` (landed) |
+| 15 | [`024-ide-agent-definition`](024-ide-agent-definition/spec.md) | `ide agent` and `ide tasks` — the profile that puts this server's five tools in the editor's agent picker, and the task that rebuilds the index, both written only where they may be | 0, `013` and `022` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -70,7 +71,8 @@ key, `013` is the evidence server, `015` is F# code intelligence —
 server, `016` is model roles, `017` is the image view, `019` is image ingress — round 10 — `020` is the turn's image
 budget — round 11 — `021` is image deduplication — round 12 — `022` is the IDE's client configuration — round 13 —
 `023` is the IDE surface itself, a page for the developer rather than for another agent — round 14 — and
-`014` was never assigned.)
+`024` is the agent definition, the profile such an editor lists and the task such a workspace runs — round 15 —
+while `014` was never assigned.)
 
 ## Decision record
 
@@ -615,6 +617,42 @@ The probe is part of the record rather than an anecdote: non-elevated on this ma
 `http://127.0.0.1:0/` is refused with code 87, a second listener on the same prefix is 183, a port a plain socket holds
 is 32, and port 80 is access-denied at 5 — which is why `--port` checks `0–65535` and lets the bind decide.
 
+## Round 15 — `024-ide-agent-definition` (landed 2026-11-02 as `db8ef91`)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–14 took. Rounds 6 and 13 gave
+other *agents* this repository's index; round 22 gave the IDE's own MCP client its file; round 23 gave the developer a
+page. What none of them did was put the agent itself in the editor's picker, carrying a description and a tool list —
+because a configured server is a set of tools, and an agent is the thing that decides to use them. `ide agent` does that;
+`ide tasks` gives the same binary a keystroke in the task list. The argument is
+[`024-ide-agent-definition/spec.md`](024-ide-agent-definition/spec.md); the two document formats, quoted from Microsoft's
+references, the eleven decisions and the two things this round could not verify are in its `plan.md`.
+
+**Ships**: `sharpcoreagent ide agent [--write]` — prints, or writes, `.github/agents/sharpcoreagent.agent.md`: a
+`description`, a `tools` list naming the five published tools as `sharpcoreagent/<tool>`, and a prompt that tells the agent
+to quote the `path:start-end` it was given and to report a missing index rather than guess. The tool list is built from
+`McpServerCatalog.PublishedToolNames` — the same array `McpServerPublishedSet` filters by — so the profile cannot
+advertise a tool the server stopped publishing. `--write` replaces the file whole only when the marker on its last line is
+there, and refuses at `7` otherwise. `sharpcoreagent ide tasks [--write]` files one task, `sharpcoreagent: index`, whose
+command is this binary's absolute path from the same `Invocation` answer the MCP blocks use, merged by label so a second
+run replaces rather than duplicates. `--write` is the flag `022` added, renamed `Write` because two commands read it now;
+`WorkspaceFileWriter` and its exception are `022`'s, widened.
+
+**Does not ship**: `group`, `problemMatcher` and `type` in the task (the three keys the page describes only in prose, and a
+guessed matcher is a file the editor rejects), `--force`, a prompt file, an instructions file, an agent skill,
+`mcp-servers` inside the profile, Visual Studio 2026's own agent format, and the VS Code extension — which is still
+`023`'s next round and still needs a TypeScript toolchain.
+
+**Evidence**: fifty-four cases, all new except two amended where a message changed on purpose. `AgentProfileTests` (13:
+the frontmatter's two keys and the four it decided against, the tool list equal to the published set and in order, every
+tool named in the body, the marker last, one line ending throughout), `IdeCommandParsingTests` (25: both actions, no
+action, an unknown one, an operand, and the flags that name a turn, a client, a network, an index action or the panel),
+`IdeTasksWriteTests` (8: created, merged around another task and another key, replaced in place, unchanged, and the
+comment dialect refused at `7`), `IdeAgentWriteTests` (6: created, unchanged, replaced, somebody else's file refused), and
+two rows in `HelpTextTests`. Build 0 warnings; suite 1,472 passed, 0 failed, 0 skipped — 54 this round's, against 1,418.
+
+The binary was run against this repository: the profile it wrote is committed, the task list it wrote was read and
+deleted, because its `command` is one machine's absolute path and D8 said so before it happened.
+
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
 empty checkbox.
@@ -630,6 +668,7 @@ empty checkbox.
 | 4 | `010` T031–T034 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured — T035 (*showing the screenshot to the model as an image*) is closed by `017` |
 | 6 | `013` SC-005 → the index lease | the served call costs 3.2 s at p95 against a 300 ms budget, re-measured 2026-11-01 on 12 889 passages (4 425 ms on 12 420 when it was first taken). The hop costs nothing: in-process and stdio differ by 6 to 283 ms on calls of 2.5–3.2 s, with neither side consistently the slower one. The cost is the snapshot every call rebuilds — `LeasedCodeIndex` opens a new index per operation, so the `build_id`-keyed cache in `IndexReader` never survives a call and every answer re-reads 12 889 rows of text and 512-wide embeddings. Opening the file itself is 0.36 s, which rules the open out. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is open is the work the restatement does not do — one snapshot shared across per-call handles, `warm` defined in the harness, and the index size that makes the load expensive at all (`002` T034, `research.md` D17) |
 | 9 | `017` T024–T033 | OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, transcript trimming, an image token estimate, and serving `view_image` over `mcp serve` — T024 (*images inside MCP results*) and T025 (*`fetch_url` returning images*) are closed by `019`, T031's per-turn budget clause by `020`, and T031's deduplication clause by `021`, which is why the row no longer claims any of them |
+| 15 | `024` — five | `group`, `problemMatcher` and `type` in the written task (the page describes them in prose this round did not read, and a guessed matcher is a file the editor rejects); `--force`; a prompt file, an instructions file and an agent skill, each its own format; `mcp-servers` inside the profile, which the reference says IDE agents ignore; and Visual Studio 2026's own agent definition, whose format and location this round read neither of |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
 | — | `006` T017–T018 | `config edit` and per-provider sections. T016 — a first-run key prompt with restricted permissions — is closed by `016`, which ships the paste, the no-echo read, the owner-only file beside the settings document and the settings entry that makes the next run find it; rotation stays out of scope there and is named in `016`'s spec |
 
