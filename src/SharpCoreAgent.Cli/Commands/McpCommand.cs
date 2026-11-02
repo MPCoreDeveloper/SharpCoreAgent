@@ -151,7 +151,7 @@ internal static class McpCommand
         await error.WriteLineAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"sharpcoreagent mcp serve: {workspace.Root} · index {IndexCommand.State(status.Freshness)} ({status.Files} files, {status.Chunks} passages) · {session.PublishedToolCount} tools")
+                $"sharpcoreagent mcp serve: {workspace.Root} · index {IndexStatusDocument.State(status.Freshness)} ({status.Files} files, {status.Chunks} passages) · {session.PublishedToolCount} tools")
                 .AsMemory(),
             cancellationToken).ConfigureAwait(false);
 

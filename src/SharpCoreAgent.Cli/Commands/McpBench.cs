@@ -193,7 +193,7 @@ internal static class McpBench
         await error.WriteLineAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"sharpcoreagent mcp bench: {workspace.Root} · index {IndexCommand.State(status.Freshness)} ({status.Files} files, {status.Chunks} passages) · {queries.Count} queries")
+                $"sharpcoreagent mcp bench: {workspace.Root} · index {IndexStatusDocument.State(status.Freshness)} ({status.Files} files, {status.Chunks} passages) · {queries.Count} queries")
                 .AsMemory(),
             cancellationToken).ConfigureAwait(false);
 

@@ -202,6 +202,7 @@ sharpcoreagent config [show|get|set|unset|path]   settings, and where each value
 sharpcoreagent setup                        the preferences, asked for one at a time
 sharpcoreagent mcp serve [options]          this workspace's index as an MCP server on stdio
 sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
+sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
 sharpcoreagent --help | --version
 ```
 
@@ -253,7 +254,10 @@ keep working on the file that needs repairing.
 | `--credential-file <path>` | all | none — `NAME=value` keys read first; they win over the environment |
 | `--session <path>` | run, chat | `<workspace>/.sharpcoreagent/sessions/<timestamp>.json` |
 | `--no-session` | run, chat | off — write no transcript |
-| `--json` | run, index | off — one JSON object per event, or per index report |
+| `--json` | run, index, ui | off — one JSON object per event, per index report, or the panel's endpoint |
+| `--serve` | ui | the panel: `ui` has no other action, so `ui` alone exits `2` |
+| `--port <n>` | ui | `0` — `0`–`65535`; `0` picks a free port, and one that cannot be bound exits `2` with the port named |
+| `--refresh` | ui | off — walk the index before each answer, inside `--index-budget` |
 | `--color <mode>` | run, chat, models | `auto` — `auto`, `always`, `never`; `auto` honours `NO_COLOR`, `TERM=dumb` and redirection |
 | `--mode <mode>` | run, chat | `act` — `plan` advertises and allows only read-only tools |
 | `--quiet` / `--verbose` | run, chat | off / off — `--verbose` also names each turn as it starts |
@@ -745,6 +749,32 @@ most: Visual Studio 2026 reads `.mcp.json` from the solution folder, and a serve
 its tool list is almost always a block written under the wrong key, in the wrong file, or without
 `"type": "stdio"`. `--client codex --write` is refused rather than attempted: `config.toml` holds
 whichever tables it already holds, and this repository has no TOML writer to keep them.
+
+### Seeing it
+
+The same index, as a page, in the editor you already have open:
+
+```powershell
+sharpcoreagent index                     # once: nothing here builds an index for you
+sharpcoreagent ui --serve                # http://127.0.0.1:<port>/ — the URL is the first line printed
+sharpcoreagent ui --serve --port 8080    # a port you chose
+sharpcoreagent ui --serve --refresh      # walk the tree before each answer, inside --index-budget
+```
+
+Open that URL in a browser, or inside the editor: VS Code's *Simple Browser* (`Ctrl+Shift+P` → **Simple
+Browser: Show**) and a Visual Studio browser window both load it. The panel is one self-contained page —
+inline stylesheet, one script, one fetch — which renders in the editor's light or dark theme and shows
+every number `index --status --json` prints, because both surfaces are built by one function.
+`GET /` is the page; `GET /api/status.json` is that same object, byte for byte, for a script or a
+dashboard.
+
+The default reads the index and never writes it: a page load has `index --status` semantics, so a panel
+left open overnight cannot start a walk in a repository nobody is watching. `--refresh` is the opt-in, and
+`--index-budget` bounds it. Nothing leaves the machine: the listener binds `127.0.0.1` and only
+`127.0.0.1` — there is no `--host` — a request whose `Host` header is not that address is refused so a
+hostile page cannot reach it by DNS rebinding, and no answer is cached. Ctrl+C stops it at `0`; a port
+nothing can bind exits `2` with the port named. Opening the URL is your action: nothing is started for
+you.
 
 ### Measuring it
 

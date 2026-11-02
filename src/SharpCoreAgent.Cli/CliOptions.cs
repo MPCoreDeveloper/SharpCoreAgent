@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using SharpCoreAgent.DependencyInjection;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Errors;
@@ -37,6 +37,9 @@ internal enum CliCommand
 
     /// <summary>Serve this workspace's index to another agent over stdio.</summary>
     Mcp,
+
+    /// <summary>Serve this workspace's index as a page on a loopback port.</summary>
+    Ui,
 }
 
 /// <summary>What <c>mcp</c> was asked to do.</summary>
@@ -356,6 +359,36 @@ internal sealed record CliOptions
     /// </remarks>
     public bool NoRefresh { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether <c>ui</c> was asked to serve the panel.
+    /// </summary>
+    /// <remarks>
+    /// <c>--serve</c>, and it is not optional: <c>ui</c> on its own prints a usage error rather than choosing a server,
+    /// because a command that binds a port should say so on its own command line. A flag rather than a verb like
+    /// <c>mcp serve</c> because there is one action today and <c>--serve</c> leaves room for a second one that is not
+    /// a listening socket at all — an export of the page to a file, say — without either spelling being ambiguous.
+    /// </remarks>
+    public bool UiServe { get; init; }
+
+    /// <summary>
+    /// Gets the port the panel binds, or 0 for one chosen at bind time.
+    /// </summary>
+    /// <remarks>
+    /// Zero is the default and means the same thing as <c>--port 0</c>. It is not passed to the listener: the platform
+    /// refuses a prefix whose port is 0, so a port is picked first and this value is only ever the developer's request.
+    /// </remarks>
+    public int UiPort { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether <c>ui --serve</c> refreshes the index before answering.
+    /// </summary>
+    /// <remarks>
+    /// Off by default, which is the opposite of <c>mcp serve</c> and deliberate: the caller there is an agent that asked a
+    /// question, while a page load is a developer looking at what the index already says. <c>--index-budget</c> bounds the
+    /// walk when it is on, so the refresh cannot outlive a browser's patience.
+    /// </remarks>
+    public bool UiRefresh { get; init; }
+
     /// <summary>Projects the command line onto the container's options.</summary>
     /// <returns>The options <c>AddSharpCoreAgent</c> consumes.</returns>
     public SharpCoreAgentOptions ToSharpCoreAgentOptions() => new()
@@ -471,24 +504,38 @@ internal sealed record CliOptions
         // from an export or a settings file, and neither is a decision about this command.
         if (parsed.Command == CliCommand.Mcp)
         {
-            RejectModelFlags(parsed);
+            RejectModelFlags(parsed, "mcp serve", "For example: sharpcoreagent mcp serve --workspace .");
+        }
+
+        // The same reason, one command over: `ui --serve` runs no model, keeps no transcript and answers no approval
+        // question, and `-y` names the approval setting as surely as `--approval allow` does.
+        if (parsed.Command == CliCommand.Ui)
+        {
+            RejectTurnFlags(parsed);
         }
 
         return ApplySettings(parsed, loadSettings, environment);
     }
 
     /// <summary>
-    /// Rejects the flags that name a model, an endpoint or a transcript on <c>mcp serve</c>.
+    /// Rejects the flags that name a model, an endpoint or a transcript on a command that runs no turn.
     /// </summary>
     /// <param name="options">The parsed command line.</param>
+    /// <param name="command">The command being refused, for the message.</param>
+    /// <param name="example">The line that shows the command without those flags.</param>
     /// <exception cref="CliUsageException">One of those flags was given.</exception>
     /// <remarks>
     /// A capability that cannot apply is a mistake in the command line, not a no-op: a developer who typed
     /// <c>--model</c> and watched the server start would reasonably believe a model was answering. The check reads
     /// the flags that were typed rather than the merged values, because an exported
     /// <c>SHARPCOREAGENT_PROVIDER</c> is a property of the shell and not a decision about this command.
+    /// <para>
+    /// Two commands answer to this because both are outside the turn: <c>mcp serve</c>, whose stdout is a protocol, and
+    /// <c>ui --serve</c>, which renders an index and opens no conversation. The message names which one, so the refusal
+    /// reads as a fact about the command the developer typed.
+    /// </para>
     /// </remarks>
-    private static void RejectModelFlags(CliOptions options)
+    private static void RejectModelFlags(CliOptions options, string command, string example)
     {
         var named = options.CommandLineSettings;
 
@@ -502,8 +549,8 @@ internal sealed record CliOptions
             || options.SessionPath is not null)
         {
             throw new CliUsageException(
-                "mcp serve runs no model and keeps no transcript: --provider, --model, --planner, --executor, --reviewer, --base-url, --fallback and --session do not apply.",
-                "For example: sharpcoreagent mcp serve --workspace .");
+                $"{command} runs no model and keeps no transcript: --provider, --model, --planner, --executor, --reviewer, --base-url, --fallback and --session do not apply.",
+                example);
         }
     }
 
@@ -743,11 +790,19 @@ internal sealed record CliOptions
         // `--no-refresh` belongs to the command that keeps an index open between requests. Everywhere else a
         // refresh is already bounded by --index-budget, and a flag that was silently ignored would be a promise
         // nobody kept. Help and the version are exempt because they answer a question about the build.
-        if (command is not (CliCommand.Mcp or CliCommand.Help or CliCommand.Version))
+        if (command is not (CliCommand.Mcp or CliCommand.Ui or CliCommand.Help or CliCommand.Version))
         {
             RejectNoRefresh(options);
             RejectClientFlag(options);
             RejectWriteFlag(options);
+        }
+
+        // The panel's flags are refused everywhere else for the reason every misplaced flag is: a developer who typed
+        // `--port 8080` and watched a turn start would believe something is listening on 8080. `ui` is exempt because
+        // that is the command that reads them.
+        if (command is not CliCommand.Ui)
+        {
+            RejectUiFlags(options);
         }
 
         switch (command)
@@ -790,7 +845,7 @@ internal sealed record CliOptions
 
                 if (options.Json)
                 {
-                    throw new CliUsageException("--json is only valid with run.");
+                    throw new CliUsageException("--json is only valid with run and ui.");
                 }
 
                 return options with { Command = CliCommand.Chat };
@@ -826,7 +881,7 @@ internal sealed record CliOptions
                 if (options.Json)
                 {
                     throw new CliUsageException(
-                        "--json is only valid with run and index.",
+                        "--json is only valid with run, index and ui.",
                         "Use 'sharpcoreagent config get <name>' for one value a script can read.");
                 }
 
@@ -840,7 +895,7 @@ internal sealed record CliOptions
                 if (options.Json)
                 {
                     throw new CliUsageException(
-                        "--json is only valid with run and index.",
+                        "--json is only valid with run, index and ui.",
                         "Use 'sharpcoreagent config get <name>' for one value a script can read.");
                 }
 
@@ -864,11 +919,15 @@ internal sealed record CliOptions
                     // --json would promise a second, incompatible one. The bench prints one table for the same
                     // reason, in the other direction: a number is read, not parsed.
                     throw new CliUsageException(
-                        "--json is only valid with run and index.",
+                        "--json is only valid with run, index and ui.",
                         "mcp serve's stdout is JSON-RPC and mcp bench prints one table; diagnostics go to stderr.");
                 }
 
                 return FinishMcp(options, positionals);
+
+            case CliCommand.Ui:
+                // Its own flags are the whole command, so the refusals live in FinishUi where the action is known.
+                return FinishUi(options, positionals);
 
             default:
                 RejectIndexFlags(options);
@@ -1069,6 +1128,124 @@ internal sealed record CliOptions
                     $"'{positionals[0]}' is not an mcp action.",
                     "The actions are serve, config and bench.");
         }
+    }
+
+    /// <summary>
+    /// Reads the flags of <c>ui</c>, whose one action is <c>--serve</c>.
+    /// </summary>
+    /// <param name="options">The options the flags produced.</param>
+    /// <param name="positionals">The arguments after the command.</param>
+    /// <returns>The options with the panel's settings.</returns>
+    /// <exception cref="CliUsageException">An operand was given, <c>--serve</c> is missing, or the index was turned off.</exception>
+    /// <remarks>
+    /// A flag rather than a verb like <c>mcp serve</c>, because the command has one action: <c>ui</c> on its own is a
+    /// usage error rather than a server nobody asked to start, and the operand refusal is what tells a developer who
+    /// typed <c>ui serve</c> out of <c>mcp</c>'s habit which spelling this command uses. The flags that describe a turn
+    /// are refused in <see cref="Parse"/> instead, because which of them were typed is only known once the scan has
+    /// named them.
+    /// </remarks>
+    private static CliOptions FinishUi(CliOptions options, List<string> positionals)
+    {
+        if (positionals.Count > 0)
+        {
+            throw new CliUsageException(
+                $"ui does not take '{positionals[0]}'.",
+                "For example: sharpcoreagent ui --serve");
+        }
+
+        if (!options.UiServe)
+        {
+            throw new CliUsageException(
+                "ui needs --serve.",
+                "For example: sharpcoreagent ui --serve --port 0");
+        }
+
+        // The panel renders the index and nothing else, so --no-index would leave it with an empty page whose emptiness
+        // looked like an empty repository. Refused with the command that fills it.
+        if (!options.IndexEnabled)
+        {
+            throw new CliUsageException(
+                "--no-index leaves ui --serve with nothing to show.",
+                "The panel reads the index; build it with 'sharpcoreagent index'.");
+        }
+
+        return options with { Command = CliCommand.Ui };
+    }
+
+    /// <summary>
+    /// Rejects the flags that describe a turn on <c>ui --serve</c>.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">A flag with nothing to act on was given.</exception>
+    /// <remarks>
+    /// The command opens an index and a socket: it runs no model, keeps no transcript, asks no approvals, starts no
+    /// server and fetches nothing. Each flag is refused by the helper its owning command already has, so <c>--client</c>
+    /// says where a client belongs whether it was typed on <c>index</c> or on <c>ui</c>. Only the two whose message names
+    /// another command — the model flags and <c>--no-refresh</c> — are restated here, because their message would
+    /// otherwise send the developer to <c>mcp serve</c>.
+    /// </remarks>
+    private static void RejectTurnFlags(CliOptions options)
+    {
+        RejectModelFlags(options, "ui --serve", "For example: sharpcoreagent ui --serve");
+        RejectClientFlag(options);
+        RejectWriteFlag(options);
+        RejectWebFlags(options);
+        RejectMcpFlags(options);
+        RejectAttachmentRoots(options);
+
+        if (options.NoRefresh)
+        {
+            // Not "does not apply": the panel is opt-in, so --no-refresh asks for what already happens, and the useful
+            // answer is the flag that asks for the opposite.
+            throw new CliUsageException(
+                "--no-refresh applies to mcp serve; ui --serve reads the index as it is unless --refresh is given.",
+                "For example: sharpcoreagent ui --serve --refresh");
+        }
+
+        // Read the flag, not the merged value: an `approval = allow` in the settings file is a default for turns and
+        // not a decision about a page. `-y` and `--yes` count, because they name the same setting.
+        if (options.CommandLineSettings.Contains("approval"))
+        {
+            throw new CliUsageException(
+                "ui --serve asks no questions, so --approval does not apply.",
+                "The panel only reads the index; for a turn that edits files use 'sharpcoreagent run'.");
+        }
+    }
+
+    /// <summary>
+    /// Rejects <c>--serve</c>, <c>--port</c> and <c>--refresh</c> on the commands that serve no panel.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException">One of the panel's flags was given to another command.</exception>
+    /// <remarks>
+    /// The same reasoning as <see cref="RejectWebFlags"/>: a developer who typed <c>--port 8080</c> and watched a turn
+    /// start would believe a page was being served on 8080. The port is named in the message because the developer
+    /// already chose it and will otherwise look for the mistake in the number.
+    /// </remarks>
+    private static void RejectUiFlags(CliOptions options)
+    {
+        if (!options.UiServe && options.UiPort == 0 && !options.UiRefresh)
+        {
+            return;
+        }
+
+        string named;
+        if (options.UiServe)
+        {
+            named = "--serve";
+        }
+        else if (options.UiPort != 0)
+        {
+            named = string.Create(CultureInfo.InvariantCulture, $"--port {options.UiPort}");
+        }
+        else
+        {
+            named = "--refresh";
+        }
+
+        throw new CliUsageException(
+            $"{named} belongs to the ui command.",
+            "For example: sharpcoreagent ui --serve --port 8080");
     }
 
     /// <summary>
@@ -1753,6 +1930,17 @@ internal sealed record CliOptions
             case "--prune":
                 return options with { IndexPrune = true };
 
+            // The ui command's three flags. `--serve` is a switch rather than a verb because the command has one action
+            // today; `--port` is validated here so a value out of range is a usage error before any socket is touched.
+            case "--serve":
+                return options with { UiServe = true };
+
+            case "--port":
+                return options with { UiPort = UiEndpoint.ParsePort(TakeValue(args, ref index, name)) };
+
+            case "--refresh":
+                return options with { UiRefresh = true };
+
             default:
                 throw new CliUsageException(
                     $"unknown option '{name}'.",
@@ -1815,6 +2003,11 @@ internal sealed record CliOptions
             return CliCommand.Mcp;
         }
 
+        if (Is(argument, "ui"))
+        {
+            return CliCommand.Ui;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -1827,7 +2020,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models, index, setup, config and mcp.");
+            "Commands are run, chat, models, index, setup, config, mcp and ui.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)

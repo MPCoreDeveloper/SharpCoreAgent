@@ -32,6 +32,7 @@ internal static class HelpText
           sharpcoreagent mcp serve [options]           this workspace's index as an MCP server on stdio
           sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
           sharpcoreagent mcp bench [options]           the twelve fixture questions, measured against the source
+          sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
           sharpcoreagent --help | --version
 
           With no command and a terminal on both ends, a session starts. When either stream is
@@ -172,6 +173,26 @@ internal static class HelpText
           is a failure rather than a row: the bench is where 'the server adds nothing' is a
           number and not a claim.
 
+        Panel
+          sharpcoreagent ui --serve [options]         the index as a page, until Ctrl+C
+          --serve                  ui          —           serve the panel; there is no other ui action
+          --port <n>               ui          0           the port to bind; 0 picks a free one
+          --refresh                ui          off         walk the index before each answer, inside --index-budget
+          --json                   ui          off         the object naming the URL, then the panel keeps serving
+
+          GET / is the page and GET /api/status.json is the object 'index --status --json' prints — the same
+          bytes, built by the same code — and neither is cached, because a cached page would show numbers
+          that are no longer the index's. Nothing else is answered: any other path, any method but GET, and
+          any Host header that is not 127.0.0.1:<port> gets 404 or 403 with an empty body, because a
+          loopback listener that answers any Host is reachable from a hostile page by DNS rebinding.
+
+          It reads the index and never writes it. A page load does not walk the tree: that is what --refresh
+          adds, bounded by --index-budget, so the safe behaviour is the one that happens. The prefix is
+          127.0.0.1 and there is no --host — the page carries this repository's path and counts, and nothing
+          here is published to a network. Opening the URL is your action: VS Code's Simple Browser and a
+          Visual Studio browser window both render it. Ctrl+C ends the panel at 0; a port nothing can bind
+          ends it at 2, with the port named and --port as the fix.
+
         Chat
           /help                    every chat command, including /cost, /roles and /review
 
@@ -190,7 +211,7 @@ internal static class HelpText
           prefix; its keys win over the environment, and a blank value counts as unset.
 
         Exit codes
-          0  the turn completed and the transcript was written, or mcp serve reached end of input
+          0  the turn completed and the transcript was written, or mcp serve reached end of input, or the panel stopped
           1  the turn failed: provider error, tool crash or unexpected exception
           2  the command line could not be understood
           3  a credential is missing, or the credential file cannot be read
@@ -210,6 +231,9 @@ internal static class HelpText
           sharpcoreagent chat --mcp "npx -y @modelcontextprotocol/server-filesystem ."
           sharpcoreagent mcp config --client vscode > .vscode/mcp.json
           sharpcoreagent mcp config --client visualstudio --write
+          sharpcoreagent ui --serve
+          sharpcoreagent ui --serve --port 8080 --refresh
+          sharpcoreagent ui --serve --json
         """;
 
     /// <summary>Gets the commands the interactive loop understands.</summary>

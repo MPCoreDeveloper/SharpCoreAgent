@@ -182,6 +182,63 @@ public sealed class HelpTextTests
     }
 
     [Fact]
+    public void TheUsageBlockDocumentsThePanelCommand()
+    {
+        // A command that binds a port is the last one that should be discovered from a changelog: the synopsis line, the
+        // two routes and the loopback-only sentence are all asserted, because each of them answers a question a
+        // developer would otherwise have to answer by reading the source.
+        Assert.Contains("sharpcoreagent ui --serve [options]", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("--port <n>", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("--refresh", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("GET /api/status.json", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("127.0.0.1", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("there is no --host", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("sharpcoreagent ui --serve --port 8080 --refresh", HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThePanelSectionIsGolden()
+    {
+        // The whole section, verbatim, for the reason TheServeSectionIsGolden gives: a paragraph that drifts from the
+        // shipped behaviour is worse than no paragraph at all.
+        string[] section =
+        [
+            "Panel",
+            "  sharpcoreagent ui --serve [options]         the index as a page, until Ctrl+C",
+            "  --serve                  ui          —           serve the panel; there is no other ui action",
+            "  --port <n>               ui          0           the port to bind; 0 picks a free one",
+            "  --refresh                ui          off         walk the index before each answer, inside --index-budget",
+            "  --json                   ui          off         the object naming the URL, then the panel keeps serving",
+            string.Empty,
+            "  GET / is the page and GET /api/status.json is the object 'index --status --json' prints — the same",
+            "  bytes, built by the same code — and neither is cached, because a cached page would show numbers",
+            "  that are no longer the index's. Nothing else is answered: any other path, any method but GET, and",
+            "  any Host header that is not 127.0.0.1:<port> gets 404 or 403 with an empty body, because a",
+            "  loopback listener that answers any Host is reachable from a hostile page by DNS rebinding.",
+            string.Empty,
+            "  It reads the index and never writes it. A page load does not walk the tree: that is what --refresh",
+            "  adds, bounded by --index-budget, so the safe behaviour is the one that happens. The prefix is",
+            "  127.0.0.1 and there is no --host — the page carries this repository's path and counts, and nothing",
+            "  here is published to a network. Opening the URL is your action: VS Code's Simple Browser and a",
+            "  Visual Studio browser window both render it. Ctrl+C ends the panel at 0; a port nothing can bind",
+            "  ends it at 2, with the port named and --port as the fix.",
+        ];
+
+        Assert.Contains(string.Join('\n', section), Normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheExitCodeTableSaysWhatZeroMeansForThePanel()
+    {
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.StartsWith("  0  ", StringComparison.Ordinal));
+
+        Assert.Contains("mcp serve", row, StringComparison.Ordinal);
+        Assert.Contains("panel", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheUsageBlockDocumentsTheBenchCommand()
     {
         // The measurement is only reproducible if a reader can find the command that produces it, and the one thing

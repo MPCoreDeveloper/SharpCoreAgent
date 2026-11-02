@@ -79,6 +79,10 @@ internal static class Program
                 CliCommand.Models => ModelsCommand.Execute(options),
                 CliCommand.Index => await IndexCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
 
+                // The panel. Ctrl+C cancels the token, the listener stops in its own finally, and the command answers 0:
+                // a developer who ended a server they started did not ask for a failure code.
+                CliCommand.Ui => await UiCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
+
                 // The raw handles rather than Console.Out: the protocol is bytes on stdout, and a TextWriter
                 // carrying an encoding decision is exactly what FR-003 forbids.
                 CliCommand.Mcp => await McpCommand.ExecuteAsync(

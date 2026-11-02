@@ -15,6 +15,7 @@ sharpcoreagent config [show|get|set|unset|path]   # settings and their provenanc
 sharpcoreagent mcp serve [options]           # this workspace's index as an MCP server on stdio (013)
 sharpcoreagent mcp config --client <name>    # the block that adds it to claude, vscode, visualstudio or codex (013, 022)
 sharpcoreagent mcp bench [options]           # the fixture questions, measured against the source (013)
+sharpcoreagent ui --serve [options]          # this workspace's index as a page on 127.0.0.1 (023)
 sharpcoreagent --help | --version
 ```
 
@@ -48,7 +49,10 @@ settings file, its precedence and its exit code are in
 | `--credential-file <path>` | all | — | `NAME=value` keys read before the environment; they win over it |
 | `--session <path>` | run, chat | `.sharpcoreagent/sessions/<timestamp>.json` | Transcript file; `chat` resumes one that exists |
 | `--no-session` | run, chat | — | Do not write a transcript |
-| `--json` | run | — | Emit a machine-readable event stream on stdout |
+| `--json` | run, index, ui | — | Emit a machine-readable event stream on stdout; one object for an index report; the endpoint object for `ui --serve` (023) |
+| `--serve` | ui | — | Serve the panel; the only action `ui` has, so `ui` without it exits `2` (023) |
+| `--port <n>` | ui | `0` | The port to bind, `0`–`65535`; `0` picks a free one, and a port that cannot be bound exits `2` with the port named (023) |
+| `--refresh` | ui | — | Walk the index before each answer, inside `--index-budget`; without it a page load never writes (023) |
 | `--quiet` | run, chat | — | Suppress thinking deltas and tool summaries |
 | `--verbose` | run, chat | — | Log request descriptions (host and path only) |
 
@@ -75,6 +79,41 @@ has file modes. The key is then set in the process for the rest of the run, and 
 named no file — the settings document gains `credential-file` pointing at it, so the next run finds it. A
 piped stdin, a declined `[Y/n]` or a blank paste writes nothing and exits `3` with the three routes printed
 (016).
+
+## The panel (`ui --serve`) (023)
+
+`sharpcoreagent ui --serve` binds `http://127.0.0.1:<port>/` and answers two routes until the process is
+interrupted:
+
+| Route | Answer |
+|---|---|
+| `GET /` | the page: the state, every count `index --status --json` carries, and the workspace path in its footer; `Content-Type: text/html; charset=utf-8` |
+| `GET /api/status.json` | the object `index --status --json` prints, byte for byte, from the one builder both surfaces share; `Content-Type: application/json; charset=utf-8` |
+
+Both answers carry `Cache-Control: no-store` and `Connection: close`. Everything else is refused with an
+empty body that carries no number: any method but `GET`, and any path other than the two, is `404`; any
+request whose `Host` header is not `127.0.0.1:<port>` is `403`, which is what stops a hostile page reaching
+the listener by DNS rebinding.
+
+The listener is loopback-only by construction: the prefix is `127.0.0.1`, and no flag, settings key or
+environment variable widens it — there is no `--host`. The page carries a workspace path and counts, which
+is a map of a private repository, and nothing this command does publishes it to a network.
+
+The default reads the index and never writes it: a page load has `index --status` semantics. `--refresh`
+opts into one walk before each answer, bounded by `--index-budget` (default `3000` ms) with the same call
+`run` and `chat` make. A read that fails is answered — `503`, with the failure in the body — and the
+listener keeps serving.
+
+`--json` prints one object on stdout before the first request is answered —
+`{"command":"ui","action":"serve","url":"http://127.0.0.1:<port>/","workspace":"<slash-normalised path>","refresh":<bool>}`
+— and then serves, so a script can start the panel and learn where it is without parsing a sentence.
+Everything else the command says goes to stderr, the URL first and alone on its line.
+
+It exits `0` when Ctrl+C stops it, the way `mcp serve` ends at end of input, and `2` when the port cannot
+be bound — outside `0–65535`, not a number, or already held — with the port named and `--port` as the fix.
+It runs no model, keeps no transcript and starts nothing: `--model`, `--provider`, `--planner`,
+`--executor`, `--reviewer`, `--session`, `--approval`, `--client`, `--write`, `--mcp` and `--web` are
+refused at `2`, and opening the printed URL is the developer's action.
 
 ## Interactive commands (`chat`)
 
@@ -110,9 +149,9 @@ Ctrl+C during a turn cancels the turn and returns to the prompt; a second Ctrl+C
 
 | Code | Meaning |
 |---|---|
-| 0 | turn completed and the session saved |
+| 0 | turn completed and the session saved; or `mcp serve` reached end of input; or the panel was stopped with Ctrl+C (023) |
 | 1 | turn failed (model error, tool crash, unexpected exception) |
-| 2 | usage error (bad option, missing prompt, unknown provider) |
+| 2 | usage error (bad option, missing prompt, unknown provider); for `ui --serve`, a port outside `0–65535`, a port that is not a number, or a port that cannot be bound (023) |
 | 3 | missing credentials, or a credential file that cannot be read (the message names the variable, and the file and line) |
 | 4 | budget exhausted or turn cancelled |
 | 5 | session file could not be written or read |

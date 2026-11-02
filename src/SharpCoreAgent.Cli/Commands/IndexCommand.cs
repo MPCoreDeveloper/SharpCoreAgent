@@ -211,8 +211,8 @@ internal static class IndexCommand
 
             var status = report.Status;
             var line = report.Incomplete
-                ? string.Create(CultureInfo.InvariantCulture, $"index · partial ({Number(status.Files)} files indexed, {Seconds(report.ElapsedMilliseconds)})")
-                : string.Create(CultureInfo.InvariantCulture, $"index · {State(status.Freshness)} ({Number(status.Files)} files, {Number(status.Chunks)} passages, {Seconds(report.ElapsedMilliseconds)})");
+                ? string.Create(CultureInfo.InvariantCulture, $"index · partial ({IndexStatusDocument.Number(status.Files)} files indexed, {Seconds(report.ElapsedMilliseconds)})")
+                : string.Create(CultureInfo.InvariantCulture, $"index · {IndexStatusDocument.State(status.Freshness)} ({IndexStatusDocument.Number(status.Files)} files, {IndexStatusDocument.Number(status.Chunks)} passages, {Seconds(report.ElapsedMilliseconds)})");
 
             await output.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
         }
@@ -279,35 +279,15 @@ internal static class IndexCommand
 
         if (options.Json)
         {
-            WriteJson(output, new Dictionary<string, object?>
-            {
-                ["command"] = "index",
-                ["action"] = "status",
-                ["workspace"] = Slash(workspace.Root),
-                ["state"] = State(status.Freshness),
-                ["tier"] = TierName(status.Tier),
-                ["embedder"] = status.Embedder,
-                ["dimensions"] = status.Dimensions,
-                ["files"] = status.Files,
-                ["stale"] = status.StaleFiles,
-                ["skipped"] = status.SkippedFiles,
-                ["orphans"] = status.OrphanRows,
-                ["passages"] = status.Chunks,
-                ["symbols"] = status.Symbols,
-                ["edges"] = status.Edges,
-                ["communities"] = status.Communities,
-                ["sizeBytes"] = status.SizeBytes,
-                ["vectorSearch"] = status.VectorSearchEnabled,
-                ["builtUtc"] = status.BuiltUtc?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
-                ["incomplete"] = status.Freshness is IndexFreshness.Partial,
-                ["notes"] = Array.Empty<string>(),
-            });
+            // One builder for both surfaces: `ui --serve`'s /api/status.json answers with this same object, which is
+            // what makes the two renderings comparable byte for byte instead of field by field.
+            WriteJson(output, IndexStatusDocument.Build(workspace, status));
 
             return ExitCodes.Success;
         }
 
         var builder = new StringBuilder();
-        builder.Append("index · sharpcoreagent @ ").Append(Slash(workspace.Root)).Append('\n');
+        builder.Append("index · sharpcoreagent @ ").Append(IndexStatusDocument.Slash(workspace.Root)).Append('\n');
 
         if (status.Freshness == IndexFreshness.Missing)
         {
@@ -318,18 +298,18 @@ internal static class IndexCommand
         }
 
         builder
-            .Append(Line("state", State(status.Freshness))).Append('\n')
+            .Append(Line("state", IndexStatusDocument.State(status.Freshness))).Append('\n')
             .Append(Line("tier", Describe(status))).Append('\n')
             .Append(Line("built", status.BuiltUtc is { } built
                 ? built.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
                 : "never")).Append('\n')
             .Append(Line("files", string.Create(
                 CultureInfo.InvariantCulture,
-                $"{Number(status.Files)} indexed · {status.StaleFiles} stale · {status.SkippedFiles} skipped · {status.OrphanRows} orphan rows"))).Append('\n')
+                $"{IndexStatusDocument.Number(status.Files)} indexed · {status.StaleFiles} stale · {status.SkippedFiles} skipped · {status.OrphanRows} orphan rows"))).Append('\n')
             .Append(Line("content", string.Create(
                 CultureInfo.InvariantCulture,
-                $"{Number(status.Chunks)} passages · {Number(status.Symbols)} symbols · {Number(status.Edges)} edges"))).Append('\n')
-            .Append(Line("size", $"{Size(status.SizeBytes)} in {Directory(workspace, index)}")).Append('\n')
+                $"{IndexStatusDocument.Number(status.Chunks)} passages · {IndexStatusDocument.Number(status.Symbols)} symbols · {IndexStatusDocument.Number(status.Edges)} edges"))).Append('\n')
+            .Append(Line("size", $"{IndexStatusDocument.Size(status.SizeBytes)} in {Directory(workspace, index)}")).Append('\n')
             .Append(Line("retrieval", string.Create(
                 CultureInfo.InvariantCulture,
                 $"lexical on · vector {(status.VectorSearchEnabled && !status.LexicalFallback ? "on" : "off")} · graph on")));
@@ -370,7 +350,7 @@ internal static class IndexCommand
             {
                 ["command"] = "index",
                 ["action"] = "verify",
-                ["workspace"] = Slash(workspace.Root),
+                ["workspace"] = IndexStatusDocument.Slash(workspace.Root),
                 ["healthy"] = verification.IsHealthy,
                 ["files"] = status.Files,
                 ["filesMissingFromIndex"] = verification.FilesMissingFromIndex,
@@ -386,16 +366,16 @@ internal static class IndexCommand
         var onDisk = Math.Max(0, status.Files + verification.FilesMissingFromIndex - verification.FilesMissingOnDisk);
 
         var builder = new StringBuilder();
-        builder.Append("verify · ").Append(Slash(workspace.Root)).Append('\n');
+        builder.Append("verify · ").Append(IndexStatusDocument.Slash(workspace.Root)).Append('\n');
         builder.Append(Line("files", string.Create(
             CultureInfo.InvariantCulture,
-            $"{Number(status.Files)} in index · {Number(onDisk)} on disk   (+{verification.FilesMissingFromIndex} missing from index)"))).Append('\n');
+            $"{IndexStatusDocument.Number(status.Files)} in index · {IndexStatusDocument.Number(onDisk)} on disk   (+{verification.FilesMissingFromIndex} missing from index)"))).Append('\n');
         builder.Append(Line("hashes", string.Create(
             CultureInfo.InvariantCulture,
             $"{verification.HashMismatches} mismatch{(verification.HashMismatches == 1 ? string.Empty : "es")}"))).Append('\n');
         builder.Append(Line("orphans", string.Create(
             CultureInfo.InvariantCulture,
-            $"{Number(verification.Orphans)} rows"))).Append('\n');
+            $"{IndexStatusDocument.Number(verification.Orphans)} rows"))).Append('\n');
         builder.Append(Line("result", verification.IsHealthy ? "fresh" : "drift"));
 
         foreach (var detail in verification.Details.Take(20))
@@ -474,9 +454,9 @@ internal static class IndexCommand
             {
                 ["command"] = "index",
                 ["action"] = action,
-                ["workspace"] = Slash(workspace.Root),
-                ["state"] = State(report.Status.Freshness),
-                ["tier"] = TierName(report.Status.Tier),
+                ["workspace"] = IndexStatusDocument.Slash(workspace.Root),
+                ["state"] = IndexStatusDocument.State(report.Status.Freshness),
+                ["tier"] = IndexStatusDocument.TierName(report.Status.Tier),
                 ["embedder"] = report.Status.Embedder,
                 ["dimensions"] = report.Status.Dimensions,
                 ["files"] = report.Status.Files,
@@ -512,26 +492,26 @@ internal static class IndexCommand
         var scanned = report.Added + report.Changed + report.Removed + report.Unchanged;
         var builder = new StringBuilder();
 
-        builder.Append(verb).Append(' ').Append(Slash(workspace.Root))
-            .Append(string.Create(CultureInfo.InvariantCulture, $" ({TierName(report.Status.Tier)}, {report.Status.Embedder})")).Append('\n');
+        builder.Append(verb).Append(' ').Append(IndexStatusDocument.Slash(workspace.Root))
+            .Append(string.Create(CultureInfo.InvariantCulture, $" ({IndexStatusDocument.TierName(report.Status.Tier)}, {report.Status.Embedder})")).Append('\n');
 
         builder.Append(Line("scanned", string.Create(
             CultureInfo.InvariantCulture,
-            $"{Number(scanned)} files · {report.Added} added · {report.Changed} changed · {report.Removed} removed · {report.Unchanged} unchanged · {report.Skipped} skipped"))).Append('\n');
+            $"{IndexStatusDocument.Number(scanned)} files · {report.Added} added · {report.Changed} changed · {report.Removed} removed · {report.Unchanged} unchanged · {report.Skipped} skipped"))).Append('\n');
 
         builder.Append(Line("content", string.Create(
             CultureInfo.InvariantCulture,
-            $"{Number(report.Status.Chunks)} passages · {Number(report.Status.Symbols)} symbols · {Number(report.Status.Edges)} edges"))).Append('\n');
+            $"{IndexStatusDocument.Number(report.Status.Chunks)} passages · {IndexStatusDocument.Number(report.Status.Symbols)} symbols · {IndexStatusDocument.Number(report.Status.Edges)} edges"))).Append('\n');
 
         builder.Append(Line("communities", report.Status.Communities == 0
             ? "none · no declaration has a relation yet"
             : string.Create(
                 CultureInfo.InvariantCulture,
-                $"{Number(report.Status.Communities)} · centers {Number(report.Status.Centers)}"))).Append('\n');
+                $"{IndexStatusDocument.Number(report.Status.Communities)} · centers {IndexStatusDocument.Number(report.Status.Centers)}"))).Append('\n');
 
         builder.Append(Line("wrote", string.Create(
             CultureInfo.InvariantCulture,
-            $"{Directory(workspace, index)} in {timing.Render()} ({Size(report.Status.SizeBytes)})"))).Append('\n');
+            $"{Directory(workspace, index)} in {timing.Render()} ({IndexStatusDocument.Size(report.Status.SizeBytes)})"))).Append('\n');
 
         // Only when the two clocks disagree enough to be the story: a line that fired on every ordinary build
         // would be a line nobody reads.
@@ -550,7 +530,7 @@ internal static class IndexCommand
 
         builder.Append(Line("state", report.Incomplete
             ? "partial · run `sharpcoreagent index` to finish"
-            : State(report.Status.Freshness)));
+            : IndexStatusDocument.State(report.Status.Freshness)));
 
         foreach (var note in report.Notes.Take(10))
         {
@@ -653,28 +633,6 @@ internal static class IndexCommand
     private static string Line(string label, string value) => string.Concat("  ", label.PadRight(LabelWidth), value);
 
     /// <summary>
-    /// Renders a count with groups of three separated by a space.
-    /// </summary>
-    /// <param name="value">The count.</param>
-    /// <returns>For example <c>1 908</c>.</returns>
-    private static string Number(long value) =>
-        value.ToString("N0", CultureInfo.InvariantCulture).Replace(',', ' ');
-
-    /// <summary>
-    /// Renders a byte count with one decimal place.
-    /// </summary>
-    /// <param name="bytes">The size in bytes.</param>
-    /// <returns>For example <c>14.2 MiB</c>.</returns>
-    private static string Size(long bytes) => bytes switch
-    {
-        < 0 => "0 B",
-        < 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes} B"),
-        < 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024d:0.0} KiB"),
-        < 1024L * 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024d * 1024):0.0} MiB"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024d * 1024 * 1024):0.0} GiB"),
-    };
-
-    /// <summary>
     /// Renders a duration in milliseconds.
     /// </summary>
     /// <param name="milliseconds">The elapsed time.</param>
@@ -685,33 +643,6 @@ internal static class IndexCommand
     /// </remarks>
     private static string Seconds(long milliseconds) =>
         BuildTiming.Span(TimeSpan.FromMilliseconds(milliseconds));
-
-    /// <summary>
-    /// Renders the freshness word the blocks use.
-    /// </summary>
-    /// <param name="freshness">The state to render.</param>
-    /// <returns>The lowercase name.</returns>
-    /// <remarks>
-    /// Shared with <c>mcp serve</c>'s ready line rather than copied: two renderings of one enum would drift, and
-    /// the word a developer reads in a terminal and the word a client's log holds must be the same word.
-    /// </remarks>
-    internal static string State(IndexFreshness freshness) => freshness switch
-    {
-        IndexFreshness.Missing => "missing",
-        IndexFreshness.Building => "building",
-        IndexFreshness.Partial => "partial",
-        IndexFreshness.Stale => "stale",
-        IndexFreshness.Fresh => "fresh",
-        IndexFreshness.Corrupt => "corrupt",
-        _ => "unknown",
-    };
-
-    /// <summary>
-    /// Renders the tier name the output uses.
-    /// </summary>
-    /// <param name="tier">The tier to render.</param>
-    /// <returns><c>lean</c> or <c>rich</c>.</returns>
-    private static string TierName(IndexTier tier) => tier == IndexTier.Rich ? "rich" : "lean";
 
     /// <summary>
     /// Renders the embedder name a usage error quotes back.
@@ -731,7 +662,7 @@ internal static class IndexCommand
             ? string.Create(CultureInfo.InvariantCulture, $" · dimensions {status.Dimensions}")
             : string.Empty;
 
-        return string.Create(CultureInfo.InvariantCulture, $"{TierName(status.Tier)} · embedder {status.Embedder}{dimensions}");
+        return string.Create(CultureInfo.InvariantCulture, $"{IndexStatusDocument.TierName(status.Tier)} · embedder {status.Embedder}{dimensions}");
     }
 
     /// <summary>
@@ -741,22 +672,19 @@ internal static class IndexCommand
     /// <param name="index">The open index.</param>
     /// <returns>For example <c>.sharpcoreagent/index</c>.</returns>
     private static string Directory(Workspace workspace, SharpCoreAgentIndex index) =>
-        Slash(workspace.ToRelative(index.IndexDirectory));
-
-    /// <summary>
-    /// Renders a path with forward slashes, which is how every block prints one.
-    /// </summary>
-    /// <param name="path">The path to render.</param>
-    /// <returns>The path with <c>/</c> separators.</returns>
-    private static string Slash(string path) => path.Replace('\\', '/');
+        IndexStatusDocument.Slash(workspace.ToRelative(index.IndexDirectory));
 
     /// <summary>
     /// Writes one JSON object on its own line.
     /// </summary>
     /// <param name="output">Where the object goes.</param>
     /// <param name="fields">The object's keys and values, in the order they must appear.</param>
+    /// <remarks>
+    /// The serialisation is <see cref="IndexStatusDocument.Serialize"/>'s, so a line this command prints and the body
+    /// the panel answers with cannot differ by a space.
+    /// </remarks>
     private static void WriteJson(TextWriter output, Dictionary<string, object?> fields)
     {
-        output.WriteLine(JsonSerializer.Serialize(fields));
+        output.WriteLine(IndexStatusDocument.Serialize(fields));
     }
 }

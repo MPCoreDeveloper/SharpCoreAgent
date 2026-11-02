@@ -104,7 +104,7 @@ public sealed class ConfigCommandTests
     {
         var error = Assert.Throws<CliUsageException>(() => Parse(["config", "--json"]));
 
-        Assert.Contains("only valid with run and index", error.Message, StringComparison.Ordinal);
+        Assert.Contains("only valid with run, index and ui", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
