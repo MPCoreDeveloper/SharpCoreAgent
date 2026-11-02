@@ -16,6 +16,8 @@ sharpcoreagent mcp serve [options]           # this workspace's index as an MCP 
 sharpcoreagent mcp config --client <name>    # the block that adds it to claude, vscode, visualstudio or codex (013, 022)
 sharpcoreagent mcp bench [options]           # the fixture questions, measured against the source (013)
 sharpcoreagent ui --serve [options]          # this workspace's index as a page on 127.0.0.1 (023)
+sharpcoreagent ide agent [--write]           # the agent profile that puts the index in an editor's picker (024)
+sharpcoreagent ide tasks [--write]           # the task that rebuilds the index, for .vscode/tasks.json (024)
 sharpcoreagent --help | --version
 ```
 
@@ -39,7 +41,7 @@ settings file, its precedence and its exit code are in
 | `--web-allow <host>` | run, chat | — | Exempt a host from `fetch_url`'s address refusal; repeatable, needs `--web`, and has no settings key or environment variable (008) |
 | `--mcp <command>` | run, chat | — | Start one stdio MCP server and register the tools it lists for this process; repeatable, refused on `models`, `index`, `config` and `setup`, and has no settings key or environment variable (009) |
 | `--client <name>` | mcp config | — | `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for; `visualstudio` and `claude` name the same `.mcp.json` under different keys, and `vs` is accepted for `visualstudio`; refused on every other command, and required — `mcp config` without it exits `2` (013, 022) |
-| `--write` | mcp config | — | Merge the block into the file `--client` names instead of printing it, keeping every other key, server and entry field; an entry that already matches is not written, and a file that cannot be merged exits `7` untouched; refused on every other command, `--client codex` included (022) |
+| `--write` | mcp config, ide | — | Merge the block into the file `--client` names instead of printing it, keeping every other key, server and entry field; an entry that already matches is not written, and a file that cannot be merged exits `7` untouched; refused on every other command, `--client codex` included (022). On `ide`, write the profile or the task instead of printing it, replacing the profile only when the command wrote it and merging the task by label (024) |
 | `--approval <mode>` | run, chat | `ask` | `readonly`, `ask`, `allow` |
 | `--max-iterations <n>` | run, chat | `400` | Loop bound: one turn is tens of model calls, not a handful |
 | `--max-output-tokens <n>` | run, chat | `8000` | Per-request output cap |
@@ -114,6 +116,35 @@ be bound — outside `0–65535`, not a number, or already held — with the por
 It runs no model, keeps no transcript and starts nothing: `--model`, `--provider`, `--planner`,
 `--executor`, `--reviewer`, `--session`, `--approval`, `--client`, `--write`, `--mcp` and `--web` are
 refused at `2`, and opening the printed URL is the developer's action.
+
+## The editor files (`ide`) (024)
+
+`sharpcoreagent ide <agent|tasks>` answers one question — which of an editor's two files — and prints it,
+unless `--write` is given, in which case the file is written and stdout stays empty. Neither action reads
+the index, builds a container, reads a credential, starts a process or touches the network.
+
+| Action | File | What it carries |
+|---|---|---|
+| `agent` | `<workspace>/.github/agents/sharpcoreagent.agent.md` | YAML frontmatter — `description`, and `tools` naming the five published tools as `sharpcoreagent/<tool>` — then the prompt |
+| `tasks` | `<workspace>/.vscode/tasks.json` | `"version": "2.0.0"` and one task, `sharpcoreagent: index`, whose `command` is this binary's absolute path |
+
+The profile's tool list is built from the same array `mcp serve` filters by, so the two cannot disagree; it
+carries no `name` (the file's name is the name the picker shows), no `model`, no `target` and no
+`mcp-servers`. Its last line is a marker naming the command: `--write` replaces the file only when that line
+is there, and a profile this command did not write is refused at `7` with the file untouched.
+
+The task is merged by label rather than appended: a task already carrying this label is replaced in place,
+every other task and every other top-level key survives, `version` is kept when the file has one and written
+when it does not, and a file that already says this is not written at all. A `tasks.json` that is not JSON —
+including one with `//` comments, which VS Code accepts and `System.Text.Json` does not — or whose `tasks` is
+not an array, exits `7` with the file untouched.
+
+Both actions exit `0` for a document printed, a file created, updated, or already correct, and `7` for a file
+that could not be read, merged or written. `ide` with no action, an unknown action, an operand after the
+action, and the flags that name a turn or a client (`--provider`, `--model`, `--planner`, `--executor`,
+`--reviewer`, `--base-url`, `--fallback`, `--session`), the network (`--web`, `--web-allow`, `--mcp`), an
+index action (`--status`, `--rebuild`, `--verify`, `--prune`), `--no-index`, `--add-root`, the panel's flags
+(`--serve`, `--port`, `--refresh`), `--no-refresh`, `--client` and `--json` are all refused at `2`.
 
 ## Interactive commands (`chat`)
 

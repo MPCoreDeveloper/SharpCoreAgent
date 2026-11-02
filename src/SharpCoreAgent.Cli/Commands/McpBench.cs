@@ -475,7 +475,7 @@ internal static class McpBench
     /// <returns>A command line <see cref="McpToolHost"/> can start through the platform shell.</returns>
     private static string ServerCommandLine(string root)
     {
-        var (command, arguments) = McpClientSnippets.Invocation();
+        var (command, arguments) = McpClientSnippets.Invocation("mcp", "serve");
         var builder = new StringBuilder(Quote(command));
 
         // The snippet's arguments already carry `mcp serve`; the two flags after them are what the bench adds, and

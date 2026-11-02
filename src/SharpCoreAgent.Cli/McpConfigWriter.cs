@@ -1,21 +1,7 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace SharpCoreAgent.Cli;
-
-/// <summary>What <c>mcp config --write</c> did to the file.</summary>
-internal enum WriteOutcome
-{
-    /// <summary>The file did not name this binary, and now does.</summary>
-    Created,
-
-    /// <summary>The file named this binary, and its entry changed.</summary>
-    Updated,
-
-    /// <summary>The file already said exactly this, so it was not touched.</summary>
-    Unchanged,
-}
 
 /// <summary>
 /// Merges <c>mcp config --write</c>'s block into the file a client reads, instead of printing it for a redirect.
@@ -44,7 +30,7 @@ internal static class McpConfigWriter
     /// <param name="command">The executable the entry names.</param>
     /// <param name="arguments">Its arguments.</param>
     /// <returns>What was done, and the one line that goes to stderr.</returns>
-    /// <exception cref="McpConfigWriteException">The file could not be read, written or merged.</exception>
+    /// <exception cref="WorkspaceWriteException">The file could not be read, written or merged.</exception>
     internal static (WriteOutcome Outcome, string Note) Write(
         McpClientKind client,
         string destination,
@@ -55,7 +41,7 @@ internal static class McpConfigWriter
         {
             // Unreachable from the command line: FinishMcp refuses --write for the client whose file is TOML, before a
             // workspace is opened. It stays so a caller that arrives another way is told rather than silently ignored.
-            throw new McpConfigWriteException($"{client}'s configuration is not JSON, so there is nothing to merge.");
+            throw new WorkspaceWriteException($"{client}'s configuration is not JSON, so there is nothing to merge.");
         }
 
         var existed = File.Exists(destination);
@@ -94,7 +80,7 @@ internal static class McpConfigWriter
     /// <param name="destination">The file.</param>
     /// <param name="existed">Whether it was there before this command ran.</param>
     /// <returns>The document to merge into.</returns>
-    /// <exception cref="McpConfigWriteException">The file could not be read, or is not a JSON object.</exception>
+    /// <exception cref="WorkspaceWriteException">The file could not be read, or is not a JSON object.</exception>
     private static JsonObject Read(string destination, bool existed)
     {
         if (!existed)
@@ -102,15 +88,7 @@ internal static class McpConfigWriter
             return new JsonObject();
         }
 
-        string text;
-        try
-        {
-            text = File.ReadAllText(destination);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            throw new McpConfigWriteException($"{destination} could not be read: {exception.Message}");
-        }
+        var text = WorkspaceFileWriter.ReadText(destination);
 
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -123,13 +101,13 @@ internal static class McpConfigWriter
             {
                 JsonObject document => document,
                 null => new JsonObject(),
-                _ => throw new McpConfigWriteException(
+                _ => throw new WorkspaceWriteException(
                     $"{destination} holds a JSON value that is not an object; nothing was written."),
             };
         }
         catch (JsonException exception)
         {
-            throw new McpConfigWriteException(
+            throw new WorkspaceWriteException(
                 $"{destination} is not valid JSON, so nothing was written: {exception.Message}");
         }
     }
@@ -141,7 +119,7 @@ internal static class McpConfigWriter
     /// <param name="root">The key: <c>mcpServers</c> or <c>servers</c>.</param>
     /// <param name="destination">The file, for the refusal.</param>
     /// <returns>The section to merge into.</returns>
-    /// <exception cref="McpConfigWriteException">A key of that name holds something other than an object.</exception>
+    /// <exception cref="WorkspaceWriteException">A key of that name holds something other than an object.</exception>
     private static JsonObject Section(JsonObject document, string root, string destination)
     {
         switch (document[root])
@@ -150,7 +128,7 @@ internal static class McpConfigWriter
                 return section;
 
             case { } other:
-                throw new McpConfigWriteException(
+                throw new WorkspaceWriteException(
                     $"'{root}' in {destination} holds a JSON {other.GetValueKind()}, not an object; nothing was written.");
 
             default:
@@ -183,31 +161,13 @@ internal static class McpConfigWriter
     /// </summary>
     /// <param name="destination">The file.</param>
     /// <param name="document">The merged document.</param>
-    /// <exception cref="McpConfigWriteException">The directory or the file could not be written.</exception>
+    /// <exception cref="WorkspaceWriteException">The directory or the file could not be written.</exception>
     /// <remarks>
-    /// <c>.vscode</c> is created when it is missing: a repository that has never had one is the common case, and the
-    /// command's whole job is that the next step is not "make the folder first".
+    /// The bytes are <see cref="WorkspaceFileWriter.Save"/>'s: <c>.vscode</c> created when it is missing, one
+    /// <c>WriteAllBytes</c>, and an OS failure turned into one message naming the file.
     /// </remarks>
-    private static void Save(string destination, JsonObject document)
-    {
-        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-            .GetBytes(document.ToJsonString(Indented) + Environment.NewLine);
-
-        try
-        {
-            var directory = Path.GetDirectoryName(destination);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllBytes(destination, bytes);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            throw new McpConfigWriteException($"{destination} could not be written: {exception.Message}");
-        }
-    }
+    private static void Save(string destination, JsonObject document) =>
+        WorkspaceFileWriter.Save(destination, document.ToJsonString(Indented) + Environment.NewLine);
 
     /// <summary>Says what happened, in the one line that goes to stderr.</summary>
     /// <param name="outcome">What was done.</param>
@@ -227,24 +187,6 @@ internal static class McpConfigWriter
             _ =>
                 $"{McpClientSnippets.NotePrefix}{destination} already names this binary under {key}; nothing written",
         };
-    }
-}
-
-/// <summary>
-/// The failure <c>mcp config --write</c> reports when the file could not be read, merged or written.
-/// </summary>
-/// <remarks>
-/// A distinct type because the exit code is distinct: the command line was understood, so this is not a usage error —
-/// it is the client's own configuration file, and <see cref="ExitCodes.Configuration"/> is the code a script branches
-/// on. Raised before anything is written, so the file the developer opens afterwards is the file they had.
-/// </remarks>
-public sealed class McpConfigWriteException : Exception
-{
-    /// <summary>Initializes a new instance of the <see cref="McpConfigWriteException"/> class.</summary>
-    /// <param name="message">What could not be done, naming the file.</param>
-    public McpConfigWriteException(string message)
-        : base(message)
-    {
     }
 }
 

@@ -36,17 +36,11 @@ internal sealed class McpServerPublishedSet
     /// The only names this server may ever publish, whatever flags the host was started with.
     /// </summary>
     /// <remarks>
-    /// Written in the order the contract documents. Nothing outside this array reaches a client: there is no
-    /// <c>--read-tools</c>, and no flag names one of these tools.
+    /// Written in the order the contract documents, and held in <see cref="McpServerCatalog"/> rather than here because
+    /// an agent profile now lists the same names: one array, two readers. Nothing outside it reaches a client — there is
+    /// no <c>--read-tools</c>, and no flag names one of these tools.
     /// </remarks>
-    internal static readonly string[] AllowList =
-    [
-        CodeContextTool.Name,
-        FindReferencesTool.Name,
-        FindSymbolTool.Name,
-        IndexStatusTool.Name,
-        SearchCodeTool.Name,
-    ];
+    internal static IReadOnlyList<string> AllowList => McpServerCatalog.PublishedToolNames;
 
     private readonly McpServerPublishedTool[] _tools;
 
@@ -66,9 +60,7 @@ internal sealed class McpServerPublishedSet
         [
             .. registry.Tools
                 .Where(tool => tool.Safety == ToolSafety.ReadOnly)
-                .Where(tool => Array.Exists(
-                    AllowList,
-                    allowed => string.Equals(allowed, tool.Definition.Name, StringComparison.Ordinal)))
+                .Where(tool => AllowList.Contains(tool.Definition.Name, StringComparer.Ordinal))
                 .Select(tool => new McpServerPublishedTool(tool, Parse(tool))),
         ];
     }

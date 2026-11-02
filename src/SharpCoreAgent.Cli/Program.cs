@@ -83,6 +83,14 @@ internal static class Program
                 // a developer who ended a server they started did not ask for a failure code.
                 CliCommand.Ui => await UiCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
 
+                // The two editor files. Raw stdout for the same reason `mcp config` uses it: what is printed is a document
+                // a caller may redirect into the file, so an encoding decision belongs to the redirect.
+                CliCommand.Ide => await IdeCommand.ExecuteAsync(
+                    options,
+                    Console.OpenStandardOutput(),
+                    Console.Error,
+                    scope.ExitToken).ConfigureAwait(false),
+
                 // The raw handles rather than Console.Out: the protocol is bytes on stdout, and a TextWriter
                 // carrying an encoding decision is exactly what FR-003 forbids.
                 CliCommand.Mcp => await McpCommand.ExecuteAsync(

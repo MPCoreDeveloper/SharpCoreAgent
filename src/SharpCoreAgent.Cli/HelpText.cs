@@ -33,6 +33,8 @@ internal static class HelpText
           sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
           sharpcoreagent mcp bench [options]           the twelve fixture questions, measured against the source
           sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
+          sharpcoreagent ide agent [--write]           the agent profile that puts the index in an editor's picker
+          sharpcoreagent ide tasks [--write]           the task that rebuilds the index, in .vscode/tasks.json
           sharpcoreagent --help | --version
 
           With no command and a terminal on both ends, a session starts. When either stream is
@@ -193,6 +195,33 @@ internal static class HelpText
           Visual Studio browser window both render it. Ctrl+C ends the panel at 0; a port nothing can bind
           ends it at 2, with the port named and --port as the fix.
 
+        Ide
+          sharpcoreagent ide agent [options]          the profile that puts this server's tools in an editor's picker
+          sharpcoreagent ide tasks [options]          the one task that rebuilds the index, for .vscode/tasks.json
+          --write                  ide         off         write the file instead of printing it
+
+          Two files, and neither is per-client: an agent profile is read by whatever editor the developer
+          uses, and a task list belongs to this workspace. 'ide agent' writes
+          .github/agents/sharpcoreagent.agent.md — YAML frontmatter with a description and a tools list, then
+          a prompt. The tools are the five 'mcp serve' publishes, each named sharpcoreagent/<tool>, so the
+          profile and the server cannot list different tools. No name: the file's name is the name the picker
+          shows. No model and no target: the model is the developer's choice, and unset target means both
+          environments.
+
+          It never overwrites somebody else's work. The last line of a profile this command wrote is a marker;
+          a file without it is refused at 7 with the file untouched, so a hand-written agent beside this one is
+          safe and deleting the marker is how you claim the file.
+
+          'ide tasks' writes .vscode/tasks.json with one task, 'sharpcoreagent: index', whose command is this
+          binary's absolute path — the same answer 'mcp config' uses. --write merges by label, so the second run
+          replaces the task rather than adding a twin, and every other task and key in the file survives. A file
+          that is not JSON, or whose 'tasks' is not an array, exits 7 with the file untouched; a file with //
+          comments is refused rather than rewritten, and the task can be added by hand.
+
+          Neither action opens the index, reads a credential, starts a process or touches the network, so both
+          work before the first run of anything else. --write says which of the three happened — created,
+          updated, unchanged — in one line on stderr, and writes nothing to stdout.
+
         Chat
           /help                    every chat command, including /cost, /roles and /review
 
@@ -211,7 +240,7 @@ internal static class HelpText
           prefix; its keys win over the environment, and a blank value counts as unset.
 
         Exit codes
-          0  the turn completed and the transcript was written, or mcp serve reached end of input, or the panel stopped
+          0  the turn completed, or mcp serve reached end of input, or the panel stopped, or an ide file was written
           1  the turn failed: provider error, tool crash or unexpected exception
           2  the command line could not be understood
           3  a credential is missing, or the credential file cannot be read
@@ -234,6 +263,8 @@ internal static class HelpText
           sharpcoreagent ui --serve
           sharpcoreagent ui --serve --port 8080 --refresh
           sharpcoreagent ui --serve --json
+          sharpcoreagent ide agent --write
+          sharpcoreagent ide tasks --write
         """;
 
     /// <summary>Gets the commands the interactive loop understands.</summary>

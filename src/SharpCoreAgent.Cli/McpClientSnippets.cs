@@ -30,9 +30,6 @@ internal static class McpClientSnippets
     /// </remarks>
     internal const string ServerName = "sharpcoreagent";
 
-    /// <summary>The arguments every snippet carries: the command, started as the server.</summary>
-    private static readonly string[] Serve = ["mcp", "serve"];
-
     /// <summary>
     /// Renders the block for one client.
     /// </summary>
@@ -149,26 +146,32 @@ internal static class McpClientSnippets
     /// <summary>
     /// Works out how this binary has to be started, so a snippet names something that will run.
     /// </summary>
-    /// <returns>The command, and the arguments before <c>mcp serve</c> when the command is the .NET host.</returns>
+    /// <param name="verb">What the caller wants it to do: <c>mcp serve</c>, or <c>index</c> for the editor's task.</param>
+    /// <returns>The command, and the arguments before <paramref name="verb"/> when the command is the .NET host.</returns>
     /// <remarks>
     /// <see cref="Environment.ProcessPath"/> is the executable the shell started, which is the apphost in a normal
     /// install. Under a debugger, a test host or a hand-written <c>dotnet sharpcoreagent.dll</c> it is <c>dotnet</c>
     /// itself, and then the executable alone answers nothing: the entry assembly has to be named too, or the snippet
     /// starts the runtime with no program to run.
+    /// <para>
+    /// The verb is a parameter rather than a constant because two documents need it and they need different ones: the
+    /// MCP blocks start the server, and <c>ide tasks</c> rebuilds the index. One helper, so a fix to the host case is a
+    /// fix in every file this build writes.
+    /// </para>
     /// </remarks>
-    internal static (string Command, IReadOnlyList<string> Arguments) Invocation()
+    internal static (string Command, IReadOnlyList<string> Arguments) Invocation(params string[] verb)
     {
         var process = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(process))
         {
             // The platform will not say: the name on PATH is the best guess, and the one the README uses.
-            return (ServerName, Serve);
+            return (ServerName, verb);
         }
 
         var command = Path.GetFullPath(process);
         return IsDotNetHost(command) && EntryAssembly() is { } assembly
-            ? (command, [assembly, .. Serve])
-            : (command, Serve);
+            ? (command, [assembly, .. verb])
+            : (command, verb);
     }
 
     /// <summary>Renders a JSON block for one client, indented because a human pastes it.</summary>

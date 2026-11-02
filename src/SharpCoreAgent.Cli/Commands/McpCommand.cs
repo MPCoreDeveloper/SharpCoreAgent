@@ -196,10 +196,10 @@ internal static class McpCommand
                 "mcp config needs --client.",
                 "Use --client claude, --client vscode, --client visualstudio or --client codex.");
 
-        var (command, arguments) = McpClientSnippets.Invocation();
+        var (command, arguments) = McpClientSnippets.Invocation("mcp", "serve");
         var destination = McpClientSnippets.Destination(client, Path.GetFullPath(options.Workspace));
 
-        if (options.McpConfigWrite)
+        if (options.Write)
         {
             try
             {
@@ -208,7 +208,7 @@ internal static class McpCommand
                 await error.WriteLineAsync(note.AsMemory(), cancellationToken).ConfigureAwait(false);
                 return ExitCodes.Success;
             }
-            catch (McpConfigWriteException exception)
+            catch (WorkspaceWriteException exception)
             {
                 // Exit 7, and the file is as it was: a developer who reads the message and opens the path sees what
                 // this command saw, which is the only way a refusal about a file is useful.

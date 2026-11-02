@@ -325,6 +325,37 @@ public sealed class HelpTextTests
         Assert.Contains("credential file", row, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheUsageBlockDocumentsTheIdeCommand()
+    {
+        // Both actions, and the flag that turns a printed document into a written file. The row in the options table is
+        // `--client`'s neighbour and says `mcp config`; this section is where `ide` documents its own `--write`.
+        Assert.Contains("sharpcoreagent ide agent", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("sharpcoreagent ide tasks", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains(".github/agents/sharpcoreagent.agent.md", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains(".vscode/tasks.json", HelpText.Usage, StringComparison.Ordinal);
+
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.StartsWith("  --write", StringComparison.Ordinal) && line.Contains("ide", StringComparison.Ordinal));
+
+        Assert.Equal(27, row.IndexOf("ide", StringComparison.Ordinal));
+        Assert.Equal(39, row.IndexOf("off", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheExitCodeTableSaysWhatZeroMeansForAWrittenFile()
+    {
+        // Round 15's own row: a file written, or one that already said what was asked, is a success and not a no-op to
+        // be punished.
+        var row = Assert.Single(
+            HelpText.Usage.Split('\n'),
+            line => line.TrimStart().StartsWith("0 ", StringComparison.Ordinal));
+
+        Assert.Contains("ide file", row, StringComparison.Ordinal);
+        Assert.Contains("written", row, StringComparison.Ordinal);
+    }
+
     /// <summary>Gets the usage block with one kind of line ending, so a comparison does not depend on the checkout.</summary>
     private static string Normalized => HelpText.Usage.Replace("\r\n", "\n", StringComparison.Ordinal);
 }

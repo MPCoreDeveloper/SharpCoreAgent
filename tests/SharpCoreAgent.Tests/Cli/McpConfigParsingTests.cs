@@ -35,7 +35,7 @@ public sealed class McpConfigParsingTests
         Assert.True(options.IndexEnabled);
 
         // Printing is the default: a client named without --write is a block for a redirect or for a paste.
-        Assert.False(options.McpConfigWrite);
+        Assert.False(options.Write);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class McpConfigParsingTests
 
         Assert.Equal(McpAction.Config, options.McpAction);
         Assert.Equal(McpClientKind.VisualStudio, options.McpClient);
-        Assert.True(options.McpConfigWrite);
+        Assert.True(options.Write);
     }
 
     [Fact]
@@ -128,18 +128,19 @@ public sealed class McpConfigParsingTests
     [InlineData("models", null)]
     [InlineData("config", null)]
     [InlineData("setup", null)]
-    public void TheWriteFlagAppliesToConfigAndNothingElse(string command, string? operand)
+    public void TheWriteFlagAppliesToConfigIdeAndNothingElse(string command, string? operand)
     {
         // The same reasoning --client is refused by: a command told to write a file and not writing one sends the
-        // developer looking for the file.
+        // developer looking for the file. `ide` is the other command that writes one, and it is exempted in Finish.
         string[] arguments = operand is null
             ? [command, "--write"]
             : [command, operand, "--write"];
 
         var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(arguments, NoEnvironment));
 
-        Assert.Equal("--write applies to mcp config.", error.Message);
+        Assert.Equal("--write applies to mcp config and ide.", error.Message);
         Assert.Contains("mcp config --client visualstudio --write", error.Hint, StringComparison.Ordinal);
+        Assert.Contains("ide agent --write", error.Hint, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -151,7 +152,7 @@ public sealed class McpConfigParsingTests
         // session for the client before the first answer.
         var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", verb, "--write"], NoEnvironment));
 
-        Assert.Equal("--write applies to mcp config.", error.Message);
+        Assert.Equal("--write applies to mcp config and ide.", error.Message);
     }
 
     [Fact]

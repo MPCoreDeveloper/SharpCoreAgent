@@ -40,6 +40,24 @@ internal enum CliCommand
 
     /// <summary>Serve this workspace's index as a page on a loopback port.</summary>
     Ui,
+
+    /// <summary>Write the files that put this workspace's index inside an editor.</summary>
+    Ide,
+}
+
+/// <summary>Which of an editor's two files <c>ide</c> was asked for.</summary>
+/// <remarks>
+/// Two, and neither takes a client: an agent profile is read by the editor's picker whatever client that is, and a task
+/// list belongs to one workspace. That is the difference from <c>mcp config</c>, whose whole subject is which client
+/// reads which key in which file.
+/// </remarks>
+internal enum IdeAction
+{
+    /// <summary>The profile that puts the agent in the picker: <c>.github/agents/sharpcoreagent.agent.md</c>.</summary>
+    Agent,
+
+    /// <summary>The one task that rebuilds the index: <c>.vscode/tasks.json</c>.</summary>
+    Tasks,
 }
 
 /// <summary>What <c>mcp</c> was asked to do.</summary>
@@ -139,14 +157,17 @@ internal sealed record CliOptions
     public McpClientKind? McpClient { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether <c>mcp config</c> writes the block into the client's file instead of printing it.
+    /// Gets a value indicating whether the command writes the file instead of printing it.
     /// </summary>
     /// <remarks>
-    /// A redirect (<c>&gt; .mcp.json</c>) is the shape every other command's output has, and it truncates: a file that
-    /// already named another server would lose it. <c>--write</c> exists for the two files a repository shares, so a
-    /// second client can be added to the same <c>.mcp.json</c> without the first one being sacrificed to save it.
+    /// Two commands read this: <c>mcp config</c> and both <c>ide</c> actions. A redirect is the shape every other
+    /// command's output has, and it truncates — <c>.mcp.json</c>, <c>tasks.json</c> and an editor's agent directory are
+    /// all places something else may already have written, so the flag exists for them rather than for the printer.
     /// </remarks>
-    public bool McpConfigWrite { get; init; }
+    public bool Write { get; init; }
+
+    /// <summary>Gets the editor file <c>ide</c> was asked for.</summary>
+    public IdeAction Ide { get; init; }
 
     /// <summary>Gets the setting <c>config get</c>, <c>set</c> or <c>unset</c> names.</summary>
     public string? ConfigName { get; init; }
@@ -514,6 +535,13 @@ internal sealed record CliOptions
             RejectTurnFlags(parsed);
         }
 
+        // The same reason once more: `ide` writes a profile and a task, and neither names a model. Read here because only
+        // here is it known which flags the developer typed — the values on `parsed` may have come from an export.
+        if (parsed.Command == CliCommand.Ide)
+        {
+            RejectModelFlags(parsed, "ide", "For example: sharpcoreagent ide agent --write");
+        }
+
         return ApplySettings(parsed, loadSettings, environment);
     }
 
@@ -790,7 +818,7 @@ internal sealed record CliOptions
         // `--no-refresh` belongs to the command that keeps an index open between requests. Everywhere else a
         // refresh is already bounded by --index-budget, and a flag that was silently ignored would be a promise
         // nobody kept. Help and the version are exempt because they answer a question about the build.
-        if (command is not (CliCommand.Mcp or CliCommand.Ui or CliCommand.Help or CliCommand.Version))
+        if (command is not (CliCommand.Mcp or CliCommand.Ui or CliCommand.Ide or CliCommand.Help or CliCommand.Version))
         {
             RejectNoRefresh(options);
             RejectClientFlag(options);
@@ -928,6 +956,10 @@ internal sealed record CliOptions
             case CliCommand.Ui:
                 // Its own flags are the whole command, so the refusals live in FinishUi where the action is known.
                 return FinishUi(options, positionals);
+
+            case CliCommand.Ide:
+                // The same reason: which flags apply depends on the action, and the action is the first operand.
+                return FinishIde(options, positionals);
 
             default:
                 RejectIndexFlags(options);
@@ -1086,7 +1118,7 @@ internal sealed record CliOptions
                 // A merge into config.toml would have to keep the tables and comments the developer already has, and
                 // this repository has no TOML reader: a hand-rolled rewriter that gets it wrong corrupts a file the
                 // developer maintains by hand. Refused here, before anything is opened, rather than half attempted.
-                if (options.McpConfigWrite && client == McpClientKind.Codex)
+                if (options.Write && client == McpClientKind.Codex)
                 {
                     throw new CliUsageException(
                         "--write does not apply to --client codex.",
@@ -1249,6 +1281,69 @@ internal sealed record CliOptions
     }
 
     /// <summary>
+    /// Reads the action of <c>ide</c>, and refuses the flags that command has nothing to do with.
+    /// </summary>
+    /// <param name="options">The options the flags produced.</param>
+    /// <param name="positionals">The arguments after the command.</param>
+    /// <returns>The options with the action.</returns>
+    /// <exception cref="CliUsageException">No action, an unknown one, or a flag with nothing to act on.</exception>
+    /// <remarks>
+    /// An action rather than a flag, unlike <c>ui --serve</c>, because there are two files and neither is a default: a
+    /// typo must not write the other one. The refusals are the ones <c>ui</c> and <c>mcp config</c> make, restated where
+    /// their message would otherwise name a command the developer did not type.
+    /// </remarks>
+    private static CliOptions FinishIde(CliOptions options, List<string> positionals)
+    {
+        if (positionals.Count == 0)
+        {
+            throw new CliUsageException(
+                "ide needs an action.",
+                "The actions are agent and tasks: sharpcoreagent ide agent --write");
+        }
+
+        var action = positionals[0].ToLowerInvariant() switch
+        {
+            "agent" => IdeAction.Agent,
+            "tasks" => IdeAction.Tasks,
+            _ => throw new CliUsageException(
+                $"'{positionals[0]}' is not an ide action.",
+                "The actions are agent and tasks."),
+        };
+
+        if (positionals.Count > 1)
+        {
+            throw new CliUsageException(
+                $"ide does not take '{positionals[1]}'.",
+                "Both actions read --workspace and --write, and nothing else.");
+        }
+
+        RejectClientFlag(options);
+        RejectWebFlags(options);
+        RejectMcpFlags(options);
+        RejectIndexFlags(options);
+        RejectAttachmentRoots(options);
+        RejectNoRefresh(options);
+
+        // The two files describe an editor, not an index: nothing here reads one, so there is nothing for the flag to
+        // turn off. Refused for the reason every other misplaced flag is.
+        if (!options.IndexEnabled)
+        {
+            throw new CliUsageException(
+                "--no-index does not apply to ide.",
+                "It writes a profile and a task; it opens no index.");
+        }
+
+        if (options.Json)
+        {
+            throw new CliUsageException(
+                "--json is only valid with run, index and ui.",
+                "ide prints the file itself, which is what a redirect wants.");
+        }
+
+        return options with { Command = CliCommand.Ide, Ide = action };
+    }
+
+    /// <summary>
     /// Rejects <c>--no-refresh</c> on the commands that do not hold an index open between requests.
     /// </summary>
     /// <param name="options">The parsed options.</param>
@@ -1288,7 +1383,7 @@ internal sealed record CliOptions
     }
 
     /// <summary>
-    /// Rejects <c>--write</c> on the commands that write no client's file.
+    /// Rejects <c>--write</c> on the commands that write no file.
     /// </summary>
     /// <param name="options">The parsed options.</param>
     /// <exception cref="CliUsageException"><c>--write</c> was given to a command that prints a table or serves a loop.</exception>
@@ -1299,11 +1394,11 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectWriteFlag(CliOptions options)
     {
-        if (options.McpConfigWrite)
+        if (options.Write)
         {
             throw new CliUsageException(
-                "--write applies to mcp config.",
-                "For example: sharpcoreagent mcp config --client visualstudio --write");
+                "--write applies to mcp config and ide.",
+                "For example: sharpcoreagent mcp config --client visualstudio --write, or sharpcoreagent ide agent --write");
         }
     }
 
@@ -1851,7 +1946,7 @@ internal sealed record CliOptions
                 return options with { McpClient = ParseClient(TakeValue(args, ref index, name)) };
 
             case "--write":
-                return options with { McpConfigWrite = true };
+                return options with { Write = true };
 
             case "--approval":
                 var approval = TakeValue(args, ref index, name);
@@ -2008,6 +2103,11 @@ internal sealed record CliOptions
             return CliCommand.Ui;
         }
 
+        if (Is(argument, "ide"))
+        {
+            return CliCommand.Ide;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -2020,7 +2120,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models, index, setup, config, mcp and ui.");
+            "Commands are run, chat, models, index, setup, config, mcp, ui and ide.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)

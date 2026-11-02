@@ -203,6 +203,8 @@ sharpcoreagent setup                        the preferences, asked for one at a 
 sharpcoreagent mcp serve [options]          this workspace's index as an MCP server on stdio
 sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
 sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
+sharpcoreagent ide agent [--write]           the profile that puts this agent in an editor's picker
+sharpcoreagent ide tasks [--write]           the task that rebuilds the index, for .vscode/tasks.json
 sharpcoreagent --help | --version
 ```
 
@@ -244,7 +246,7 @@ keep working on the file that needs repairing.
 | `--fsharp` | run, chat | off — `file_diagnostics`, `uses_at` and `signature_at` may ask the F# type checker; off otherwise |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
-| `--write` | mcp config | off — merge the block into that file instead of printing it, keeping every other entry |
+| `--write` | mcp config, ide | off — merge the block into that file, or write the profile or the task, instead of printing it |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
@@ -775,6 +777,32 @@ left open overnight cannot start a walk in a repository nobody is watching. `--r
 hostile page cannot reach it by DNS rebinding, and no answer is cached. Ctrl+C stops it at `0`; a port
 nothing can bind exits `2` with the port named. Opening the URL is your action: nothing is started for
 you.
+
+### In the picker
+
+A configured server is a set of tools; an agent is the thing that decides to use them. One command puts this
+workspace's index into the editor's agent picker, with those five tools and nothing else:
+
+```powershell
+sharpcoreagent ide agent --write         # .github/agents/sharpcoreagent.agent.md
+sharpcoreagent ide tasks --write         # one task in .vscode/tasks.json
+```
+
+The profile is a Markdown file with two keys in its frontmatter — a `description` and a `tools` list naming
+`sharpcoreagent/search_code`, `find_symbol`, `find_references`, `code_context` and `index_status` — and a
+prompt that tells the agent to quote the `path:start-end` a tool returned and to say so when the index is
+missing. The tool list comes from the same array `mcp serve` filters by, so the profile cannot advertise a
+tool the server stopped publishing. No `--client` is involved: VS Code, the Copilot CLI and the Copilot cloud
+agent all read `.github/agents`.
+
+`--write` replaces the file only when it wrote it: the last line of a profile this command wrote is a marker,
+and a file without that marker is refused at exit `7` with its bytes untouched, so an agent you wrote by hand
+sits beside this one safely. Running it twice says `unchanged` and writes nothing.
+
+`ide tasks` files one task, `sharpcoreagent: index`, whose command is this binary's absolute path — the same
+answer `mcp config` uses. It merges by label, so a second run replaces the task instead of adding a twin and
+every other task and key in the file survives. A `tasks.json` with `//` comments is refused rather than
+rewritten, because the comment dialect is not the JSON this build reads; add the task by hand there.
 
 ### Measuring it
 
