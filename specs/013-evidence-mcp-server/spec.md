@@ -4,8 +4,10 @@
 
 **Created**: 2026-10-28
 
-**Status**: Accepted 2026-10-28 (constitution 1.2.0). Round 6 of `specs/000-parity-roadmap.md`. SC-005 is
-restated 2026-10-29 with the measured latency beside it (`plan.md`); the other criteria stand as written.
+**Status**: Accepted 2026-10-28 (constitution 1.2.0). Round 6 of `specs/000-parity-roadmap.md`. SC-005 has been
+restated three times, each with the measured number beside it in `plan.md`: 2026-10-29 and 2026-11-01 as misses,
+and 2026-11-02 — after round 16 (`025-served-index-snapshot`) — as met at 248–261 ms p95. The other criteria stand
+as written.
 
 **Input**: User description: "… do we cover this? … a small MCP utility that makes a project's knowledge
 and repeatable operations available to GitHub Copilot, Codex, or Claude Code … if not make a plan to do so."
@@ -279,6 +281,14 @@ TOML-shaped for the third) and names the running binary.
   rather than measurement: share one snapshot across per-call handles, and say what `warm` means in the
   harness — with twelve samples the nearest-rank p95 *is* the slowest one, and the call that pays the load is
   the first after a cold start.
+  **Measured a third time, 2026-11-02, after round 16 — SC-005 is now met** (`plan.md`, "What it printed
+  (2026-11-02)"): p95 **261 ms** and **248 ms** over two runs on the 712-file, 13 686-passage, 350.2 MiB index,
+  parity 12/12, with the cold first call published beside it at **2 641–2 834 ms**. The work the 2026-11-01
+  paragraph asked for was done, and the measurement found a second half the paragraph did not name: the *status*
+  every tool reads before it answers cost 1 347–1 435 ms on a fresh instance, against 34–38 ms for the search
+  itself. Both the build and the status are now held per database rather than per call. The criterion is
+  restated to say which call it is about — **a warm call**, after the first — because that was always the
+  sentence's meaning and the harness can now tell the two apart. The cold call is not a miss: it is published.
 - **SC-006**: The evidence-to-source ratio is published as a measured number, not a projection: for a
   checked-in set of fixture queries, the characters an answer spends are compared with the characters of
   the files it cites, and the ratio is recorded in `plan.md`. There is no vendor percentage in this

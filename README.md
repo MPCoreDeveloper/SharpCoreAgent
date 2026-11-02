@@ -722,6 +722,13 @@ the tool's own heading says how fresh it is. `--no-refresh` skips the walk. The 
 and released again, so a server left running for a day never stops `sharpcoreagent index` in another
 terminal.
 
+What a call does not pay for twice is what it learned about a build it did not change: the loaded snapshot
+and the index's status are held per database rather than per call — bounded at four workspaces, re-keyed by
+the build id and by the database file's stamp — so a rebuild in this process or any other is seen by the next
+call, and the second question in a session costs tens of milliseconds instead of seconds. On this repository's
+index the twelfth question is about forty milliseconds and the first, which loads everything, about three
+seconds.
+
 Wiring a client is one command, which prints the block for the file that client reads and names the
 absolute path of the binary that is running:
 
@@ -809,11 +816,16 @@ rewritten, because the comment dialect is not the JSON this build reads; add the
 `sharpcoreagent mcp bench` is the number this round is allowed to claim. It asks the twelve questions in
 `specs/013-evidence-mcp-server/bench/queries.txt` twice — once in process and once over stdio through the
 client above — and prints, per query, the characters the answer spent against the characters of the whole
-files it cites, plus the p95 of the call:
+files it cites, plus the p95 of the call and the cost of the one call that warmed the index:
 
 ```text
-bench · 12 queries · evidence 26 412 chars · sources 61 388 chars · ratio 0.430 · p95 148 ms · parity 12/12
+bench · 12 queries · evidence 143 825 chars · sources 6 452 613 chars · ratio 0.022 · p95 261 ms · cold 2641 ms · parity 12/12
 ```
+
+The `p95` is the twelve timed calls; `cold` is one untimed call made before them, which is the only one that
+loads the index into the server process. Reporting the two separately is what lets a warm server be measured as
+a warm server — with twelve samples the p95 is the slowest sample, and without the warm-up that sample would
+always be the first call after a cold start.
 
 A query whose two answers differ is a failure rather than a row, so the harness is also the parity check
 SC-002 asks for. It needs a built index and will not run without one; the numbers it printed are in

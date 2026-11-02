@@ -22,6 +22,10 @@ namespace SharpCoreAgent.Indexing;
 /// <item>The second open in this process reuses the first handle through <see cref="IndexHandleCache"/>: the
 /// engine keeps a lock on its file, and a builder and a reader that disagree about what is committed would be
 /// worse than a lock error.</item>
+/// <item>The loaded build is shared per database path through <see cref="IndexReadCache"/> and outlives this
+/// instance. A reader is built per call by the lease, so a snapshot owned here would be thrown away on every call
+/// and every call would re-read the whole index; the handle is not shared, because releasing it between calls is
+/// what lets a build in another process run beside an idle server.</item>
 /// </list>
 /// The retrieval methods of <see cref="ICodeIndex"/> arrive with the legs that answer them; this type grows into that
 /// interface in M3 instead of shipping stubs that would silently return nothing. <see cref="Search"/> is the first of
@@ -37,17 +41,16 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     private readonly Lock _gate = new();
     private readonly IndexPaths _paths;
     private readonly string? _encryptionPassword;
-    private readonly IndexReader _reader = IndexReader.Create();
+    private readonly IndexReadState _state;
     private readonly ICodeTextEmbedder _embedder = HashedCodeEmbedder.CreateDefault();
 
     private IndexHandleLease? _lease;
-    private IndexStatus? _cached;
-    private FileStamp? _cachedStamp;
 
     private SharpCoreDbCodeIndex(IndexPaths paths, string? encryptionPassword)
     {
         _paths = paths;
         _encryptionPassword = encryptionPassword;
+        _state = IndexReadCache.For(paths);
     }
 
     /// <summary>Gets the paths this reader reads.</summary>
@@ -72,6 +75,16 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Gets the state this instance answers from: the shared one, not a copy.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so a test can compare two instances and see that the shape the lease builds — one instance per call —
+    /// still reads one loaded build. It says nothing about whether that build is current; the reader's own
+    /// <c>build_id</c> check and the status memo's file stamp do.
+    /// </remarks>
+    internal IndexReadState State => _state;
 
     /// <summary>
     /// Opens a reader for one workspace. Nothing is created and nothing is read until the first call.
@@ -103,28 +116,33 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     /// Reports the status synchronously, which is what the maintainer does while it already holds the handle.
     /// </summary>
     /// <returns>The status, cached against the database file's stamp.</returns>
+    /// <remarks>
+    /// The memo lives in <see cref="IndexReadState"/> rather than in this instance, because a status is a statement
+    /// about the file and this instance will be gone after one call. Computing it means reading <c>meta</c>, counting
+    /// the stale, skipped and orphaned rows and scanning the graph: 1 347 ms on this repository's index, paid per
+    /// call for as long as the memo was per instance. The stamp is still the gate, so a build in this process or any
+    /// other is seen by the next read.
+    /// </remarks>
     internal IndexStatus GetStatus()
     {
         lock (_gate)
         {
             if (!_paths.DatabaseExists)
             {
-                _cached = null;
-                _cachedStamp = null;
+                _state.Status = null;
                 CloseHandle();
                 LastReason = null;
                 return IndexStatus.Missing(_paths.WorkspaceRoot);
             }
 
             var stamp = ReadStamp();
-            if (_cached is { } cached && _cachedStamp is { } known && stamp == known)
+            if (_state.Status is { } memo && stamp == memo.Stamp)
             {
-                return cached;
+                return memo.Status;
             }
 
             var status = ComputeStatus();
-            _cached = status;
-            _cachedStamp = stamp;
+            _state.Status = stamp is { } taken ? new IndexStatusMemo(taken, status) : null;
             return status;
         }
     }
@@ -132,14 +150,11 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     /// <summary>
     /// Drops the cached status, so the next read looks at the database again.
     /// </summary>
-    internal void InvalidateStatus()
-    {
-        lock (_gate)
-        {
-            _cached = null;
-            _cachedStamp = null;
-        }
-    }
+    /// <remarks>
+    /// The memo is shared, so this drops it for every reader of the database — which is what a build wants: the
+    /// status it has just invalidated is not the status anybody should read next.
+    /// </remarks>
+    internal void InvalidateStatus() => _state.Status = null;
 
     /// <summary>
     /// Answers one search: both retrieval legs, the ranker and the selection budget, in that order.
@@ -164,7 +179,7 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
         }
 
         var database = OpenDatabase();
-        var snapshot = _reader.Load(database);
+        var snapshot = _state.Reader.Load(database);
 
         if (snapshot.ChunkCount == 0)
         {
@@ -279,13 +294,16 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The handle is released, because it is what a build in another process is waiting for. Nothing else is: the
+    /// loaded build and the computed status belong to the database, not to this reader, and they are exactly what a
+    /// per-call instance is not allowed to take with it. See <see cref="IndexReadCache"/>.
+    /// </remarks>
     public void Dispose()
     {
         lock (_gate)
         {
             CloseHandle();
-            _cached = null;
-            _cachedStamp = null;
         }
     }
 
@@ -306,7 +324,7 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
             return null;
         }
 
-        var snapshot = _reader.Load(OpenDatabase());
+        var snapshot = _state.Reader.Load(OpenDatabase());
         return snapshot.ChunkCount == 0 ? null : snapshot;
     }
 
@@ -647,8 +665,6 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
 
     private static string Describe(Exception exception) =>
         string.Create(CultureInfo.InvariantCulture, $"{exception.GetType().Name}: {exception.Message}");
-
-    private readonly record struct FileStamp(long Length, long WriteTicks);
 
     private sealed class MetaView(Dictionary<string, string> values)
     {

@@ -105,15 +105,33 @@ public sealed class McpBenchTests : IDisposable
                 new BenchRow("where is the budget enforced", 268, 2_118, 41),
                 new BenchRow("which file writes the transcript", 91, 512, 12),
             ],
-            Attempted: 2);
+            Attempted: 2,
+            ColdMilliseconds: 3_917);
 
         var table = McpBench.Render(report).Split('\n');
 
-        Assert.Equal("bench · 2 queries · evidence 359 chars · sources 2 630 chars · ratio 0.137 · p95 41 ms · parity 2/2", table[0]);
+        Assert.Equal(
+            "bench · 2 queries · evidence 359 chars · sources 2 630 chars · ratio 0.137 · p95 41 ms · cold 3917 ms · parity 2/2",
+            table[0]);
         Assert.StartsWith("   chars    source   ratio", table[2], StringComparison.Ordinal);
         Assert.Contains("where is the budget enforced", table[3], StringComparison.Ordinal);
         Assert.Contains("which file writes the transcript", table[4], StringComparison.Ordinal);
         Assert.StartsWith("     268     2 118   0.127", table[3], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCallThatLoadsTheSnapshotIsReportedAndIsNotThePercentile()
+    {
+        // The first call is the only one that pays the load, and with twelve samples the nearest-rank p95 is the
+        // slowest sample: counting the warm-up would make every run describe its own start-up.
+        var report = new BenchReport(
+            [new BenchRow("q1", 100, 1_000, 38), new BenchRow("q2", 120, 1_100, 41)],
+            Attempted: 2,
+            ColdMilliseconds: 3_917);
+
+        Assert.Equal(41, report.P95Milliseconds);
+        Assert.Equal(3_917, report.ColdMilliseconds);
+        Assert.Contains("cold 3917 ms", McpBench.Render(report), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -140,6 +158,7 @@ public sealed class McpBenchTests : IDisposable
         Assert.StartsWith("bench · 2 queries · evidence ", table, StringComparison.Ordinal);
         Assert.Contains("parity 2/2", table, StringComparison.Ordinal);
         Assert.Contains("p95 ", table, StringComparison.Ordinal);
+        Assert.Contains("· cold ", table, StringComparison.Ordinal);
         Assert.Contains("convert celsius to fahrenheit", table, StringComparison.Ordinal);
         Assert.Contains("where is a reading logged", table, StringComparison.Ordinal);
 

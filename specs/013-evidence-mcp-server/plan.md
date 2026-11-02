@@ -228,6 +228,32 @@ each. The duplicate ids T035 describes belong to the incremental runs before it 
 rebuild. A bench taken without the rebuild would have measured a file with repeated rows and counted passages
 twice.
 
+### What it printed (2026-11-02, this repository, after round 16)
+
+Round 16 (`025-served-index-snapshot`) did the work this plan left open — one snapshot across per-call handles, and a
+harness that says what `warm` means — and the same command on the same fixture now prints:
+
+```
+bench · 12 queries · evidence 143 825 chars · sources 6 452 613 chars · ratio 0.022 · p95 261 ms · cold 2641 ms · parity 12/12
+bench · 12 queries · evidence 143 825 chars · sources 6 452 613 chars · ratio 0.022 · p95 248 ms · cold 2834 ms · parity 12/12
+```
+
+**SC-005: met.** 261 ms and 248 ms against a 300 ms budget, down from 3 199 ms. Two things had to move out of the
+call, and the round found the second one by measuring rather than by reasoning: the snapshot (3 917 ms cold, 0 ms
+warm) and the status every tool reads before it answers (1 347–1 435 ms on a fresh instance, 0 ms when remembered).
+Both are now held per database rather than per instance, keyed by the build id and the file stamp they already used,
+so a rebuild in this process or any other is still seen by the next call. The handle is still opened and released
+per call — `LeasedCodeIndex` was not touched, and its test that proves a build in another terminal is never waiting
+on an idle editor passes without an edit.
+
+**Cold is 2 641–2 834 ms and is printed beside the p95.** The first call after a cold start is the one that loads
+the build and computes the status; with twelve samples the nearest-rank p95 *is* the slowest sample, so the harness
+now spends one untimed call before the samples and reports that call separately. The criterion is about
+"a warm `search_code`", which is what it now measures.
+
+**SC-006 stands**: ratio 0.022 on the grown index, against 0.017 at 606 files — the same order, measured on a tree
+that has since doubled.
+
 ## Complexity Tracking
 
 Four places this plan chose more work than the minimum. Each is deliberate.

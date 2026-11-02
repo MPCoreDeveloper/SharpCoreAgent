@@ -182,7 +182,10 @@ rather than a second implementation of it.
   is counted once per query and counted whole rather than by the cited range. Below 1 means the answer cost less
   than reading the files it points at.
 - **The latency (SC-005)** is the p95 of the stdio `tools/call` wall-clock, by nearest rank: with twelve samples
-  that is the slowest call, not an interpolated one.
+  that is the slowest call, not an interpolated one. Since round 16 the run spends one untimed call before the
+  samples — the first question, asked over stdio — so the samples describe a server that has already answered, and
+  that call's cost is reported separately as `cold`. Without it the p95 *is* the first call by construction, and a
+  warm server would measure as a cold one.
 - **stdout** carries one summary line, a blank line and one row per query — that is the artefact the numbers in
   `plan.md` are a paste of. **stderr** carries the header naming the index, and every parity failure.
 - It needs a built index (`sharpcoreagent index` first) and refuses to run without one, because twelve identical

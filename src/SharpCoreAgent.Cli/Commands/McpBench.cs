@@ -28,11 +28,16 @@ internal sealed record BenchRow(string Query, long AnswerChars, long SourceChars
 }
 
 /// <summary>
-/// The whole run: the two numbers SC-006 and SC-005 are recorded as, and whether parity held.
+/// The whole run: the numbers SC-006 and SC-005 are recorded as, whether parity held, and what the first call cost.
 /// </summary>
 /// <param name="Rows">The queries that answered identically on both sides.</param>
 /// <param name="Attempted">How many were asked, so a mismatch cannot shrink the denominator.</param>
-internal sealed record BenchReport(IReadOnlyList<BenchRow> Rows, int Attempted)
+/// <param name="ColdMilliseconds">
+/// The untimed call that loaded the snapshot before the samples began. It is reported beside the p95 rather than
+/// counted in it: with twelve samples the nearest-rank p95 is the slowest sample, so including the only call that
+/// pays the load would make the p95 a measurement of the cold start however warm the server had become.
+/// </param>
+internal sealed record BenchReport(IReadOnlyList<BenchRow> Rows, int Attempted, int ColdMilliseconds = 0)
 {
     /// <summary>Gets the characters every answer spent.</summary>
     public long AnswerChars => Rows.Sum(row => row.AnswerChars);
@@ -214,7 +219,7 @@ internal static class McpBench
             return ExitCodes.Failed;
         }
 
-        var rows = await MeasureAsync(
+        var measured = await MeasureAsync(
             tool,
             host.Servers[0],
             workspace,
@@ -223,7 +228,7 @@ internal static class McpBench
             error,
             cancellationToken).ConfigureAwait(false);
 
-        var report = new BenchReport(rows, queries.Count);
+        var report = new BenchReport(measured.Rows, queries.Count, measured.ColdMilliseconds);
 
         await output.WriteAsync(Render(report).AsMemory(), cancellationToken).ConfigureAwait(false);
         await output.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -238,12 +243,17 @@ internal static class McpBench
     /// <param name="tool">The in-process <c>search_code</c>, resolved from the container <c>mcp serve</c> builds.</param>
     /// <param name="server">The running server, spoken to through this product's own client.</param>
     /// <param name="workspace">The workspace the answers cite.</param>
-    /// <param name="queries">The questions, in the order the file lists them.</param>
+    /// <param name="queries">The questions, in the order the file lists them; at least one.</param>
     /// <param name="verbose">Whether to report each query's two durations as it finishes.</param>
     /// <param name="error">Where a query that failed or disagreed is named.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
-    /// <returns>One row per query that answered identically on both sides.</returns>
-    private static async Task<IReadOnlyList<BenchRow>> MeasureAsync(
+    /// <returns>One row per query that answered identically on both sides, and the cost of the warm-up call.</returns>
+    /// <remarks>
+    /// The warm-up comes first and is reported rather than counted: it is the one call that loads the index's
+    /// snapshot into the server process, and it is what makes every sample after it the cost of asking rather than
+    /// the cost of starting. It asks the first question, so the work it does is work the run needs anyway.
+    /// </remarks>
+    private static async Task<(IReadOnlyList<BenchRow> Rows, int ColdMilliseconds)> MeasureAsync(
         ITool tool,
         McpServerConnection server,
         Workspace workspace,
@@ -253,6 +263,7 @@ internal static class McpBench
         CancellationToken cancellationToken)
     {
         var rows = new List<BenchRow>(queries.Count);
+        var cold = await WarmUpAsync(server, queries[0], verbose, error, cancellationToken).ConfigureAwait(false);
 
         foreach (var query in queries)
         {
@@ -319,7 +330,61 @@ internal static class McpBench
                 (int)elapsed.TotalMilliseconds));
         }
 
-        return rows;
+        return (rows, cold);
+    }
+
+    /// <summary>
+    /// Asks one question before anything is timed, so the samples measure a server that has already answered.
+    /// </summary>
+    /// <param name="server">The running server, spoken to through this product's own client.</param>
+    /// <param name="query">The first question of the fixture; its answer is not kept, only its cost.</param>
+    /// <param name="verbose">Whether to report the warm-up's duration as it finishes.</param>
+    /// <param name="error">Where a warm-up that failed is named.</param>
+    /// <param name="cancellationToken">Cancels the run.</param>
+    /// <returns>The wall clock of the call, in milliseconds.</returns>
+    /// <remarks>
+    /// This is the call that loads the index snapshot into the server process, and it is the only one that pays it.
+    /// Its cost is reported as <c>cold</c> rather than added to the samples: a p95 that included it would be the
+    /// slowest sample by construction, and with twelve samples that would describe the start-up on every run.
+    /// </remarks>
+    private static async Task<int> WarmUpAsync(
+        McpServerConnection server,
+        string query,
+        bool verbose,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        var arguments = JsonSerializer.Serialize(
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["query"] = query });
+
+        using var payload = JsonDocument.Parse(arguments);
+
+        var started = Stopwatch.GetTimestamp();
+        var answer = await server
+            .CallAsync(SearchCodeTool.Name, payload.RootElement, TimeSpan.FromMinutes(2), cancellationToken)
+            .ConfigureAwait(false);
+        var elapsed = Stopwatch.GetElapsedTime(started);
+
+        if (verbose)
+        {
+            await error.WriteLineAsync(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"  warm-up · stdio {elapsed.TotalMilliseconds:0} ms (the call that loads the snapshot)")
+                    .AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (answer.IsError)
+        {
+            // Named here rather than left to the parity rows: a warm-up that failed means every sample after it
+            // measured a server that could not answer, and the p95 would be a number about nothing.
+            await error.WriteLineAsync(
+                $"  the warm-up call could not be answered: {answer.Text}".AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return (int)elapsed.TotalMilliseconds;
     }
 
     /// <summary>
@@ -446,6 +511,7 @@ internal static class McpBench
             .Append(" · sources ").Append(Number(report.SourceChars)).Append(" chars")
             .Append(" · ratio ").Append(Ratio(report.Ratio))
             .Append(" · p95 ").Append(report.P95Milliseconds.ToString(CultureInfo.InvariantCulture)).Append(" ms")
+            .Append(" · cold ").Append(report.ColdMilliseconds.ToString(CultureInfo.InvariantCulture)).Append(" ms")
             .Append(" · parity ").Append(report.Identical.ToString(CultureInfo.InvariantCulture))
             .Append('/').Append(report.Attempted.ToString(CultureInfo.InvariantCulture))
             .Append("\n\n  ")
