@@ -48,7 +48,7 @@ reader sees is whole files, whole checkpoints, and one complete `meta` row set a
 
 D21 named three levers. This is the first. `communities` (1 m 49 s for 26 files, 2 m 0 s for 6 — a fixed charge per
 *writing* run) and the no-op `meta`/open overhead (5.5 s for a run that changed nothing) are the second and the third,
-and each is a slice of its own. SC-006's 61x index size belongs to D17–D19 and is not touched here either.
+and each is a slice of its own. SC-006's 61× index size belongs to D17–D19 and is not touched here either.
 
 ## User Scenarios & Testing *(mandatory)*
 

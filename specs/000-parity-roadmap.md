@@ -61,6 +61,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 14 | [`023-ide-surface`](023-ide-surface/spec.md) | `ui --serve` — the index as a page on `127.0.0.1`, from one builder both it and `index --status --json` read (landed 2026-11-02 as `1eb0164`: `UiCommand`, `UiServer`, `UiPage`, `UiEndpoint`, `IndexStatusDocument`, 62 tests) | 0, `002` and `013` (landed) |
 | 15 | [`024-ide-agent-definition`](024-ide-agent-definition/spec.md) | `ide agent` and `ide tasks` — the profile that puts this server's five tools in the editor's agent picker, and the task that rebuilds the index, both written only where they may be | 0, `013` and `022` (landed) |
 | 16 | [`025-served-index-snapshot`](025-served-index-snapshot/spec.md) | the served call stops reloading what it already knew — one loaded build and one computed status per index, shared across the handles the lease opens and releases, and a harness that says which call its p95 describes (landed 2026-11-02 as `37c5efa`: `IndexReadCache`, `IndexReadState`, `IndexStatusMemo`, `FileStamp`, the bench's warm-up and `cold`, 11 tests) | 0, `002` and `013` (all landed) |
+| 17 | [`026-checkpointed-index-writes`](026-checkpointed-index-writes/spec.md) | one commit per checkpoint of 32 files — a rebuild of this index falls from 17 m 51 s to 2 m 53 s and from 700 commits to 26, and the clusterer becomes 74 % of what is left (landed 2026-11-02 as `acf125e`: the checkpoint in `IndexFileWriter`, four boundaries in `IndexWriter`, `PruneAsync`'s one commit, `IndexBuildReport.Commits`, the `--verbose` row, 11 tests) | 16, and `002` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -73,7 +74,8 @@ server, `016` is model roles, `017` is the image view, `019` is image ingress �
 budget — round 11 — `021` is image deduplication — round 12 — `022` is the IDE's client configuration — round 13 —
 `023` is the IDE surface itself, a page for the developer rather than for another agent — round 14 — and
 `024` is the agent definition, the profile such an editor lists and the task such a workspace runs — round 15 —
-`025` is the served call's own memory, the build and the status a `tools/call` no longer rebuilds — round 16 —
+`025` is the served call's own memory, the build and the status a `tools/call` no longer rebuilds — round 16 — and
+`026` is the commit interval, the write phase a build no longer pays once per file — round 17 —
 while `014` was never assigned and `018` stays released, unassigned for a round that wants it.)
 
 ## Decision record
@@ -692,13 +694,54 @@ The number is the point: `mcp bench` twice on this repository's index, 712 files
 `p95 261 ms · cold 2641 ms · parity 12/12` and `p95 248 ms · cold 2834 ms · parity 12/12`, against 3,199 ms before.
 SC-005 is restated a third time in `013` and met; the cold call is published beside it rather than averaged into it.
 
+## Round 17 — `026-checkpointed-index-writes` (landed 2026-11-02 as `acf125e`)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–16 took. Round 17 is the
+first of the three levers `002` D21 named, and the only one that is arithmetic rather than a judgement: D21 measured a
+build's steps for the first time and found that 88 % of a rebuild was the store's own batch commit — 700 of them, one
+per written file. The argument is [`026-checkpointed-index-writes/spec.md`](026-checkpointed-index-writes/spec.md); the
+nine decisions, the terminal's output and both runs are in its `plan.md`.
+
+**Ships**: a checkpoint in `IndexFileWriter` — `BeginCheckpoint`, `EndCheckpoint`, `AbandonCheckpoint`, a count of the
+files a group is carrying, and a `RunInBatch` that joins an open group instead of opening its own batch. The batch is
+opened lazily by the first write inside the group, so a group that carries nothing costs nothing and a build stopped
+before its first file still pays exactly one commit. `IndexWriter` carries 32 files per checkpoint and closes it at the
+end of the walk, before the budget's break and before cancellation leaves the writer, abandoning it on any other
+exception; `RemoveVanished` and `PruneAsync` remove their whole set in one commit each; `IndexWriteResult.Commits` counts
+every commit where it is timed, and `index --verbose` prints it beside the phase block it explains.
+
+**Does not ship**: no `--checkpoint` flag (a decision the code can make once, not a knob), nothing about `communities`,
+`meta` or the store's own commit, no parallel extraction, and no `--json` key — a commit count is a fact about the
+writer's strategy rather than about the index a caller queries. One file is still written as one unit and `meta` is
+still written last and alone, which is what keeps an interrupted build **stale** rather than wrong.
+
+**Evidence**: eleven cases, all new. `CheckpointTests` (9): five files commit 3 times at the default and 5 at two files a
+group, with the same counters and rows either way; an abandoned group leaves the store as the last commit left it and a
+committed one survives a later failure; a zero budget commits only `meta`; a budget expiring inside a group keeps it
+(200 files, 800 ms, rows equal to the counter, commits still one per group); an already-cancelled build writes nothing;
+a prune of three files commits once; a second begin is refused. `IndexCommandTests` adds the `--verbose` row and the
+absence of a `commits` key in `--json`. No existing test was edited — `PhaseTimingTests`, `RefreshBudgetTests`,
+`VerifyPruneTests`, `WriterLockTests` and `IncrementalIndexTests` pass as they are. Build 0 warnings; suite 1,494
+passed, 0 failed, 0 skipped — 11 this round's, against 1,483.
+
+The number is the point: one `index --rebuild --verbose` on this repository's index, 740 files and 14,200 passages,
+reports **26 commits** and **2 m 53 s**, where D21's rebuild reported 700 and 17 m 51 s. `write` fell from 15 m 47 s to
+**36.9 s** and the commit inside it from 15 m 49 s to **37.5 s** — 25× both, and the two still agree to within a second,
+which is D21's finding moved down rather than replaced. A seven-file writing run now costs 2 m 18 s, of which the clusterer
+is 2 m 2 s. `mcp bench` still prints `p95 260 ms · cold 2774 ms · parity 12/12`, so round 16's SC-005 is untouched.
+
+**Left open, with the arithmetic attached**: the interval itself. At 32 files a checkpoint the commit is still about half
+of what the write phase costs, so a larger group would help — and a checkpoint is a buffer held in memory until it
+commits, which is a decision about memory this round did not take. The next lever is `communities`, then the no-op
+`meta`/open overhead, and `002` T034 stays open for SC-002's 5,000-file tree and SC-006's 61×.
+
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
 empty checkbox.
 
 | Round | Open | Why it is still open |
 |---|---|---|
-| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19) |
+| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |

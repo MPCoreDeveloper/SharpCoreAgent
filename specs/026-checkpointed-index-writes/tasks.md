@@ -77,10 +77,10 @@ number, and the number exists before the round is called done.
   - Files: `SharpCoreAgent.slnx`
   - Done: build clean at zero warnings; **1 494 passed, 0 failed, 0 skipped** — eleven new, against 1 483.
 
-- [ ] **T012** The roadmap, last and separately
+- [x] **T012** The roadmap, last and separately
   - Files: `specs/000-parity-roadmap.md`
-  - Do: the Round 17 section, the rounds-table row, and the round-0 open item's numbers. Lands as its own commit carrying
-    this one's hash, the shape rounds 9–16 took.
+  - Done: the Round 17 section, the rounds-table row, the round-0 open item's numbers and the numbering note; landed as
+    its own commit carrying `acf125e`, the shape rounds 9–16 took.
 
 ## Notes
 
