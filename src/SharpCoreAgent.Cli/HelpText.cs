@@ -30,7 +30,7 @@ internal static class HelpText
                                                        settings, and where each value comes from
           sharpcoreagent setup                         the preferences, asked for one at a time
           sharpcoreagent mcp serve [options]           this workspace's index as an MCP server on stdio
-          sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode or codex
+          sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
           sharpcoreagent mcp bench [options]           the twelve fixture questions, measured against the source
           sharpcoreagent --help | --version
 
@@ -50,7 +50,8 @@ internal static class HelpText
           --fsharp                 run, chat   off         file_diagnostics, uses_at and signature_at may ask the F# type checker; off otherwise
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
-          --client <name>          mcp config  —           claude, vscode or codex: whose configuration gets the block
+          --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
+          --write                  mcp config  off         write the block into that file instead of printing it
           --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow
           --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
@@ -131,7 +132,7 @@ internal static class HelpText
 
         Serve
           sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served
-          sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode or codex
+          sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode, visualstudio or codex
           sharpcoreagent mcp bench                    the twelve fixture questions, asked twice and measured
           Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only
           evidence tools — search_code, find_symbol, find_references, code_context and index_status —
@@ -150,11 +151,18 @@ internal static class HelpText
 
           Nothing here is a setting and nothing here needs a key, which is why wiring an agent is one
           command: 'mcp config --client claude' prints the block for .mcp.json at the repository root,
-          'vscode' the one for .vscode/mcp.json, and 'codex' the [mcp_servers.sharpcoreagent] table for
-          ~/.codex/config.toml. Each names this binary's absolute path and 'mcp serve', so the agent
-          serves the directory it starts the server in; put --workspace in the args to pin another.
-          The block is the only thing on stdout, so a redirect writes the file, and the one line
-          naming that file goes to stderr.
+          'visualstudio' the one Visual Studio reads from that same .mcp.json, 'vscode' the one for
+          .vscode/mcp.json, and 'codex' the [mcp_servers.sharpcoreagent] table for ~/.codex/config.toml.
+          Each names this binary's absolute path and 'mcp serve', so the agent serves the directory it
+          starts the server in; put --workspace in the args to pin another. The block is the only thing
+          on stdout, so a redirect writes the file, and the one line naming that file goes to stderr.
+
+          --write merges the block into that file instead of printing it, because a redirect truncates:
+          the file keeps every key it had, the client's object keeps every other server, and this entry
+          keeps the env and cwd somebody added to it. An entry that already matches is left alone and
+          said so. A file that is not JSON, or whose 'servers' is not an object, exits 7 with the file
+          untouched. Run it once per client and one committed .mcp.json carries both keys — mcpServers
+          for Claude Code, servers for Visual Studio — with neither client losing the other's.
 
           'mcp bench' asks the twelve questions in specs/013-evidence-mcp-server/bench/queries.txt
           twice — in process and over stdio — and prints, for each answer, the characters it spent
@@ -201,6 +209,7 @@ internal static class HelpText
           sharpcoreagent run "find the TODO comments" --provider openai-compatible --base-url http://localhost:1234/v1
           sharpcoreagent chat --mcp "npx -y @modelcontextprotocol/server-filesystem ."
           sharpcoreagent mcp config --client vscode > .vscode/mcp.json
+          sharpcoreagent mcp config --client visualstudio --write
         """;
 
     /// <summary>Gets the commands the interactive loop understands.</summary>

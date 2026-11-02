@@ -5,13 +5,14 @@ using System.Text.Json.Nodes;
 namespace SharpCoreAgent.Cli;
 
 /// <summary>
-/// The three configuration blocks <c>mcp config</c> prints, and the file each one belongs in.
+/// The four configuration blocks <c>mcp config</c> prints, and the file each one belongs in.
 /// </summary>
 /// <remarks>
-/// Three agents, three file shapes, and the difference is not cosmetic: Claude Code reads an <c>mcpServers</c>
-/// object from <c>.mcp.json</c>, VS Code reads a <c>servers</c> object from <c>.vscode/mcp.json</c> and insists on a
-/// <c>type</c>, and Codex reads a TOML table from <c>config.toml</c>. A developer who has to learn that from three
-/// blog posts is the developer this command exists for.
+/// Four clients, three files, and the difference is not cosmetic: Claude Code reads an <c>mcpServers</c> object from
+/// <c>.mcp.json</c>, Visual Studio reads a <c>servers</c> object from the same <c>.mcp.json</c> and insists on a
+/// <c>type</c>, VS Code reads that same <c>servers</c> shape from <c>.vscode/mcp.json</c>, and Codex reads a TOML
+/// table from <c>config.toml</c>. A developer who has to learn that from three blog posts is the developer this
+/// command exists for.
 /// <para>
 /// The blocks are built, not formatted by hand: the JSON through <see cref="JsonNode"/> so a Windows path arrives
 /// escaped, and the TOML with a literal string, which is the one TOML form in which a backslash stays a backslash.
@@ -19,6 +20,8 @@ namespace SharpCoreAgent.Cli;
 /// </remarks>
 internal static class McpClientSnippets
 {
+    /// <summary>The prefix every line this command writes to stderr begins with.</summary>
+    internal const string NotePrefix = "sharpcoreagent mcp config: ";
     /// <summary>The name the entry is filed under, and the prefix the agent puts in front of every tool name.</summary>
     /// <remarks>
     /// <c>sharpcoreagent</c>, because that is what the server answers in <c>serverInfo</c> and what FR-017 expects the
@@ -37,12 +40,71 @@ internal static class McpClientSnippets
     /// <param name="command">The absolute path of the executable the client should start.</param>
     /// <param name="arguments">What to pass it.</param>
     /// <returns>The block, newline-terminated, ready to paste or redirect into the file.</returns>
-    internal static string Render(McpClientKind client, string command, IReadOnlyList<string> arguments) => client switch
+    internal static string Render(McpClientKind client, string command, IReadOnlyList<string> arguments) =>
+        TryShape(client, out var root, out var typed)
+            ? Json(root, typed, command, arguments)
+            : Toml(command, arguments);
+
+    /// <summary>
+    /// Says which key a client reads, and whether it insists on a <c>type</c>.
+    /// </summary>
+    /// <param name="client">Whose configuration is being written.</param>
+    /// <param name="root">The top-level key: <c>mcpServers</c> or <c>servers</c>.</param>
+    /// <param name="typed">Whether a stdio entry says so.</param>
+    /// <returns><see langword="true"/> for the JSON clients, <see langword="false"/> for the one whose file is TOML.</returns>
+    /// <remarks>
+    /// The one place the two JSON shapes are written down, because the printer and the writer must agree about them:
+    /// a block that said <c>mcpServers</c> beside a merge that wrote <c>servers</c> is a file that grows a second,
+    /// ignored entry every time it is written.
+    /// </remarks>
+    internal static bool TryShape(McpClientKind client, out string root, out bool typed)
     {
-        McpClientKind.Claude => Json("mcpServers", typed: false, command, arguments),
-        McpClientKind.VsCode => Json("servers", typed: true, command, arguments),
-        _ => Toml(command, arguments),
-    };
+        switch (client)
+        {
+            case McpClientKind.Claude:
+                root = "mcpServers";
+                typed = false;
+                return true;
+
+            case McpClientKind.VsCode:
+            case McpClientKind.VisualStudio:
+                root = "servers";
+                typed = true;
+                return true;
+
+            default:
+                root = string.Empty;
+                typed = false;
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Builds the one entry both the printer and the writer file under <see cref="ServerName"/>.
+    /// </summary>
+    /// <param name="typed">Whether the entry says <c>"type": "stdio"</c>.</param>
+    /// <param name="command">The executable.</param>
+    /// <param name="arguments">Its arguments.</param>
+    /// <returns>A detached entry, which the caller may parent wherever it likes.</returns>
+    internal static JsonObject Entry(bool typed, string command, IReadOnlyList<string> arguments)
+    {
+        var entry = new JsonObject();
+        if (typed)
+        {
+            entry["type"] = "stdio";
+        }
+
+        entry["command"] = command;
+
+        var args = new JsonArray();
+        foreach (var argument in arguments)
+        {
+            args.Add(JsonValue.Create(argument));
+        }
+
+        entry["args"] = args;
+        return entry;
+    }
 
     /// <summary>
     /// Names the file the block belongs in.
@@ -50,9 +112,14 @@ internal static class McpClientSnippets
     /// <param name="client">Whose configuration the block is for.</param>
     /// <param name="workspaceRoot">The workspace, absolute: two of the three files are found from it.</param>
     /// <returns>An absolute path for the user-scope file, a path inside the workspace for the two project ones.</returns>
+    /// <remarks>
+    /// Claude Code and Visual Studio are given the same file on purpose. Each reads its own key and ignores the other's,
+    /// so one committed <c>.mcp.json</c> beside the solution serves both — and <c>--write</c> merges, which is what
+    /// makes running the command once per client leave both keys in place.
+    /// </remarks>
     internal static string Destination(McpClientKind client, string workspaceRoot) => client switch
     {
-        McpClientKind.Claude => Path.Combine(workspaceRoot, ".mcp.json"),
+        McpClientKind.Claude or McpClientKind.VisualStudio => Path.Combine(workspaceRoot, ".mcp.json"),
         McpClientKind.VsCode => Path.Combine(workspaceRoot, ".vscode", "mcp.json"),
         _ => Path.Combine(UserProfile(), ".codex", "config.toml"),
     };
@@ -70,11 +137,13 @@ internal static class McpClientSnippets
     internal static string Note(McpClientKind client, string destination) => client switch
     {
         McpClientKind.Claude =>
-            $"sharpcoreagent mcp config: paste into {destination} (project scope: committed, and shared with the team)",
+            $"{NotePrefix}paste into {destination} (project scope: committed, and shared with the team)",
         McpClientKind.VsCode =>
-            $"sharpcoreagent mcp config: paste into {destination} (workspace scope: VS Code reads .vscode/mcp.json)",
+            $"{NotePrefix}paste into {destination} (workspace scope: VS Code reads .vscode/mcp.json)",
+        McpClientKind.VisualStudio =>
+            $"{NotePrefix}paste into {destination} (solution scope: Visual Studio reads .mcp.json beside the .sln)",
         _ =>
-            $"sharpcoreagent mcp config: append to {destination} (user scope: one table per server, beside the rest)",
+            $"{NotePrefix}append to {destination} (user scope: one table per server, beside the rest)",
     };
 
     /// <summary>
@@ -110,23 +179,7 @@ internal static class McpClientSnippets
     /// <returns>The document, newline-terminated.</returns>
     private static string Json(string root, bool typed, string command, IReadOnlyList<string> arguments)
     {
-        var entry = new JsonObject();
-        if (typed)
-        {
-            entry["type"] = "stdio";
-        }
-
-        entry["command"] = command;
-
-        var args = new JsonArray();
-        foreach (var argument in arguments)
-        {
-            args.Add(JsonValue.Create(argument));
-        }
-
-        entry["args"] = args;
-
-        var document = new JsonObject { [root] = new JsonObject { [ServerName] = entry } };
+        var document = new JsonObject { [root] = new JsonObject { [ServerName] = Entry(typed, command, arguments) } };
         return document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
     }
 

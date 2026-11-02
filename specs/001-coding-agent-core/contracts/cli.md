@@ -13,7 +13,7 @@ sharpcoreagent models [--provider <name>]    # list known models
 sharpcoreagent index [options]               # build, inspect or repair the index (002)
 sharpcoreagent config [show|get|set|unset|path]   # settings and their provenance (006)
 sharpcoreagent mcp serve [options]           # this workspace's index as an MCP server on stdio (013)
-sharpcoreagent mcp config --client <name>    # the block that adds it to claude, vscode or codex (013)
+sharpcoreagent mcp config --client <name>    # the block that adds it to claude, vscode, visualstudio or codex (013, 022)
 sharpcoreagent mcp bench [options]           # the fixture questions, measured against the source (013)
 sharpcoreagent --help | --version
 ```
@@ -37,7 +37,8 @@ settings file, its precedence and its exit code are in
 | `--web` | run, chat | — | Register `fetch_url` for this process; refused on `models`, `index`, `config` and `setup` (008) |
 | `--web-allow <host>` | run, chat | — | Exempt a host from `fetch_url`'s address refusal; repeatable, needs `--web`, and has no settings key or environment variable (008) |
 | `--mcp <command>` | run, chat | — | Start one stdio MCP server and register the tools it lists for this process; repeatable, refused on `models`, `index`, `config` and `setup`, and has no settings key or environment variable (009) |
-| `--client <name>` | mcp config | — | `claude`, `vscode` or `codex`: whose configuration the printed block is for; refused on every other command, and required — `mcp config` without it exits `2` (013) |
+| `--client <name>` | mcp config | — | `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for; `visualstudio` and `claude` name the same `.mcp.json` under different keys, and `vs` is accepted for `visualstudio`; refused on every other command, and required — `mcp config` without it exits `2` (013, 022) |
+| `--write` | mcp config | — | Merge the block into the file `--client` names instead of printing it, keeping every other key, server and entry field; an entry that already matches is not written, and a file that cannot be merged exits `7` untouched; refused on every other command, `--client codex` included (022) |
 | `--approval <mode>` | run, chat | `ask` | `readonly`, `ask`, `allow` |
 | `--max-iterations <n>` | run, chat | `400` | Loop bound: one turn is tens of model calls, not a handful |
 | `--max-output-tokens <n>` | run, chat | `8000` | Per-request output cap |
@@ -116,7 +117,7 @@ Ctrl+C during a turn cancels the turn and returns to the prompt; a second Ctrl+C
 | 4 | budget exhausted or turn cancelled |
 | 5 | session file could not be written or read |
 | 6 | the code index could not be created, written or read (002) |
-| 7 | the settings file could not be read, written or understood (006) |
+| 7 | the settings file could not be read, written or understood (006); or `mcp config --write` could not merge the client's file, which is left as it was (022) |
 
 `chat` exits 0 on `/exit` regardless of earlier turn outcomes; the exit code reflects the last turn
 only when the process ends because of that turn.

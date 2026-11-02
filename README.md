@@ -201,7 +201,7 @@ sharpcoreagent index [options]               build, inspect or repair the code i
 sharpcoreagent config [show|get|set|unset|path]   settings, and where each value comes from
 sharpcoreagent setup                        the preferences, asked for one at a time
 sharpcoreagent mcp serve [options]          this workspace's index as an MCP server on stdio
-sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode or codex
+sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
 sharpcoreagent --help | --version
 ```
 
@@ -242,7 +242,8 @@ keep working on the file that needs repairing.
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
 | `--fsharp` | run, chat | off — `file_diagnostics`, `uses_at` and `signature_at` may ask the F# type checker; off otherwise |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
-| `--client <name>` | mcp config | none — `claude`, `vscode` or `codex`: whose configuration the printed block is for |
+| `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
+| `--write` | mcp config | off — merge the block into that file instead of printing it, keeping every other entry |
 | `--approval <mode>` | run, chat | `ask` |
 | `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
@@ -719,14 +720,31 @@ Wiring a client is one command, which prints the block for the file that client 
 absolute path of the binary that is running:
 
 ```text
-sharpcoreagent mcp config --client claude    # .mcp.json at the repository root, project scope
-sharpcoreagent mcp config --client vscode    # .vscode/mcp.json, which wants "servers" and a "type"
-sharpcoreagent mcp config --client codex     # the [mcp_servers.sharpcoreagent] table for config.toml
+sharpcoreagent mcp config --client claude          # .mcp.json at the repository root, under "mcpServers"
+sharpcoreagent mcp config --client visualstudio    # that same .mcp.json, under "servers" and typed
+sharpcoreagent mcp config --client vscode          # .vscode/mcp.json, which wants "servers" and a "type"
+sharpcoreagent mcp config --client codex           # the [mcp_servers.sharpcoreagent] table for config.toml
 ```
 
 stdout carries the block and nothing else, so `sharpcoreagent mcp config --client vscode > .vscode/mcp.json`
-writes the file; the line naming that file goes to stderr. None of it is a setting and none of it needs a
-key, which is the point: an agent that is not this one gets this repository's index for a command line.
+writes the file; the line naming that file goes to stderr. `--write` merges the block into that file
+instead of printing it, because a redirect truncates: the file keeps every key it already had, the
+client's object keeps every other server, and this entry keeps the `env` and `cwd` you added to it. An
+entry that already matches is left alone and said so; a file that is not JSON exits 7 with nothing
+written. That merge is what makes one committed `.mcp.json` serve both IDEs — Claude Code reads
+`mcpServers` from it, Visual Studio reads `servers` from it, and neither run destroys the other's key:
+
+```text
+sharpcoreagent mcp config --client claude --write        # adds mcpServers.sharpcoreagent
+sharpcoreagent mcp config --client visualstudio --write  # adds servers.sharpcoreagent, keeps the first
+```
+
+None of it is a setting and none of it needs a key, which is the point: an agent that is not this one
+gets this repository's index for a command line. `visualstudio` is the one an IDE-delegated agent needs
+most: Visual Studio 2026 reads `.mcp.json` from the solution folder, and a server that never appears in
+its tool list is almost always a block written under the wrong key, in the wrong file, or without
+`"type": "stdio"`. `--client codex --write` is refused rather than attempted: `config.toml` holds
+whichever tables it already holds, and this repository has no TOML writer to keep them.
 
 ### Measuring it
 
@@ -979,6 +997,16 @@ the second duplicates settings that would drift.
   the model asked for it to be, and it is checked before the turn's budget because it spends nothing. Identity is the
   picture's type and bytes, never the path or the URL. Seven new cases; the whole suite is 1,309 green in `Release` at 0
   warnings.
+
+- `specs/022-ide-client-config` — the fourth client, and a merge instead of a redirect. Rounds 1–12 made the index
+  reachable from three terminal agents; the IDE is the one that is not a terminal, and it reads `.mcp.json` from the
+  solution folder under `servers`, with an explicit `"type": "stdio"`. `--client visualstudio` prints that block, and
+  `--write` merges it into the file instead of printing it: every other key, every other server and every entry field
+  the command does not own survive, an entry that already matches is left byte-identical, and one committed `.mcp.json`
+  ends up carrying both `mcpServers` (Claude Code) and `servers` (Visual Studio). A file that cannot be merged exits 7
+  with nothing written, `--write` is refused on every other command, and `--client codex --write` is refused because
+  `config.toml` has tables this repository cannot read. Twenty-five new cases; the whole suite is 1,356 green in
+  `Release` at 0 warnings.
 
 ## Spec-driven development
 

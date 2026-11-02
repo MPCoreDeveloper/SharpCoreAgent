@@ -57,6 +57,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 10 | [`019-image-ingress`](019-image-ingress/spec.md) | a picture reaches the model through every door already open — an MCP `image` part and an `image/*` response from `fetch_url`, behind one `ImagePayload` rule (landed 2026-10-31 as `83c28ea`; closes `017` T024–T025) | 0, `008`, `009`, `010` and `017` (all landed) |
 | 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31 as `051089d`; narrows `017` T031) | 0, `017` and `019` (landed) |
 | 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31 as `5a01290`; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
+| 13 | [`022-ide-client-config`](022-ide-client-config/spec.md) | `mcp config --client visualstudio`, and `--write` — the block merged into the one `.mcp.json` two IDEs read, instead of a redirect that truncates (landed 2026-11-02: `McpClientKind.VisualStudio`, `McpClientSnippets.TryShape`/`Entry`, `McpConfigWriter`, 25 tests) | 0, and `013` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -66,7 +67,8 @@ compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — whi
 key, `013` is the evidence server, `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
 server, `016` is model roles, `017` is the image view, `019` is image ingress — round 10 — `020` is the turn's image
-budget — round 11 — `021` is image deduplication — round 12 — and `014` was never assigned.)
+budget — round 11 — `021` is image deduplication — round 12 — `022` is the IDE's client configuration — round 13 — and
+`014` was never assigned.)
 
 ## Decision record
 
@@ -537,7 +539,41 @@ picture, then the picture). Build 0 warnings; suite 1,309 passed, 0 failed, whic
 one ordering that changed is inside `view_image` — the file is read before the duplicate and the budget are checked,
 because a duplicate cannot be recognised without its bytes — and no existing case observes it.
 
-## Open work, and what is still undecided
+## Round 13 — `022-ide-client-config` (landed 2026-11-02)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–12 took. Rounds 1–12 made
+this repository's index reachable from three *terminal* agents, and round 6 wrote down what it had not done: the three
+clients it knew were Claude Code, VS Code and Codex. The fourth is the one that is not a terminal. Visual Studio 2026's
+agent reads `.mcp.json` from the solution folder, under `servers`, with an explicit `"type": "stdio"` — a file and a key
+no command named. `--client vscode` prints the right key for the wrong file, so the server appears in VS Code's list and
+nowhere in the IDE's. Worse, `.mcp.json` is the one file two clients read under two different keys, and the documented
+route into it was a redirect, which truncates: adding the second client deleted the first. The argument is
+[`022-ide-client-config/spec.md`](022-ide-client-config/spec.md) and the facts, decisions and the two things this round
+did not verify are in its `plan.md`.
+
+**Ships**: `McpClientKind.VisualStudio` — `.mcp.json` in the workspace, `servers`, typed, with `vs` accepted — and
+`mcp config --write`, which merges the block into the file instead of printing it. The merge keeps every top-level key,
+every other server and every entry field the command does not own (`env`, `cwd`); it rewrites `type`/`command`/`args`,
+because those are what go stale when the binary moves; an entry that already matches is not written to at all and says
+so; and one committed `.mcp.json` carries both `mcpServers` and `servers` after two runs. A file that cannot be merged —
+not JSON, not an object, a `servers` key that is an array — exits `7` with the file untouched. `McpClientSnippets.TryShape`
+and `Entry` are the single place the key and the entry are decided, so the printer and the writer cannot disagree, and
+`RejectWriteFlag` refuses `--write` everywhere else, `mcp serve` included.
+
+**Does not ship**: a `.vscode/mcp.json` migration (that file is the fourth resort of Visual Studio's documented search
+and a git-ignored `.vs\mcp.json` outranks both, but changing the file `--client vscode` names would invalidate every note
+and script since round 6), a TOML merge (`--client codex --write` is refused rather than approximated), an agent
+definition (`.github/agents/*.agent.md`, `.vscode/tasks.json` — the next slice), a `mcp config --check`, atomic-by-rename
+writes, and any change to what `mcp serve` publishes.
+
+**Evidence**: twenty-five cases in three classes — `McpConfigWriteTests` (the three outcomes, the two merges, the two
+refusals), `McpConfigCommandTests` (`--client visualstudio`'s key, file and note; the note case now covers four clients)
+and `McpConfigParsingTests` (four spellings, `--write` beside `--client`, `--client codex --write`, eight commands that
+refuse it, and help/version). The five help-text cases that pin the block were amended, and the golden `Serve` section
+grew the paragraph. Build 0 warnings; suite 1,356 passed, 0 failed — 25 this round's, on a tree that already carried 22
+from the unrelated phase-timing slice in `002`.
+
+
 
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an

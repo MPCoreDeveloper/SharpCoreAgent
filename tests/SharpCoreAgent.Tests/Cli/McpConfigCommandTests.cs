@@ -6,12 +6,13 @@ using Xunit;
 namespace SharpCoreAgent.Tests.Cli;
 
 /// <summary>
-/// <c>mcp config</c> end to end: three clients, three file shapes, one block on stdout and one line on stderr.
+/// <c>mcp config</c> end to end: four clients, three file shapes, one block on stdout and one line on stderr.
 /// </summary>
 /// <remarks>
 /// The blocks are parsed back rather than compared with a golden string, because the point is that the agent will
 /// accept them: the JSON through <see cref="JsonDocument"/>, the TOML by its three lines — the repository has no TOML
-/// reader, and adding one to check three keys would be a dependency to maintain for a fixture.
+/// reader, and adding one to check three keys would be a dependency to maintain for a fixture. The merge
+/// <c>--write</c> performs is <c>McpConfigWriteTests</c>'; these cases are about what is printed.
 /// </remarks>
 public sealed class McpConfigCommandTests
 {
@@ -52,6 +53,29 @@ public sealed class McpConfigCommandTests
     }
 
     [Fact]
+    public async Task VisualStudioGetsTheServersBlockInTheFileBesideTheSolution()
+    {
+        using var directory = TempDirectory.Create();
+
+        var (exit, snippet, note) = await ConfigAsync(directory.Path, "visualstudio");
+
+        Assert.Equal(0, exit);
+
+        using var document = JsonDocument.Parse(snippet);
+        var entry = document.RootElement.GetProperty("servers").GetProperty("sharpcoreagent");
+
+        // The key Visual Studio reads, the file it reads it from, and the same explicit stdio type VS Code wants:
+        // an entry that omits the type is the reason an IDE shows a server that never starts.
+        Assert.Equal("stdio", entry.GetProperty("type").GetString());
+        Assert.True(File.Exists(entry.GetProperty("command").GetString()));
+        Assert.Equal("mcp|serve", Arguments(entry));
+        Assert.False(document.RootElement.TryGetProperty("mcpServers", out _));
+
+        Assert.Contains(Path.Combine(directory.Path, ".mcp.json"), note, StringComparison.Ordinal);
+        Assert.Contains("solution scope", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CodexGetsATomlTableWithALiteralPath()
     {
         using var directory = TempDirectory.Create();
@@ -79,11 +103,17 @@ public sealed class McpConfigCommandTests
         using var directory = TempDirectory.Create();
 
         var (_, _, claude) = await ConfigAsync(directory.Path, "claude");
+        var (_, _, visualstudio) = await ConfigAsync(directory.Path, "visualstudio");
         var (_, _, vscode) = await ConfigAsync(directory.Path, "vscode");
         var (_, _, codex) = await ConfigAsync(directory.Path, "codex");
 
         Assert.Contains(Path.Combine(directory.Path, ".mcp.json"), claude, StringComparison.Ordinal);
         Assert.Contains("project scope", claude, StringComparison.Ordinal);
+
+        // The same file, named for the other client that reads it: the note is how a developer learns that one
+        // committed .mcp.json can serve both, rather than that each client needs its own.
+        Assert.Contains(Path.Combine(directory.Path, ".mcp.json"), visualstudio, StringComparison.Ordinal);
+        Assert.Contains("solution scope", visualstudio, StringComparison.Ordinal);
 
         Assert.Contains(Path.Combine(directory.Path, ".vscode", "mcp.json"), vscode, StringComparison.Ordinal);
         Assert.Contains("workspace scope", vscode, StringComparison.Ordinal);

@@ -117,9 +117,12 @@ public sealed class HelpTextTests
     public void TheUsageBlockDocumentsTheConfigCommandForClients()
     {
         // Two of the three files are found from the repository, so the shape of the verb has to be in the block a
-        // developer reads before running anything.
+        // developer reads before running anything — and so does the key Visual Studio reads, which is the one a
+        // developer is most likely to be missing when the server does not appear in the IDE.
         Assert.Contains("sharpcoreagent mcp config --client", HelpText.Usage, StringComparison.Ordinal);
         Assert.Contains("--client <name>", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("visualstudio", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("--write", HelpText.Usage, StringComparison.Ordinal);
         Assert.Contains("mcp config  —", HelpText.Usage, StringComparison.Ordinal);
         Assert.Contains("[mcp_servers.sharpcoreagent]", HelpText.Usage, StringComparison.Ordinal);
         Assert.Contains(".vscode/mcp.json", HelpText.Usage, StringComparison.Ordinal);
@@ -134,7 +137,7 @@ public sealed class HelpTextTests
         [
             "Serve",
             "  sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served",
-            "  sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode or codex",
+            "  sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode, visualstudio or codex",
             "  sharpcoreagent mcp bench                    the twelve fixture questions, asked twice and measured",
             "  Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only",
             "  evidence tools — search_code, find_symbol, find_references, code_context and index_status —",
@@ -153,11 +156,18 @@ public sealed class HelpTextTests
             string.Empty,
             "  Nothing here is a setting and nothing here needs a key, which is why wiring an agent is one",
             "  command: 'mcp config --client claude' prints the block for .mcp.json at the repository root,",
-            "  'vscode' the one for .vscode/mcp.json, and 'codex' the [mcp_servers.sharpcoreagent] table for",
-            "  ~/.codex/config.toml. Each names this binary's absolute path and 'mcp serve', so the agent",
-            "  serves the directory it starts the server in; put --workspace in the args to pin another.",
-            "  The block is the only thing on stdout, so a redirect writes the file, and the one line",
-            "  naming that file goes to stderr.",
+            "  'visualstudio' the one Visual Studio reads from that same .mcp.json, 'vscode' the one for",
+            "  .vscode/mcp.json, and 'codex' the [mcp_servers.sharpcoreagent] table for ~/.codex/config.toml.",
+            "  Each names this binary's absolute path and 'mcp serve', so the agent serves the directory it",
+            "  starts the server in; put --workspace in the args to pin another. The block is the only thing",
+            "  on stdout, so a redirect writes the file, and the one line naming that file goes to stderr.",
+            string.Empty,
+            "  --write merges the block into that file instead of printing it, because a redirect truncates:",
+            "  the file keeps every key it had, the client's object keeps every other server, and this entry",
+            "  keeps the env and cwd somebody added to it. An entry that already matches is left alone and",
+            "  said so. A file that is not JSON, or whose 'servers' is not an object, exits 7 with the file",
+            "  untouched. Run it once per client and one committed .mcp.json carries both keys — mcpServers",
+            "  for Claude Code, servers for Visual Studio — with neither client losing the other's.",
             string.Empty,
             "  'mcp bench' asks the twelve questions in specs/013-evidence-mcp-server/bench/queries.txt",
             "  twice — in process and over stdio — and prints, for each answer, the characters it spent",
@@ -209,15 +219,15 @@ public sealed class HelpTextTests
     [Fact]
     public void TheClientRowReachesTheDescriptionColumn()
     {
-        // The one row this round added, in all four columns: the flag, the command it belongs to, the dash that says
-        // it has no default, and the sentence naming the three clients.
+        // The row that names the clients, in all four columns: the flag, the command it belongs to, the dash that says
+        // it has no default, and the sentence naming the four.
         var row = Assert.Single(
             HelpText.Usage.Split('\n'),
             line => line.StartsWith("  --client <name>", StringComparison.Ordinal));
 
         Assert.Equal(27, row.IndexOf("mcp config", StringComparison.Ordinal));
         Assert.Equal(39, row.IndexOf('—'));
-        Assert.Equal(51, row.IndexOf("claude, vscode or codex", StringComparison.Ordinal));
+        Assert.Equal(51, row.IndexOf("claude, vscode, visualstudio or codex", StringComparison.Ordinal));
     }
 
     [Fact]

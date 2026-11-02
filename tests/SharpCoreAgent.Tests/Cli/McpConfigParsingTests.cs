@@ -19,9 +19,12 @@ public sealed class McpConfigParsingTests
     [Theory]
     [InlineData("claude", "Claude")]
     [InlineData("vscode", "VsCode")]
+    [InlineData("visualstudio", "VisualStudio")]
+    [InlineData("vs", "VisualStudio")]
     [InlineData("codex", "Codex")]
     [InlineData("Claude", "Claude")]
     [InlineData("VSCODE", "VsCode")]
+    [InlineData("VisualStudio", "VisualStudio")]
     public void TheClientIsParsedAndTheActionIsConfig(string client, string expected)
     {
         var options = CliOptions.Parse(["mcp", "config", "--client", client], NoEnvironment);
@@ -30,27 +33,53 @@ public sealed class McpConfigParsingTests
         Assert.Equal(McpAction.Config, options.McpAction);
         Assert.Equal(expected, options.McpClient?.ToString());
         Assert.True(options.IndexEnabled);
+
+        // Printing is the default: a client named without --write is a block for a redirect or for a paste.
+        Assert.False(options.McpConfigWrite);
     }
 
     [Fact]
-    public void ConfigWithoutAClientIsRefusedAndNamesTheThree()
+    public void WriteIsParsedBesideTheClient()
+    {
+        var options = CliOptions.Parse(["mcp", "config", "--client", "visualstudio", "--write"], NoEnvironment);
+
+        Assert.Equal(McpAction.Config, options.McpAction);
+        Assert.Equal(McpClientKind.VisualStudio, options.McpClient);
+        Assert.True(options.McpConfigWrite);
+    }
+
+    [Fact]
+    public void ConfigWithoutAClientIsRefusedAndNamesTheFour()
     {
         var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", "config"], NoEnvironment));
 
         Assert.Equal("mcp config needs --client.", error.Message);
         Assert.Contains("claude", error.Hint, StringComparison.Ordinal);
         Assert.Contains("vscode", error.Hint, StringComparison.Ordinal);
+        Assert.Contains("visualstudio", error.Hint, StringComparison.Ordinal);
         Assert.Contains("codex", error.Hint, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AnUnknownClientIsRefusedAndNamesTheThree()
+    public void AnUnknownClientIsRefusedAndNamesTheFour()
     {
         var error = Assert.Throws<CliUsageException>(
             () => CliOptions.Parse(["mcp", "config", "--client", "emacs"], NoEnvironment));
 
         Assert.Equal("unknown client 'emacs'.", error.Message);
-        Assert.Equal("Use claude, vscode or codex.", error.Hint);
+        Assert.Equal("Use claude, vscode, visualstudio or codex.", error.Hint);
+    }
+
+    [Fact]
+    public void WriteIsRefusedForTheClientWhoseFileIsNotJson()
+    {
+        // Refused before anything is opened: a merge into config.toml would have to keep tables and comments this
+        // repository cannot read, and half a rewrite is worse than no rewrite.
+        var error = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["mcp", "config", "--client", "codex", "--write"], NoEnvironment));
+
+        Assert.Equal("--write does not apply to --client codex.", error.Message);
+        Assert.Contains("by hand", error.Hint, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -90,6 +119,46 @@ public sealed class McpConfigParsingTests
             () => CliOptions.Parse(["mcp", "serve", "--client", "claude"], NoEnvironment));
 
         Assert.Equal("--client applies to mcp config.", error.Message);
+    }
+
+    [Theory]
+    [InlineData("run", "hello")]
+    [InlineData("chat", null)]
+    [InlineData("index", null)]
+    [InlineData("models", null)]
+    [InlineData("config", null)]
+    [InlineData("setup", null)]
+    public void TheWriteFlagAppliesToConfigAndNothingElse(string command, string? operand)
+    {
+        // The same reasoning --client is refused by: a command told to write a file and not writing one sends the
+        // developer looking for the file.
+        string[] arguments = operand is null
+            ? [command, "--write"]
+            : [command, operand, "--write"];
+
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(arguments, NoEnvironment));
+
+        Assert.Equal("--write applies to mcp config.", error.Message);
+        Assert.Contains("mcp config --client visualstudio --write", error.Hint, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("serve")]
+    [InlineData("bench")]
+    public void TheOtherMcpVerbsRefuseTheWriteFlag(string verb)
+    {
+        // `serve` most of all: its stdout is the protocol, and a mode that wrote a file into it would break the
+        // session for the client before the first answer.
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["mcp", verb, "--write"], NoEnvironment));
+
+        Assert.Equal("--write applies to mcp config.", error.Message);
+    }
+
+    [Fact]
+    public void HelpAndVersionAnswerWithAWriteInTheirHistory()
+    {
+        Assert.Equal(CliCommand.Help, CliOptions.Parse(["--help", "--write"], NoEnvironment).Command);
+        Assert.Equal(CliCommand.Version, CliOptions.Parse(["--version", "--write"], NoEnvironment).Command);
     }
 
     [Fact]

@@ -164,17 +164,23 @@ internal static class McpCommand
     }
 
     /// <summary>
-    /// Prints the block that adds this server to another agent's configuration.
+    /// Prints the block that adds this server to another agent's configuration, or writes it into that file.
     /// </summary>
-    /// <param name="options">The parsed command line: the client and the workspace the note names.</param>
-    /// <param name="output">Where the block goes, and nothing else.</param>
+    /// <param name="options">The parsed command line: the client, the write switch and the workspace the note names.</param>
+    /// <param name="output">Where the block goes, and nothing else — or nothing at all, under <c>--write</c>.</param>
     /// <param name="error">Where the one line naming the file goes.</param>
     /// <param name="cancellationToken">Cancels the write, which only happens if the reader stopped reading.</param>
-    /// <returns>The process exit code: always 0, because a block that can be printed is a block that can be pasted.</returns>
+    /// <returns>
+    /// The process exit code: 0 for a block printed or a file written, 7 when the file could not be read or merged.
+    /// </returns>
     /// <remarks>
     /// No workspace is opened and no index is read: the command answers a question about configuration, and a
     /// developer wiring up a client should not need an index to exist first. The bytes are written without a
     /// byte-order mark, because the common case is a redirect into the file itself.
+    /// <para>
+    /// <c>--write</c> prints nothing on stdout. The block was not printed for a redirect, and a caller that pipes this
+    /// command into a file would otherwise append a second copy to the one just merged.
+    /// </para>
     /// </remarks>
     private static async Task<int> WriteSnippetAsync(
         CliOptions options,
@@ -188,10 +194,31 @@ internal static class McpCommand
         var client = options.McpClient
             ?? throw new CliUsageException(
                 "mcp config needs --client.",
-                "Use --client claude, --client vscode or --client codex.");
+                "Use --client claude, --client vscode, --client visualstudio or --client codex.");
 
         var (command, arguments) = McpClientSnippets.Invocation();
         var destination = McpClientSnippets.Destination(client, Path.GetFullPath(options.Workspace));
+
+        if (options.McpConfigWrite)
+        {
+            try
+            {
+                var (_, note) = McpConfigWriter.Write(client, destination, command, arguments);
+
+                await error.WriteLineAsync(note.AsMemory(), cancellationToken).ConfigureAwait(false);
+                return ExitCodes.Success;
+            }
+            catch (McpConfigWriteException exception)
+            {
+                // Exit 7, and the file is as it was: a developer who reads the message and opens the path sees what
+                // this command saw, which is the only way a refusal about a file is useful.
+                await error
+                    .WriteLineAsync($"{McpClientSnippets.NotePrefix}{exception.Message}".AsMemory(), cancellationToken)
+                    .ConfigureAwait(false);
+
+                return ExitCodes.Configuration;
+            }
+        }
 
         await output
             .WriteAsync(Encoding.UTF8.GetBytes(McpClientSnippets.Render(client, command, arguments)), cancellationToken)

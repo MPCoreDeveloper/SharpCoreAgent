@@ -54,8 +54,11 @@ internal enum McpAction
 
 /// <summary>Whose configuration <c>mcp config</c> prints a block for.</summary>
 /// <remarks>
-/// Three files with three shapes, which is the whole reason the command exists: a developer should not have to
-/// discover that VS Code says <c>servers</c> where Claude Code says <c>mcpServers</c> by reading a blog post.
+/// Four clients, three files, two shapes, which is the whole reason the command exists: a developer should not have to
+/// discover that Visual Studio and VS Code say <c>servers</c> where Claude Code says <c>mcpServers</c> by reading a
+/// blog post. Two clients share <c>.mcp.json</c> and disagree about the key inside it, which is why <c>--write</c>
+/// merges instead of replacing: one committed file can serve both, and neither client is asked to ignore a key it
+/// does not know.
 /// </remarks>
 internal enum McpClientKind
 {
@@ -64,6 +67,13 @@ internal enum McpClientKind
 
     /// <summary>VS Code: <c>.vscode/mcp.json</c>, under <c>servers</c> and with an explicit <c>type</c>.</summary>
     VsCode,
+
+    /// <summary>Visual Studio: <c>.mcp.json</c> beside the solution, under <c>servers</c> and with an explicit <c>type</c>.</summary>
+    /// <remarks>
+    /// The same file Claude Code reads, under the other client's key. <c>vs</c> is accepted as a shorthand because the
+    /// product's own name is two letters shorter than this one.
+    /// </remarks>
+    VisualStudio,
 
     /// <summary>Codex CLI: the <c>[mcp_servers.sharpcoreagent]</c> table in <c>config.toml</c>.</summary>
     Codex,
@@ -121,9 +131,19 @@ internal sealed record CliOptions
     /// <summary>Gets the client <c>mcp config</c> prints a block for, or <see langword="null"/> when none was named.</summary>
     /// <remarks>
     /// Nullable rather than defaulted: <c>mcp config</c> without a client has nothing to print, and the refusal
-    /// named the three clients is the only useful answer. <c>mcp serve</c> never reads it.
+    /// named the four clients is the only useful answer. <c>mcp serve</c> never reads it.
     /// </remarks>
     public McpClientKind? McpClient { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether <c>mcp config</c> writes the block into the client's file instead of printing it.
+    /// </summary>
+    /// <remarks>
+    /// A redirect (<c>&gt; .mcp.json</c>) is the shape every other command's output has, and it truncates: a file that
+    /// already named another server would lose it. <c>--write</c> exists for the two files a repository shares, so a
+    /// second client can be added to the same <c>.mcp.json</c> without the first one being sacrificed to save it.
+    /// </remarks>
+    public bool McpConfigWrite { get; init; }
 
     /// <summary>Gets the setting <c>config get</c>, <c>set</c> or <c>unset</c> names.</summary>
     public string? ConfigName { get; init; }
@@ -727,6 +747,7 @@ internal sealed record CliOptions
         {
             RejectNoRefresh(options);
             RejectClientFlag(options);
+            RejectWriteFlag(options);
         }
 
         switch (command)
@@ -939,7 +960,7 @@ internal sealed record CliOptions
     /// <remarks>
     /// Two actions in the shape <c>config</c> already uses: the verb is a word rather than a flag, so a second one
     /// joined the first without a second command — and each verb keeps its own flags, <c>--no-refresh</c> for the
-    /// server and <c>--client</c> for the snippet.
+    /// server, <c>--client</c> and <c>--write</c> for the snippet.
     /// </remarks>
     private static CliOptions FinishMcp(CliOptions options, List<string> positionals)
     {
@@ -973,6 +994,7 @@ internal sealed record CliOptions
                 }
 
                 RejectClientFlag(options);
+                RejectWriteFlag(options);
 
                 return options with { Command = CliCommand.Mcp, McpAction = McpAction.Serve };
 
@@ -981,7 +1003,7 @@ internal sealed record CliOptions
                 {
                     throw new CliUsageException(
                         $"mcp config does not take '{rest[0]}'.",
-                        "The client is named with --client: claude, vscode or codex.");
+                        "The client is named with --client: claude, vscode, visualstudio or codex.");
                 }
 
                 // Neither of the index flags means anything here: the command prints a block, reads no file and
@@ -999,7 +1021,17 @@ internal sealed record CliOptions
                 {
                     throw new CliUsageException(
                         "mcp config needs --client.",
-                        "Use --client claude, --client vscode or --client codex.");
+                        "Use --client claude, --client vscode, --client visualstudio or --client codex.");
+                }
+
+                // A merge into config.toml would have to keep the tables and comments the developer already has, and
+                // this repository has no TOML reader: a hand-rolled rewriter that gets it wrong corrupts a file the
+                // developer maintains by hand. Refused here, before anything is opened, rather than half attempted.
+                if (options.McpConfigWrite && client == McpClientKind.Codex)
+                {
+                    throw new CliUsageException(
+                        "--write does not apply to --client codex.",
+                        "config.toml holds whichever tables it already holds: append the printed block by hand.");
                 }
 
                 return options with
@@ -1028,6 +1060,7 @@ internal sealed record CliOptions
 
                 RejectNoRefresh(options);
                 RejectClientFlag(options);
+                RejectWriteFlag(options);
 
                 return options with { Command = CliCommand.Mcp, McpAction = McpAction.Bench };
 
@@ -1074,6 +1107,26 @@ internal sealed record CliOptions
             throw new CliUsageException(
                 "--client applies to mcp config.",
                 "For example: sharpcoreagent mcp config --client claude");
+        }
+    }
+
+    /// <summary>
+    /// Rejects <c>--write</c> on the commands that write no client's file.
+    /// </summary>
+    /// <param name="options">The parsed options.</param>
+    /// <exception cref="CliUsageException"><c>--write</c> was given to a command that prints a table or serves a loop.</exception>
+    /// <remarks>
+    /// The reasoning <see cref="RejectClientFlag"/> uses, one flag over: a command that was told to write a file and
+    /// did not is a command whose developer will go looking for the file. <c>mcp serve</c> is included because its
+    /// stdout is the protocol, and a mode that wrote a file instead would be the one thing it must never do.
+    /// </remarks>
+    private static void RejectWriteFlag(CliOptions options)
+    {
+        if (options.McpConfigWrite)
+        {
+            throw new CliUsageException(
+                "--write applies to mcp config.",
+                "For example: sharpcoreagent mcp config --client visualstudio --write");
         }
     }
 
@@ -1554,16 +1607,17 @@ internal sealed record CliOptions
     /// <exception cref="CliUsageException">The name is not one of the three this build knows.</exception>
     /// <remarks>
     /// Refused at parse time rather than after the snippet was half rendered: a typo in the client name is a typo
-    /// in the command line, and the answer that names all three clients is the one that fixes it.
+    /// in the command line, and the answer that names all four clients is the one that fixes it.
     /// </remarks>
     private static McpClientKind ParseClient(string value) => value.ToLowerInvariant() switch
     {
         "claude" => McpClientKind.Claude,
         "vscode" => McpClientKind.VsCode,
+        "visualstudio" or "vs" => McpClientKind.VisualStudio,
         "codex" => McpClientKind.Codex,
         _ => throw new CliUsageException(
             $"unknown client '{value}'.",
-            "Use claude, vscode or codex."),
+            "Use claude, vscode, visualstudio or codex."),
     };
 
     private static CliOptions ApplyOption(CliOptions options, string[] args, ref int index, string name)
@@ -1618,6 +1672,9 @@ internal sealed record CliOptions
 
             case "--client":
                 return options with { McpClient = ParseClient(TakeValue(args, ref index, name)) };
+
+            case "--write":
+                return options with { McpConfigWrite = true };
 
             case "--approval":
                 var approval = TakeValue(args, ref index, name);
