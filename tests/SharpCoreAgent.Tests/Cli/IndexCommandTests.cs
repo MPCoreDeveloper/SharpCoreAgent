@@ -203,6 +203,54 @@ public sealed class IndexCommandTests
         Assert.StartsWith("error: ", error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task VerboseListsWhatEachPhaseOfTheBuildCost()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index", "--verbose");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("phases      scan", output, StringComparison.Ordinal);
+        Assert.Contains("write", output, StringComparison.Ordinal);
+        Assert.Contains("of which commit", output, StringComparison.Ordinal);
+        Assert.Contains("%", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithoutVerboseTheReportSaysNothingAboutPhases()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.DoesNotContain("phases", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuildJsonCarriesEveryPhaseWithBothClocks()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index", "--json");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+
+        using var document = JsonDocument.Parse(output);
+        var phases = document.RootElement.GetProperty("phases").EnumerateArray().ToArray();
+
+        Assert.Equal(8, phases.Length);
+        Assert.Equal("scan", phases[0].GetProperty("name").GetString());
+        Assert.False(phases[0].GetProperty("nested").GetBoolean());
+        Assert.True(phases[^1].GetProperty("nested").GetBoolean());
+        Assert.True(phases.Single(phase => phase.GetProperty("name").GetString() == "write")
+            .GetProperty("wallMs").GetInt64() >= 0);
+    }
+
     private static void WriteCorpus(ToolTestWorkspace sandbox)
     {
         sandbox.Write(

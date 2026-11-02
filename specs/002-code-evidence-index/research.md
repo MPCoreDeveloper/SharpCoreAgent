@@ -609,3 +609,81 @@ processor clock stops the walk at a zero allowance, and that a generous one stil
 
 
 
+
+
+---
+
+## D21 — A build's phases, measured for the first time (2026-11-02): two whole-index steps are the run
+
+D18 could say that a writing run costs 119–132 s whatever it writes, and could not say which part of the build
+spends them. Nothing timed a build's steps, so the next hour of performance work would have been aimed at a guess.
+This slice adds the measurement and changes nothing it measures.
+
+**Where the clock lives.** `IndexPhaseClock` (internal, `SharpCoreAgent.Indexing`) keeps a total per step and times
+work by wrapping it: `Measure(phase, () => …)`, `MeasureAsync` for a `Func<Task>`, and a `Func<ValueTask<T>>`
+overload for `CommunityAssigner.AssignAsync`. Wrapping rather than opening and closing a scope by hand is what makes
+a step impossible to leave open by a changed control flow. Every step of `IndexPhases.Order` exists from
+construction with a zero total, so two reports always list the same lines and a reader can add them up; a name that
+is not in the order is refused, because a rename would otherwise cost a step's time silently. `IndexWriter.For`
+creates the one clock of a build and hands it to `IndexFileWriter`, so the store's commit — timed inside
+`RunInBatch`, at both ends of the batch — lands in the same report as the steps that contain it. `IndexBuildReport`
+carries `Phases`, `--verbose` prints them, `--json` gains a `phases` array, and a prune reports none because it is
+not a build.
+
+**Why the commit is one nested line and not four.** It runs inside `write`, `remove`, `edges` and `meta`. Four lines
+of commit scattered through four differently sized phases read as four unrelated costs, and the question they answer
+— what the store charges for being touched — is one question with one answer. `Nested` says so on the report and the
+command line prints the line as `of which commit`, without a share, because its seconds are already inside the lines
+above it.
+
+**Four runs on this repository** (lean, hashed-local/512, 350.2 MiB of index):
+
+| phase | rebuild: 698 files, 17 m 51 s | 26 files, 2 m 59 s | 6 files, 2 m 28 s | 0 files, 5.5 s |
+|---|---|---|---|---|
+| `scan` | 0.1 s | 0.1 s | 0.1 s | 0.1 s |
+| `load` | 0.0 s | 0.0 s | 0.0 s | 0.0 s |
+| `write` | 15 m 47 s (88 %) | 1 m 2 s (35 %) | 17.1 s (12 %) | 0.1 s |
+| `remove` | 0.0 s | 0.0 s | 2.0 s (1 %) | 0.0 s |
+| `edges` | 1.8 s | 1.9 s | 1.6 s | 0.0 s |
+| `communities` | 1 m 56 s (11 %) | 1 m 49 s (61 %) | 2 m 0 s (81 %) | skipped |
+| `meta` | 1.9 s | 1.8 s | 3.0 s | 1.8 s |
+| of which `commit` | 15 m 49 s | 1 m 3 s | 22.3 s | 1.8 s |
+| `other` | 3.7 s | 3.5 s (2 %) | 4.3 s (3 %) | 3.5 s (64 %) |
+
+**What that says.** Every number here was in the report before this slice except the split, and the split is the
+whole finding.
+
+*The commit is the write.* A rebuild is 88 % commit and a run that edits six files is 12 % write against 22.3 s of
+commit — and in both cases `write` and the commit inside it agree to within two seconds over the whole phase, so
+whatever the rows cost, it is spent in `EndBatchUpdate` rather than in the code between the batch's two ends. The
+commit also has a price per batch: this build makes one per written file plus one each for `remove`, `edges` and
+`meta`, which is 700 batches in the rebuild, 28 in the 26-file run and 9 in the 6-file run — 1.36 s, 2.25 s and
+2.5 s per batch, and the rebuild's lower figure is the same price against a store that grew into its final size.
+So a commit costs more the bigger the index is, and the build pays it once per file.
+
+*Community assignment is a fixed charge per writing run.* 1 m 49 s for 26 files, 2 m 0 s for 6, 11 % of a rebuild
+and 81 % of the small run: it does not care what changed, only that something did, because it clusters the whole
+graph. That is the number D18 could not see when it reported 119–132 s for one changed file — one commit's worth of
+writes plus one Louvain pass plus four seconds of opening the store lands in exactly that window.
+
+*A run that changes nothing is not free.* 5.5 s, of which 3.5 s is the writer lock, opening 350 MiB and reading the
+status back, and 1.8 s is the `meta` write — a batch of its own, committed to record that nothing happened.
+
+**What that changes about the plan.** One lever moves every run: fewer commits. The per-file batch was chosen because
+it is the largest unit that can fail independently ("a build that dies on file 40 leaves files 1–39 committed"), and
+that property is worth keeping, so the fix is not one batch for the whole build but a checkpoint interval — a bounded
+amount of re-work for a bounded multiple of the speed. Second, for a writing run only: `communities`, which is ours
+and recomputes a graph that changed by six files. Third, and cheapest: the `meta` commit and the store open, which a
+turn-start refresh pays every time it costs a model its wait. None of that is in this slice.
+
+**What it does not do.** It fixes no cost and changes no decision. SC-002 and SC-006 are untouched, `--rebuild`'s
+fixed charges are untouched, and the numbers above are one machine on one day — the useful part is the ratio between
+the lines, not the seconds on them.
+
+**What proves it.** `IndexPhaseClockTests` pins the arithmetic: every phase present in build order before anything
+ran, only the commit nested, two entries of one phase adding up instead of replacing each other, an awaited step
+timed across its await, and a name that is not a phase refused. `PhaseTimingTests` reads a real build's report and
+asserts the wiring end to end: all eight phases in order, `scan`/`load`/`write` costing something, the phases adding
+up to no more than the run they belong to, the nested commit staying inside the four phases that contain it, and a
+prune reporting none. `IndexCommandTests` asserts the `--verbose` block, its absence without the flag, and the
+`phases` array in `--json`. Suite 1 319 → 1 332, build clean at zero warnings.

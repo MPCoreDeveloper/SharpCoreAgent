@@ -130,6 +130,15 @@ public sealed record IndexBuildReport
     public long ElapsedMilliseconds { get; init; }
     public bool Incomplete { get; init; }                    // the budget ran out
     public IReadOnlyList<string> Notes { get; init; } = [];  // "docs/README.md: larger than 1024 KiB"
+    public IReadOnlyList<IndexPhase> Phases { get; init; } = [];  // what each step cost, in build order
+}
+
+public sealed record IndexPhase
+{
+    public required string Name { get; init; }               // scan, load, write, remove, edges, communities, meta, commit
+    public TimeSpan Wall { get; init; }
+    public TimeSpan Processor { get; init; }                 // process-wide, like IndexBuildReport's cpuMs
+    public bool Nested { get; init; }                        // the store's commit: inside write/remove/edges/meta
 }
 
 public sealed record IndexVerification

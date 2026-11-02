@@ -112,7 +112,8 @@ src/
 │   │   ├── CodeSymbolRef.cs                     **one declaration**
 │   │   ├── CodeQuery.cs                         **request value**
 │   │   ├── IndexStatus.cs                       **coverage + freshness**
-│   │   ├── IndexBuildReport.cs                  **what a build changed**
+│   │   ├── IndexBuildReport.cs                  **what a build changed, and what each phase cost**
+│   │   ├── IndexPhase.cs                        **one build step: wall clock, processor time, nested**
 │   │   ├── IndexVerification.cs                 **drift report**
 │   │   └── IndexEnums.cs                        **IndexTier, EvidenceLeg, IndexFreshness, EmbedderKind, ReferenceDirection, VectorQuantization**
 │   ├── Workspace.cs                             unchanged (the index path is derived from Root)

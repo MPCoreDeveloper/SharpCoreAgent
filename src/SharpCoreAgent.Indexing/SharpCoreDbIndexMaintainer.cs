@@ -301,6 +301,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
             ElapsedMilliseconds = Elapsed(started),
             Incomplete = result.Incomplete,
             Notes = result.Notes,
+            Phases = result.Phases,
         };
     }
 

@@ -389,6 +389,18 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     `cpuMs` beside `elapsedMs`. Ten new tests (six in `BuildTimingTests`, two in `IndexCommandTests`, two in
     `RefreshBudgetTests`); suite 1 309 → 1 319, build clean. This changes no measurement: the 120 s fixed cost and
     SC-006's 61× are untouched, and the phase instrumentation T034 opens with is still the next step.
+  - Note (2026-11-02, `research.md` D21): the instrumentation landed, and the first profile overturns the task's
+    premise. `IndexPhaseClock` times each of `scan`, `load`, `write`, `remove`, `edges`, `communities`, `meta` plus
+    the store's nested commit; `IndexBuildReport.Phases` carries them, `index --verbose` prints them and `--json`
+    gains a `phases` array. Three runs at 350.2 MiB: a `--rebuild` of 698 files cost 17 m 51 s, of which `write`
+    15 m 47 s (88 %) and the store's commit 15 m 49 s — the write phase *is* the commit, one per file, 1.36 s each;
+    a writing run of 26 files cost 179 s (`write` 1 m 2 s, commit 1 m 3 s, `communities` 1 m 49 s = 61 %); a run
+    that changed nothing cost 5.5 s (`meta` 1.8 s, `other` 3.5 s). So the per-file batch this task was going to
+    "batch" is not the write, it is the commit under it: a batch commit costs the whole store, and the build makes
+    one per file, which is why a cold build is 1.53 s per file here against D16's 1.12 s on a 14 MiB index and why
+    SC-002's 5 000 files are hours rather than 89 minutes. The next slice is a checkpoint interval between commits
+    (keeping the per-file failure unit bounded rather than removing it), then `communities`, then the no-op
+    `meta`/open overhead. Thirteen new tests; suite 1 319 → 1 332, build clean.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

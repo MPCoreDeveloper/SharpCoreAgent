@@ -26,7 +26,7 @@ sharpcoreagent --help | --version
 | `--tier <name>` | `lean` | `lean` or `rich` |
 | `--workspace <path>` | current directory | the tree to index |
 | `--json` | off | one JSON object on stdout, no prose |
-| `--verbose` | off | stack traces for unexpected failures |
+| `--verbose` | off | stack traces for unexpected failures, and one line per phase of the build |
 
 `--status`, `--verify` and `--prune` may be combined; `--rebuild` may not be combined with any of them
 (error: `--rebuild cannot be combined with --status, --verify or --prune.`).
@@ -102,6 +102,35 @@ That line is the report of a real run: `research.md` D19's eight hours were Mode
 blamed the indexer was a laptop that had been asleep since eleven minutes into the build. The `clock` line only
 fires on that shape, so its presence is a diagnosis and its absence is not a claim.
 
+With `--verbose` the report adds one line per phase of the build, between `wrote` and `state`:
+
+```
+  phases      scan                0.1 s wall ·    0.1 s cpu     0%
+              load                0.0 s wall ·    0.0 s cpu     0%
+              write              1 m 2 s wall ·  1 m 7 s cpu    35%
+              remove              0.0 s wall ·    0.0 s cpu     0%
+              edges               1.9 s wall ·    2.0 s cpu     1%
+              communities      1 m 49 s wall · 1 m 49 s cpu    61%
+              meta                1.8 s wall ·    1.8 s cpu     1%
+              of which commit   1 m 3 s wall ·  1 m 8 s cpu
+              other               3.5 s wall ·    4.0 s cpu     2%
+```
+
+That is one writing run on this repository: 712 files scanned, 26 written, 350.2 MiB of index (`research.md` D21).
+
+Every phase is present, in the order the build runs them, including the ones that did nothing — so the lines add up
+instead of leaving the reader to guess which numbers are missing. The share is of the run's own wall clock. Two
+lines are not phases in the same sense:
+
+- `of which commit` is the store's own batch commit. It runs inside `write`, `remove`, `edges` and `meta`, four times
+  over, and is summed once because the question it answers — what the store charges for touching it — is one
+  question. It takes no share: its seconds are already inside the lines above it.
+- `other` is the run minus its phases: the wait for the writer lock, opening the store, reading the status back for
+  the closing line. It is printed only when it is at least 50 ms, because below that it is rounding.
+
+`--prune` reports no phases at all. A prune drops rows rather than attributing them, and a profile of four empty
+lines would suggest a build that did nothing rather than a command that is not a build.
+
 With `--prune` the first line says `pruning` and the counters report `N removed`, `0 changed`.
 
 When the budget stops a turn-start refresh instead of a command, the closing line is
@@ -135,9 +164,13 @@ One object, stable key order, no trailing prose:
 ```
 
 For a build, `action` is `build`/`rebuild`/`prune` and the object adds `added`, `changed`, `removed`,
-`unchanged`, `elapsedMs`, `cpuMs`, `incomplete` and `notes`. `elapsedMs` is the wall clock and `cpuMs` the
+`unchanged`, `elapsedMs`, `cpuMs`, `phases`, `incomplete` and `notes`. `elapsedMs` is the wall clock and `cpuMs` the
 processor time over the same window; a script that compares the two can tell a slow build from a suspended
-machine without reading prose. For `--verify`, `action` is `verify` and the object
+machine without reading prose. `phases` is an array in build order, one object per phase with `name`, `wallMs`,
+`cpuMs` and `nested` — `nested` marks the store's commit, whose time is inside the phases above it. The array is
+empty when no phase ran: for `--prune`, which is not a build, and for a build that found the writer lock held, which
+reports `"incomplete": true` and leaves the last complete build readable. A script that wants the split can read
+`phases` whenever `incomplete` is false. For `--verify`, `action` is `verify` and the object
 adds `healthy`, `filesMissingFromIndex`, `filesMissingOnDisk`, `hashMismatches`, `orphans` and
 `details`.
 

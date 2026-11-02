@@ -48,13 +48,19 @@ internal sealed class IndexFileWriter
     private readonly ISyntaxFactsExtractor _extractor;
     private readonly ICodeTextEmbedder _embedder;
     private readonly IndexIdSequence _ids;
+    private readonly IndexPhaseClock _phases;
 
-    private IndexFileWriter(IDatabase database, ISyntaxFactsExtractor extractor, ICodeTextEmbedder embedder)
+    private IndexFileWriter(
+        IDatabase database,
+        ISyntaxFactsExtractor extractor,
+        ICodeTextEmbedder embedder,
+        IndexPhaseClock phases)
     {
         _database = database;
         _extractor = extractor;
         _embedder = embedder;
         _ids = IndexIdSequence.Load(database);
+        _phases = phases;
     }
 
     /// <summary>
@@ -63,19 +69,25 @@ internal sealed class IndexFileWriter
     /// <param name="database">The database the rows are written to.</param>
     /// <param name="extractor">The extractor that turns text into facts; the heuristic one by default.</param>
     /// <param name="embedder">The embedder; the local hashed one by default.</param>
+    /// <param name="phases">
+    /// The clock of the build this writer belongs to, or <see langword="null"/> for a caller that is not a build —
+    /// a prune deletes rows without reporting what each step cost, and gets a clock nobody reads.
+    /// </param>
     /// <returns>The writer.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     public static IndexFileWriter For(
         IDatabase database,
         ISyntaxFactsExtractor? extractor = null,
-        ICodeTextEmbedder? embedder = null)
+        ICodeTextEmbedder? embedder = null,
+        IndexPhaseClock? phases = null)
     {
         ArgumentNullException.ThrowIfNull(database);
 
         return new IndexFileWriter(
             database,
             extractor ?? HeuristicSyntaxFactsExtractor.Create(),
-            embedder ?? HashedCodeEmbedder.CreateDefault());
+            embedder ?? HashedCodeEmbedder.CreateDefault(),
+            phases ?? new IndexPhaseClock());
     }
 
     /// <summary>
@@ -241,14 +253,20 @@ internal sealed class IndexFileWriter
     /// <remarks>
     /// <c>CancelBatchUpdate</c> after a committed <c>EndBatchUpdate</c> is not called, so the two are strictly
     /// paired: a caller that sees an exception knows no part of the file reached the database.
+    /// <para>
+    /// Both ends of the batch are charged to <see cref="IndexPhases.Commit"/>, which is the one measurement that says
+    /// whether the store charges for touching it at all: a reading run pays nothing here, and a writing run over a
+    /// large index pays whatever the engine's commit costs for the whole store (spec 002, D18).
+    /// </para>
     /// </remarks>
     private TResult RunInBatch<TResult>(Func<TResult> work)
     {
-        _database.BeginBatchUpdate();
+        _phases.Measure(IndexPhases.Commit, _database.BeginBatchUpdate);
+
         try
         {
             var result = work();
-            _database.EndBatchUpdate();
+            _phases.Measure(IndexPhases.Commit, _database.EndBatchUpdate);
             return result;
         }
         catch (Exception)

@@ -23,7 +23,17 @@ namespace SharpCoreAgent.Cli;
 /// </remarks>
 internal static class IndexCommand
 {
+    /// <summary>The width the label column of every status block is padded to.</summary>
     private const int LabelWidth = 12;
+
+    /// <summary>
+    /// The smallest remainder the phase block prints as <c>other</c>.
+    /// </summary>
+    /// <remarks>
+    /// Below a twentieth of a second the difference between a run and the sum of its phases is rounding, and a line
+    /// that appears only to say <c>0.0 s</c> teaches the reader to skip the block.
+    /// </remarks>
+    private static readonly TimeSpan OtherFloor = TimeSpan.FromMilliseconds(50);
 
     /// <summary>
     /// Gets the processor time a command-line build gets.
@@ -483,6 +493,15 @@ internal static class IndexCommand
                 ["unchanged"] = report.Unchanged,
                 ["elapsedMs"] = report.ElapsedMilliseconds,
                 ["cpuMs"] = (long)timing.Processor.TotalMilliseconds,
+                ["phases"] = report.Phases
+                    .Select(static phase => new Dictionary<string, object?>
+                    {
+                        ["name"] = phase.Name,
+                        ["wallMs"] = (long)phase.Wall.TotalMilliseconds,
+                        ["cpuMs"] = (long)phase.Processor.TotalMilliseconds,
+                        ["nested"] = phase.Nested,
+                    })
+                    .ToArray(),
                 ["incomplete"] = report.Incomplete,
                 ["notes"] = report.Notes,
             });
@@ -521,6 +540,14 @@ internal static class IndexCommand
             builder.Append(Line("clock", divergence)).Append('\n');
         }
 
+        // Behind --verbose, because a build that costs five seconds does not need eight lines to explain them, and the
+        // run that needs them is the one a developer is already asking about (spec 002, D18: one total cannot say
+        // which step of a build the time went into).
+        if (options.Verbose && report.Phases.Count > 0)
+        {
+            builder.Append(Phases(report.Phases, timing));
+        }
+
         builder.Append(Line("state", report.Incomplete
             ? "partial · run `sharpcoreagent index` to finish"
             : State(report.Status.Freshness)));
@@ -541,6 +568,81 @@ internal static class IndexCommand
 
         return exitCode;
     }
+
+    /// <summary>
+    /// Renders the phase block: one line per step of the build, both clocks, and the share of the run it took.
+    /// </summary>
+    /// <param name="phases">The steps, in the order the build ran them.</param>
+    /// <param name="timing">The whole run, which is the denominator and the source of the unaccounted-for remainder.</param>
+    /// <returns>Zero or more terminated lines.</returns>
+    /// <remarks>
+    /// The last line is the difference between the run and its steps — the wait for the writer lock, opening the
+    /// store, reading the status back — printed only when it is big enough to matter. Without it the percentages
+    /// would quietly fail to add up, which is the failure this whole block exists to end.
+    /// <para>
+    /// A nested step takes its number without a share, because its time is already inside the step above it: two
+    /// percentages that describe the same seconds would read as a hundred and ninety percent of a run.
+    /// </para>
+    /// </remarks>
+    private static string Phases(IReadOnlyList<IndexPhase> phases, BuildTiming timing)
+    {
+        var labels = phases.Select(static phase => phase.Nested ? "of which " + phase.Name : phase.Name).ToList();
+        var labelWidth = labels.Max(static label => label.Length);
+        var wallWidth = phases.Max(static phase => BuildTiming.Span(phase.Wall).Length);
+        var cpuWidth = phases.Max(static phase => BuildTiming.Span(phase.Processor).Length);
+
+        // Both number columns are padded to their widest cell, so the seconds line up and the eye can compare them.
+        string Clocks(TimeSpan wall, TimeSpan processor) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"{BuildTiming.Span(wall).PadLeft(wallWidth)} wall · {BuildTiming.Span(processor).PadLeft(cpuWidth)} cpu");
+
+        var builder = new StringBuilder();
+        var accountedWall = TimeSpan.Zero;
+        var accountedProcessor = TimeSpan.Zero;
+
+        for (var index = 0; index < phases.Count; index++)
+        {
+            var phase = phases[index];
+            var row = labels[index].PadRight(labelWidth) + "  " + Clocks(phase.Wall, phase.Processor);
+
+            if (!phase.Nested)
+            {
+                accountedWall += phase.Wall;
+                accountedProcessor += phase.Processor;
+                row += string.Create(CultureInfo.InvariantCulture, $"  {Share(phase.Wall, timing.Wall),4:0}%");
+            }
+
+            builder.Append(index == 0 ? Line("phases", row) : Line(string.Empty, row)).Append('\n');
+        }
+
+        var otherWall = timing.Wall - accountedWall;
+        var otherProcessor = timing.Processor - accountedProcessor;
+        if (otherProcessor < TimeSpan.Zero)
+        {
+            otherProcessor = TimeSpan.Zero;
+        }
+
+        if (otherWall > OtherFloor || otherProcessor > OtherFloor)
+        {
+            var other = "other".PadRight(labelWidth) + "  " + Clocks(otherWall, otherProcessor)
+                + string.Create(CultureInfo.InvariantCulture, $"  {Share(otherWall, timing.Wall),4:0}%");
+
+            builder.Append(Line(string.Empty, other)).Append('\n');
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Renders one step's share of the run, as a whole percentage.
+    /// </summary>
+    /// <param name="value">The step's wall clock.</param>
+    /// <param name="total">The run's wall clock.</param>
+    /// <returns>For example <c>94</c>; zero when the run measured nothing.</returns>
+    private static int Share(TimeSpan value, TimeSpan total) =>
+        total > TimeSpan.Zero
+            ? (int)Math.Round(Math.Max(0, value / total) * 100, MidpointRounding.AwayFromZero)
+            : 0;
 
     /// <summary>
     /// Renders one labelled line of the status blocks.

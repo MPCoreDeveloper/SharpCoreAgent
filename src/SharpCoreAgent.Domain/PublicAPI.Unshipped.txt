@@ -99,6 +99,9 @@ override SharpCoreAgent.Domain.Index.CodeSymbolRef.ToString() -> string!
 override SharpCoreAgent.Domain.Index.IndexBuildReport.Equals(object? obj) -> bool
 override SharpCoreAgent.Domain.Index.IndexBuildReport.GetHashCode() -> int
 override SharpCoreAgent.Domain.Index.IndexBuildReport.ToString() -> string!
+override SharpCoreAgent.Domain.Index.IndexPhase.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.IndexPhase.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.IndexPhase.ToString() -> string!
 override SharpCoreAgent.Domain.Index.IndexStatus.Equals(object? obj) -> bool
 override SharpCoreAgent.Domain.Index.IndexStatus.GetHashCode() -> int
 override SharpCoreAgent.Domain.Index.IndexStatus.ToString() -> string!
@@ -438,6 +441,8 @@ SharpCoreAgent.Domain.Index.IndexBuildReport.Incomplete.init -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.IndexBuildReport() -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.Notes.get -> System.Collections.Generic.IReadOnlyList<string!>!
 SharpCoreAgent.Domain.Index.IndexBuildReport.Notes.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Phases.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.IndexPhase!>!
+SharpCoreAgent.Domain.Index.IndexBuildReport.Phases.init -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.Removed.get -> int
 SharpCoreAgent.Domain.Index.IndexBuildReport.Removed.init -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.Skipped.get -> int
@@ -446,6 +451,18 @@ SharpCoreAgent.Domain.Index.IndexBuildReport.Status.get -> SharpCoreAgent.Domain
 SharpCoreAgent.Domain.Index.IndexBuildReport.Status.init -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.Unchanged.get -> int
 SharpCoreAgent.Domain.Index.IndexBuildReport.Unchanged.init -> void
+SharpCoreAgent.Domain.Index.IndexPhase
+SharpCoreAgent.Domain.Index.IndexPhase.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexPhase!
+SharpCoreAgent.Domain.Index.IndexPhase.Equals(SharpCoreAgent.Domain.Index.IndexPhase? other) -> bool
+SharpCoreAgent.Domain.Index.IndexPhase.IndexPhase() -> void
+SharpCoreAgent.Domain.Index.IndexPhase.Name.get -> string!
+SharpCoreAgent.Domain.Index.IndexPhase.Name.init -> void
+SharpCoreAgent.Domain.Index.IndexPhase.Nested.get -> bool
+SharpCoreAgent.Domain.Index.IndexPhase.Nested.init -> void
+SharpCoreAgent.Domain.Index.IndexPhase.Processor.get -> System.TimeSpan
+SharpCoreAgent.Domain.Index.IndexPhase.Processor.init -> void
+SharpCoreAgent.Domain.Index.IndexPhase.Wall.get -> System.TimeSpan
+SharpCoreAgent.Domain.Index.IndexPhase.Wall.init -> void
 SharpCoreAgent.Domain.Index.IndexFreshness
 SharpCoreAgent.Domain.Index.IndexFreshness.Building = 1 -> SharpCoreAgent.Domain.Index.IndexFreshness
 SharpCoreAgent.Domain.Index.IndexFreshness.Corrupt = 5 -> SharpCoreAgent.Domain.Index.IndexFreshness
@@ -765,6 +782,8 @@ static SharpCoreAgent.Domain.Index.CodeSymbolRef.operator !=(SharpCoreAgent.Doma
 static SharpCoreAgent.Domain.Index.CodeSymbolRef.operator ==(SharpCoreAgent.Domain.Index.CodeSymbolRef? left, SharpCoreAgent.Domain.Index.CodeSymbolRef? right) -> bool
 static SharpCoreAgent.Domain.Index.IndexBuildReport.operator !=(SharpCoreAgent.Domain.Index.IndexBuildReport? left, SharpCoreAgent.Domain.Index.IndexBuildReport? right) -> bool
 static SharpCoreAgent.Domain.Index.IndexBuildReport.operator ==(SharpCoreAgent.Domain.Index.IndexBuildReport? left, SharpCoreAgent.Domain.Index.IndexBuildReport? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexPhase.operator !=(SharpCoreAgent.Domain.Index.IndexPhase? left, SharpCoreAgent.Domain.Index.IndexPhase? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexPhase.operator ==(SharpCoreAgent.Domain.Index.IndexPhase? left, SharpCoreAgent.Domain.Index.IndexPhase? right) -> bool
 static SharpCoreAgent.Domain.Index.IndexStatus.Missing(string! workspaceRoot) -> SharpCoreAgent.Domain.Index.IndexStatus!
 static SharpCoreAgent.Domain.Index.IndexStatus.operator !=(SharpCoreAgent.Domain.Index.IndexStatus? left, SharpCoreAgent.Domain.Index.IndexStatus? right) -> bool
 static SharpCoreAgent.Domain.Index.IndexStatus.operator ==(SharpCoreAgent.Domain.Index.IndexStatus? left, SharpCoreAgent.Domain.Index.IndexStatus? right) -> bool

@@ -37,6 +37,9 @@ internal sealed record IndexWriteResult
 
     /// <summary>Gets one line per decision worth explaining.</summary>
     public required IReadOnlyList<string> Notes { get; init; }
+
+    /// <summary>Gets what each step of the build cost, in the order it ran them.</summary>
+    public required IReadOnlyList<IndexPhase> Phases { get; init; }
 }
 
 /// <summary>
@@ -61,6 +64,7 @@ internal sealed class IndexWriter
     private readonly Workspace _workspace;
     private readonly IDatabase _database;
     private readonly IndexFileWriter _files;
+    private readonly IndexPhaseClock _phases;
 
     private readonly List<string> _notes = [];
     private readonly List<WrittenFile> _written = [];
@@ -72,11 +76,12 @@ internal sealed class IndexWriter
     private int _skipped;
     private bool _incomplete;
 
-    private IndexWriter(Workspace workspace, IDatabase database, IndexFileWriter files)
+    private IndexWriter(Workspace workspace, IDatabase database, IndexFileWriter files, IndexPhaseClock phases)
     {
         _workspace = workspace;
         _database = database;
         _files = files;
+        _phases = phases;
     }
 
     /// <summary>
@@ -91,7 +96,11 @@ internal sealed class IndexWriter
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(database);
 
-        return new IndexWriter(workspace, database, IndexFileWriter.For(database));
+        // One clock for the writer and the file writer: the store's commit is timed inside the file writer and has to
+        // land in the same report as the steps that contain it.
+        var phases = new IndexPhaseClock();
+
+        return new IndexWriter(workspace, database, IndexFileWriter.For(database, phases: phases), phases);
     }
 
     /// <summary>
@@ -116,8 +125,12 @@ internal sealed class IndexWriter
 
         var started = Stopwatch.GetTimestamp();
         var processorStarted = Environment.CpuUsage;
-        var scanned = WorkspaceFileScanner.For(_workspace).Scan(cancellationToken);
-        var stored = IndexStoredFile.LoadAll(_database);
+
+        var scanned = _phases.Measure(
+            IndexPhases.Scan,
+            () => WorkspaceFileScanner.For(_workspace).Scan(cancellationToken));
+
+        var stored = _phases.Measure(IndexPhases.Load, () => IndexStoredFile.LoadAll(_database));
         var indexedUtc = IndexTimestamps.Format(DateTimeOffset.UtcNow);
 
         // Process-wide on purpose: a build is one process doing one thing, and the number a developer reads for
@@ -126,33 +139,38 @@ internal sealed class IndexWriter
             ? Environment.CpuUsage.TotalTime - processorStarted.TotalTime >= budget
             : Stopwatch.GetElapsedTime(started) >= budget;
 
-        foreach (var file in scanned)
+        await _phases.MeasureAsync(IndexPhases.Write, async () =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (Spent())
+            foreach (var file in scanned)
             {
-                _incomplete = true;
-                _notes.Add(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"budget reached after {_added + _changed + _unchanged + _skipped} of {scanned.Count} files"));
-                break;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (Spent())
+                {
+                    _incomplete = true;
+                    _notes.Add(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"budget reached after {_added + _changed + _unchanged + _skipped} of {scanned.Count} files"));
+                    break;
+                }
+
+                await IndexOneAsync(file, stored, indexedUtc, cancellationToken).ConfigureAwait(false);
             }
+        }).ConfigureAwait(false);
 
-            await IndexOneAsync(file, stored, indexedUtc, cancellationToken).ConfigureAwait(false);
-        }
-
-        RemoveVanished(scanned, stored);
-        WriteEdges();
+        _phases.Measure(IndexPhases.Remove, () => RemoveVanished(scanned, stored));
+        _phases.Measure(IndexPhases.Edges, WriteEdges);
 
         // Communities are a property of the whole graph, so they are recomputed exactly when the graph could have
         // changed: a build that wrote nothing and removed nothing would pay for Louvain to reach the same answer.
         if (_written.Count > 0 || _removed > 0)
         {
-            await CommunityAssigner.AssignAsync(_database, cancellationToken).ConfigureAwait(false);
+            await _phases.MeasureAsync(
+                IndexPhases.Communities,
+                () => CommunityAssigner.AssignAsync(_database, cancellationToken)).ConfigureAwait(false);
         }
 
-        WriteMeta(buildId, IndexTimestamps.Format(DateTimeOffset.UtcNow));
+        _phases.Measure(IndexPhases.Meta, () => WriteMeta(buildId, IndexTimestamps.Format(DateTimeOffset.UtcNow)));
 
         return new IndexWriteResult
         {
@@ -163,6 +181,7 @@ internal sealed class IndexWriter
             Skipped = _skipped,
             Incomplete = _incomplete,
             Notes = _notes,
+            Phases = _phases.Elapsed(),
         };
     }
 

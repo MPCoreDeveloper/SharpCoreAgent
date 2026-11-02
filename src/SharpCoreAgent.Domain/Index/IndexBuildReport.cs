@@ -56,4 +56,18 @@ public sealed record IndexBuildReport
     /// <c>docs/README.md: larger than 1024 KiB</c>.
     /// </summary>
     public IReadOnlyList<string> Notes { get; init; } = [];
+
+    /// <summary>
+    /// Gets what each step of the work cost, in the order the work ran them.
+    /// </summary>
+    /// <remarks>
+    /// Empty when the work was not a build — a prune reports what it dropped rather than how long each step took —
+    /// and empty for a report that never reached the writer, such as the one another process's lock produces.
+    /// <para>
+    /// <see cref="ElapsedMilliseconds"/> is the whole window, including the wait for the writer lock, opening the
+    /// database and reading the status afterwards; these steps cover only the part inside the writer. The difference
+    /// is the honest answer to "what is left", which is why both are here.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<IndexPhase> Phases { get; init; } = [];
 }
