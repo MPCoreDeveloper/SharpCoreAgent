@@ -28,8 +28,11 @@ internal sealed record WrittenFile
 /// Writes the rows of exactly one file: its declaration, its passages, their vectors and its documentation.
 /// </summary>
 /// <remarks>
-/// The unit of work is one file, deleted and re-inserted inside one batch, because that is the largest thing
-/// that can fail independently: a build that dies on file 40 leaves files 1–39 committed and file 40 as it was.
+/// The unit of work is one file, deleted and re-inserted inside one batch. What a build groups those files into is a
+/// <em>checkpoint</em> — a bounded set of files that reaches the store in one commit — because the store charges for the
+/// commit rather than for the rows (spec 002, D21; spec 026, D1). One file is still the unit of writing; one checkpoint,
+/// of 32 files by default, is the unit that can fail independently: a build that dies leaves everything up to its last
+/// checkpoint committed.
 /// <para>
 /// Nothing here decides <em>whether</em> to write — the build does that with size, timestamp and hash. This type
 /// only turns a file's text into rows, which is the part that changes when the parser does.
@@ -49,6 +52,11 @@ internal sealed class IndexFileWriter
     private readonly ICodeTextEmbedder _embedder;
     private readonly IndexIdSequence _ids;
     private readonly IndexPhaseClock _phases;
+
+    private bool _checkpoint;
+    private bool _batchOpen;
+    private int _filesInCheckpoint;
+    private int _commits;
 
     private IndexFileWriter(
         IDatabase database,
@@ -89,6 +97,95 @@ internal sealed class IndexFileWriter
             embedder ?? HashedCodeEmbedder.CreateDefault(),
             phases ?? new IndexPhaseClock());
     }
+
+    /// <summary>
+    /// Opens a checkpoint: a bounded group of writes that reaches the store in one commit.
+    /// </summary>
+    /// <remarks>
+    /// The store is not asked to begin anything here. The batch is opened by the first write inside the checkpoint, so a
+    /// checkpoint that carries nothing costs nothing — a run whose budget expires before its first file still pays
+    /// exactly one commit, for <c>meta</c>.
+    /// <para>
+    /// A checkpoint is the unit that can fail independently: everything it buffered is discarded by
+    /// <see cref="AbandonCheckpoint"/>, and everything it committed is in the index. Callers do not nest them, because
+    /// the engine has one batch and two owners of it is how a commit gets lost.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">A checkpoint is already open.</exception>
+    public void BeginCheckpoint()
+    {
+        if (_checkpoint)
+        {
+            throw new InvalidOperationException("A checkpoint is already open.");
+        }
+
+        _checkpoint = true;
+        _filesInCheckpoint = 0;
+    }
+
+    /// <summary>
+    /// Commits the checkpoint: everything written since it opened reaches the store as one batch.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No checkpoint is open.</exception>
+    public void EndCheckpoint()
+    {
+        if (!_checkpoint)
+        {
+            throw new InvalidOperationException("No checkpoint is open to commit.");
+        }
+
+        _checkpoint = false;
+        _filesInCheckpoint = 0;
+
+        if (!_batchOpen)
+        {
+            return;
+        }
+
+        _batchOpen = false;
+        _phases.Measure(IndexPhases.Commit, _database.EndBatchUpdate);
+        _commits++;
+    }
+
+    /// <summary>
+    /// Discards the checkpoint: nothing it buffered reaches the store.
+    /// </summary>
+    /// <remarks>
+    /// A no-op when no checkpoint is open, so a caller that may already have committed can abandon on its way out of a
+    /// <see langword="catch"/> without first asking whether it still needs to.
+    /// </remarks>
+    public void AbandonCheckpoint()
+    {
+        if (!_checkpoint)
+        {
+            return;
+        }
+
+        _checkpoint = false;
+        _filesInCheckpoint = 0;
+
+        if (!_batchOpen)
+        {
+            return;
+        }
+
+        _batchOpen = false;
+        _database.CancelBatchUpdate();
+    }
+
+    /// <summary>
+    /// Gets how many file-sized writes the open checkpoint is carrying.
+    /// </summary>
+    internal int FilesInCheckpoint => _filesInCheckpoint;
+
+    /// <summary>
+    /// Gets how many times this writer asked the store to commit.
+    /// </summary>
+    /// <remarks>
+    /// Counted where the commit is timed, so the number and the <see cref="IndexPhases.Commit"/> phase cannot disagree
+    /// about how often the store was touched.
+    /// </remarks>
+    internal int Commits => _commits;
 
     /// <summary>
     /// Extracts one file and replaces its rows.
@@ -258,15 +355,33 @@ internal sealed class IndexFileWriter
     /// whether the store charges for touching it at all: a reading run pays nothing here, and a writing run over a
     /// large index pays whatever the engine's commit costs for the whole store (spec 002, D18).
     /// </para>
+    /// <para>
+    /// Inside a checkpoint this method is the only thing that opens the batch and the caller is the only thing that
+    /// closes it: one owner per batch, and the commit lands where the group ends instead of after every file (spec 026,
+    /// D1). A throw is not cancelled here, because only the caller knows what the rest of the group was.
+    /// </para>
     /// </remarks>
     private TResult RunInBatch<TResult>(Func<TResult> work)
     {
+        if (_checkpoint)
+        {
+            if (!_batchOpen)
+            {
+                _phases.Measure(IndexPhases.Commit, _database.BeginBatchUpdate);
+                _batchOpen = true;
+            }
+
+            _filesInCheckpoint++;
+            return work();
+        }
+
         _phases.Measure(IndexPhases.Commit, _database.BeginBatchUpdate);
 
         try
         {
             var result = work();
             _phases.Measure(IndexPhases.Commit, _database.EndBatchUpdate);
+            _commits++;
             return result;
         }
         catch (Exception)

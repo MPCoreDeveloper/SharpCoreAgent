@@ -231,6 +231,36 @@ public sealed class IndexCommandTests
     }
 
     [Fact]
+    public async Task VerboseSaysHowManyTimesTheBuildCommitted()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index", "--verbose");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("commits", output, StringComparison.Ordinal);
+        Assert.Contains("the store's batch commit", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheJsonDocumentSaysNothingAboutCommits()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index", "--json");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+
+        using var document = JsonDocument.Parse(output);
+
+        // A commit count is a fact about the writer's strategy rather than about the index, so it stays on the terminal
+        // and out of the contract a script branches on (spec 026, D7).
+        Assert.False(document.RootElement.TryGetProperty("commits", out _));
+    }
+
+    [Fact]
     public async Task BuildJsonCarriesEveryPhaseWithBothClocks()
     {
         using var sandbox = ToolTestWorkspace.Create();

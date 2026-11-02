@@ -525,7 +525,7 @@ internal static class IndexCommand
         // which step of a build the time went into).
         if (options.Verbose && report.Phases.Count > 0)
         {
-            builder.Append(Phases(report.Phases, timing));
+            builder.Append(Phases(report.Phases, timing, report.Commits));
         }
 
         builder.Append(Line("state", report.Incomplete
@@ -554,6 +554,7 @@ internal static class IndexCommand
     /// </summary>
     /// <param name="phases">The steps, in the order the build ran them.</param>
     /// <param name="timing">The whole run, which is the denominator and the source of the unaccounted-for remainder.</param>
+    /// <param name="reportCommits">How many times the build asked the store to commit.</param>
     /// <returns>Zero or more terminated lines.</returns>
     /// <remarks>
     /// The last line is the difference between the run and its steps — the wait for the writer lock, opening the
@@ -564,7 +565,7 @@ internal static class IndexCommand
     /// percentages that describe the same seconds would read as a hundred and ninety percent of a run.
     /// </para>
     /// </remarks>
-    private static string Phases(IReadOnlyList<IndexPhase> phases, BuildTiming timing)
+    private static string Phases(IReadOnlyList<IndexPhase> phases, BuildTiming timing, int reportCommits)
     {
         var labels = phases.Select(static phase => phase.Nested ? "of which " + phase.Name : phase.Name).ToList();
         var labelWidth = labels.Max(static label => label.Length);
@@ -609,6 +610,13 @@ internal static class IndexCommand
 
             builder.Append(Line(string.Empty, other)).Append('\n');
         }
+
+        // How many times the store was asked to commit, which is the line that makes a slow build legible: the `commit`
+        // row above says what the commits cost, and this says how many paid it. A build that committed once per file
+        // printed a commit count in the hundreds on a repository of this size (spec 026, D7).
+        var commits = "commits".PadRight(labelWidth) + "  "
+            + string.Create(CultureInfo.InvariantCulture, $"{reportCommits} × the store's batch commit");
+        builder.Append(Line(string.Empty, commits)).Append('\n');
 
         return builder.ToString();
     }

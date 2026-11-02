@@ -444,6 +444,13 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
   - Left behind, deliberately: `index --verify` checks rows, hashes and orphans rather than the version, so the
     version-1 index above answered `result fresh` while `--status` said `stale`. Reporting the mismatch in
     `--verify` as well is a small change and a separate one.
+  - Note (2026-11-02, `research.md` D22): the checkpoint landed as round 17, `026-checkpointed-index-writes`. A rebuild of
+    this repository now costs **2 m 53 s and 26 commits** instead of 17 m 51 s and 700: `write` 36.9 s and the commit
+    inside it 37.5 s, against 15 m 47 s and 15 m 49 s — 25× both, with the failure unit still bounded (one group of 32
+    files). What is left of this task is `communities`, which is 2 m 8 s and 74 % of the run and did not move; then the
+    no-op `meta`/open overhead; then the checkpoint's own size, where the commit is still half the write phase at 32 files
+    and a larger group is a decision about the batch's buffer rather than about this machine. SC-002's 5 000-file tree and
+    SC-006's 61× are still unmeasured here, so the task stays open.
 
 ## Traceability — requirement to task
 

@@ -433,6 +433,9 @@ SharpCoreAgent.Domain.Index.IndexBuildReport.Added.get -> int
 SharpCoreAgent.Domain.Index.IndexBuildReport.Added.init -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.Changed.get -> int
 SharpCoreAgent.Domain.Index.IndexBuildReport.Changed.init -> void
+SharpCoreAgent.Domain.Index.IndexBuildReport.Commits.get -> int
+SharpCoreAgent.Domain.Index.IndexBuildReport.Commits.init -> void
+
 SharpCoreAgent.Domain.Index.IndexBuildReport.ElapsedMilliseconds.get -> long
 SharpCoreAgent.Domain.Index.IndexBuildReport.ElapsedMilliseconds.init -> void
 SharpCoreAgent.Domain.Index.IndexBuildReport.Equals(SharpCoreAgent.Domain.Index.IndexBuildReport? other) -> bool

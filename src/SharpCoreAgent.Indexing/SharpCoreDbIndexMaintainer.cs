@@ -302,6 +302,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
             Incomplete = result.Incomplete,
             Notes = result.Notes,
             Phases = result.Phases,
+            Commits = result.Commits,
         };
     }
 
@@ -419,6 +420,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         {
             var notes = new List<string>();
             var removed = 0;
+            var commits = 0;
 
             if (_paths.DatabaseExists)
             {
@@ -432,13 +434,31 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
                     present.Add(file.Path);
                 }
 
+                // The vanished set is one checkpoint, for the same reason a build's is: what a delete costs is the
+                // store's commit, and a prune of three hundred files would otherwise pay for three hundred of them
+                // (spec 026, D6). The set is a commit boundary, not an accounting one — the count below is what was
+                // dropped, whichever way it was dropped.
                 var writer = IndexFileWriter.For(database);
-                foreach (var row in Ordered(stored).Where(row => !present.Contains(row.Path)))
+                writer.BeginCheckpoint();
+
+                try
                 {
-                    writer.Delete(row.Id);
-                    removed++;
-                    notes.Add(string.Create(CultureInfo.InvariantCulture, $"removed {row.Path}"));
+                    foreach (var row in Ordered(stored).Where(row => !present.Contains(row.Path)))
+                    {
+                        writer.Delete(row.Id);
+                        removed++;
+                        notes.Add(string.Create(CultureInfo.InvariantCulture, $"removed {row.Path}"));
+                    }
+
+                    writer.EndCheckpoint();
                 }
+                catch (Exception)
+                {
+                    writer.AbandonCheckpoint();
+                    throw;
+                }
+
+                commits = writer.Commits;
 
                 RefreshCounters(database);
                 _reader.InvalidateStatus();
@@ -450,6 +470,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
                 Removed = removed,
                 ElapsedMilliseconds = Elapsed(started),
                 Notes = notes,
+                Commits = commits,
             };
         }
         finally

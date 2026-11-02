@@ -687,3 +687,53 @@ asserts the wiring end to end: all eight phases in order, `scan`/`load`/`write` 
 up to no more than the run they belong to, the nested commit staying inside the four phases that contain it, and a
 prune reporting none. `IndexCommandTests` asserts the `--verbose` block, its absence without the flag, and the
 `phases` array in `--json`. Suite 1 319 → 1 332, build clean at zero warnings.
+
+---
+
+## D22 — The commit lands once per checkpoint (2026-11-02): the write phase falls 25×, and the clusterer becomes the run
+
+D21 ended with three levers and a warning: fewer commits moves every run, and the per-file batch is "the largest unit that
+can fail independently … a checkpoint interval" is what to build instead of one batch for the whole build. This slice is
+that interval, shipped as spec `026-checkpointed-index-writes`.
+
+**What shipped.** `IndexFileWriter` grows a checkpoint: `BeginCheckpoint` marks a group, `EndCheckpoint` commits it,
+`AbandonCheckpoint` discards it, and `RunInBatch` joins an open checkpoint instead of opening its own batch. The batch is
+opened lazily by the first write inside the group, so a checkpoint that carries nothing costs nothing and a build stopped
+before its first file still pays exactly one commit. `IndexWriter` carries 32 files per checkpoint, commits before it
+breaks for its budget and before cancellation leaves the writer, and abandons on any other exception; `RemoveVanished` and
+`PruneAsync` remove their whole set in one commit each. `IndexWriteResult.Commits` counts every `EndBatchUpdate` where it
+is timed, `index --verbose` prints it, and `--json` does not — the count is a fact about the writer's strategy, not about
+the index. Nothing else moved: one file is still written as one unit, `meta` is still written last and alone, and the
+schema, the reader, the tools and the published report shape are untouched.
+
+**Why not one batch for the build.** It would be 700 → 1. A checkpoint keeps the failure unit the per-file batch existed
+for, shaped like the cost: a crash or a cancellation loses at most one group's writing — 32 files, about 1.6 s here.
+
+**A rebuild of this repository** (740 files, 14 200 passages, 525.2 MiB; the index has grown since D21's 698 files and
+350.2 MiB, and a commit costs more the bigger the index is, so the ratio below is a floor):
+
+| | D21 | D22 |
+|---|---|---|
+| the run | 17 m 51 s | **2 m 53 s** |
+| `write` | 15 m 47 s (88 %) | **36.9 s** (21 %) |
+| of which `commit` | 15 m 49 s | **37.5 s** |
+| `communities` | 1 m 56 s (11 %) | 2 m 8 s (74 %) |
+| commits | **700** | **26** |
+
+26 is arithmetic: ⌈754 ÷ 32⌉ = 24 checkpoints for the 740 indexed and 14 skipped files, plus the edges and `meta`. The
+write phase and the commit inside it still agree to within a second, which is the same finding D21 made, moved down by a
+factor of 25.
+
+**What that leaves.** `communities` is now three quarters of a rebuild and it is a fixed charge per *writing* run, so the
+next slice is D21's second lever rather than more of this one. Then the no-op `meta`/open overhead (5.5 s a turn), then
+the checkpoint's own size: at 32 files the commit is still 48 % of the write phase, and a group of 128 would take another
+nine seconds off this rebuild — but a checkpoint is also a buffer held in memory until the commit, and that is a decision
+about memory this slice did not take.
+
+**What proves it.** `CheckpointTests` (9): five files commit 3 times at the default and 5 times at two files a group, with
+the same counters and the same rows either way; an abandoned checkpoint leaves the store exactly as the last commit left
+it, and a checkpoint committed before a failure stays; a zero budget commits only `meta`; a budget that expires inside a
+checkpoint keeps the group (200 files, 100 ms, and the rows equal the counter); an already-cancelled build writes nothing;
+a prune of three files commits once; a second begin is refused. `IndexCommandTests` adds the `--verbose` line and the
+absence of a `commits` key in `--json`. Suite 1 483 → 1 494, build clean at zero warnings.
+

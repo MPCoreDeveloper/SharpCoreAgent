@@ -40,6 +40,13 @@ internal sealed record IndexWriteResult
 
     /// <summary>Gets what each step of the build cost, in the order it ran them.</summary>
     public required IReadOnlyList<IndexPhase> Phases { get; init; }
+
+    /// <summary>Gets how many times the build asked the store to commit.</summary>
+    /// <remarks>
+    /// Counted by the writer where it times the commit, which is what makes the round's arithmetic — 700 batches for a
+    /// rebuild become 24 — a number a test asserts instead of one a reader infers from seconds (spec 026, D7).
+    /// </remarks>
+    public required int Commits { get; init; }
 }
 
 /// <summary>
@@ -55,16 +62,32 @@ internal sealed record IndexWriteResult
 /// declaration of the build is stored. Splitting them is what makes an edge from file 1 to a symbol declared in
 /// file 5 possible at all.
 /// </para>
+/// <para>
+/// The first pass commits once per checkpoint of <see cref="CheckpointFiles"/> files rather than once per file, because
+/// the store charges for the commit and not for the rows (spec 002, D21; spec 026). Everything else is unchanged: one
+/// file is still written as one unit, <c>meta</c> is still last, and a build that stops early keeps what it wrote.
+/// </para>
 /// </remarks>
 internal sealed class IndexWriter
 {
     /// <summary>The most skip notes one report carries, so a repository full of images does not print itself.</summary>
     private const int MaxSkipNotes = 20;
 
+    /// <summary>The number of files a checkpoint carries before the store is asked to commit.</summary>
+    /// <remarks>
+    /// Arithmetic, revised by measurement: spec 002 D21 priced a commit at 1.36 s against about 1.5 s for a file, and after
+    /// this round the file itself costs 49 ms while a commit still costs 1.44 s — so at 32 files the commit is about half
+    /// the write phase, and a larger group would help further. What bounds it is the batch's buffer rather than the
+    /// re-work (32 files is 1.6 s to redo), and the size of that buffer is a decision this round did not take (spec 026,
+    /// D3). A smaller group buys little: 4 files a checkpoint still pays 189 commits for this rebuild.
+    /// </remarks>
+    internal const int CheckpointFiles = 32;
+
     private readonly Workspace _workspace;
     private readonly IDatabase _database;
     private readonly IndexFileWriter _files;
     private readonly IndexPhaseClock _phases;
+    private readonly int _checkpointFiles;
 
     private readonly List<string> _notes = [];
     private readonly List<WrittenFile> _written = [];
@@ -76,12 +99,18 @@ internal sealed class IndexWriter
     private int _skipped;
     private bool _incomplete;
 
-    private IndexWriter(Workspace workspace, IDatabase database, IndexFileWriter files, IndexPhaseClock phases)
+    private IndexWriter(
+        Workspace workspace,
+        IDatabase database,
+        IndexFileWriter files,
+        IndexPhaseClock phases,
+        int checkpointFiles)
     {
         _workspace = workspace;
         _database = database;
         _files = files;
         _phases = phases;
+        _checkpointFiles = checkpointFiles;
     }
 
     /// <summary>
@@ -89,18 +118,30 @@ internal sealed class IndexWriter
     /// </summary>
     /// <param name="workspace">The workspace to walk.</param>
     /// <param name="database">The database to write to.</param>
+    /// <param name="checkpointFiles">
+    /// How many files one commit carries, or <see cref="CheckpointFiles"/> for the build's own answer. A caller that is
+    /// not a build has no reason to pass one; a test does, because the arithmetic of a checkpoint is worth asserting
+    /// with two files rather than thirty-two (spec 026, D3).
+    /// </param>
     /// <returns>The writer, which is used for one build and then discarded.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public static IndexWriter For(Workspace workspace, IDatabase database)
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="checkpointFiles"/> is not positive.</exception>
+    public static IndexWriter For(Workspace workspace, IDatabase database, int checkpointFiles = CheckpointFiles)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(database);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(checkpointFiles);
 
         // One clock for the writer and the file writer: the store's commit is timed inside the file writer and has to
         // land in the same report as the steps that contain it.
         var phases = new IndexPhaseClock();
 
-        return new IndexWriter(workspace, database, IndexFileWriter.For(database, phases: phases), phases);
+        return new IndexWriter(
+            workspace,
+            database,
+            IndexFileWriter.For(database, phases: phases),
+            phases,
+            checkpointFiles);
     }
 
     /// <summary>
@@ -141,20 +182,50 @@ internal sealed class IndexWriter
 
         await _phases.MeasureAsync(IndexPhases.Write, async () =>
         {
-            foreach (var file in scanned)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            // One owner of the batch: the loop opens the checkpoint and the loop closes it. The first write inside the
+            // checkpoint is what opens the store's batch, so a build that stops before its first file pays nothing for
+            // the checkpoint at all (spec 026, D2).
+            _files.BeginCheckpoint();
 
-                if (Spent())
+            try
+            {
+                foreach (var file in scanned)
                 {
-                    _incomplete = true;
-                    _notes.Add(string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"budget reached after {_added + _changed + _unchanged + _skipped} of {scanned.Count} files"));
-                    break;
+                    // Both stops commit first. What the open checkpoint holds is work this run has already paid for,
+                    // and a build that reported it without keeping it would make its own counters a lie (D5).
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        _files.EndCheckpoint();
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    if (Spent())
+                    {
+                        _incomplete = true;
+                        _notes.Add(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"budget reached after {_added + _changed + _unchanged + _skipped} of {scanned.Count} files"));
+                        break;
+                    }
+
+                    await IndexOneAsync(file, stored, indexedUtc, cancellationToken).ConfigureAwait(false);
+
+                    if (_files.FilesInCheckpoint >= _checkpointFiles)
+                    {
+                        _files.EndCheckpoint();
+                        _files.BeginCheckpoint();
+                    }
                 }
 
-                await IndexOneAsync(file, stored, indexedUtc, cancellationToken).ConfigureAwait(false);
+                // Reached by the end of the walk and by the budget's break; not by cancellation, which left above.
+                _files.EndCheckpoint();
+            }
+            catch (Exception)
+            {
+                // Nothing of an abandoned checkpoint reaches the store, and the build fails exactly as it did when a
+                // file was the unit: the report is lost, and the `meta` row nobody wrote is what leaves the index stale.
+                _files.AbandonCheckpoint();
+                throw;
             }
         }).ConfigureAwait(false);
 
@@ -182,6 +253,7 @@ internal sealed class IndexWriter
             Incomplete = _incomplete,
             Notes = _notes,
             Phases = _phases.Elapsed(),
+            Commits = _files.Commits,
         };
     }
 
@@ -290,11 +362,30 @@ internal sealed class IndexWriter
             .OrderBy(static row => row.Path, StringComparer.Ordinal)
             .ToList();
 
-        foreach (var row in vanished)
+        if (vanished.Count == 0)
         {
-            _files.Delete(row.Id);
-            _removed++;
-            _notes.Add(string.Create(CultureInfo.InvariantCulture, $"removed {row.Path}"));
+            return;
+        }
+
+        // One commit for the set, which is the same lever as the write loop and the same failure unit: a build that dies
+        // pruning leaves the rows it already dropped committed and the rest as they were (spec 026, D6).
+        _files.BeginCheckpoint();
+
+        try
+        {
+            foreach (var row in vanished)
+            {
+                _files.Delete(row.Id);
+                _removed++;
+                _notes.Add(string.Create(CultureInfo.InvariantCulture, $"removed {row.Path}"));
+            }
+
+            _files.EndCheckpoint();
+        }
+        catch (Exception)
+        {
+            _files.AbandonCheckpoint();
+            throw;
         }
     }
 
