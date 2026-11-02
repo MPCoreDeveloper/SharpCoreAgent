@@ -113,7 +113,7 @@ rendered page and the command's stderr, with no editor involved.
       that no flag widens it.
 - [x] T021 `README.md`: the synopsis line, the flag table, and a "seeing the index" section with the two routes into an
       editor, the safe default (`--refresh` is the opt-in), and the one sentence that says nothing leaves the machine.
-- [ ] T022 `specs/000-parity-roadmap.md`: round 14 in the table, a round-14 section, and `023` added to the numbering
+- [x] T022 `specs/000-parity-roadmap.md`: round 14 in the table, a round-14 section, and `023` added to the numbering
       note — in a follow-up commit, because a commit cannot contain its own hash.
 
 ---

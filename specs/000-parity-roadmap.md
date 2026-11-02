@@ -58,6 +58,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 11 | [`020-image-turn-budget`](020-image-turn-budget/spec.md) | the pictures one turn shows have a total — 16 MiB, counted by the loop and refused by each of the three doors with both numbers (landed 2026-10-31 as `051089d`; narrows `017` T031) | 0, `017` and `019` (landed) |
 | 12 | [`021-image-dedup`](021-image-dedup/spec.md) | a picture the conversation already carries is not attached again — one rule for the three doors, answered as a success rather than a refusal (landed 2026-10-31 as `5a01290`; closes `017` T031's deduplication clause) | 0, `017`, `019` and `020` (landed) |
 | 13 | [`022-ide-client-config`](022-ide-client-config/spec.md) | `mcp config --client visualstudio`, and `--write` — the block merged into the one `.mcp.json` two IDEs read, instead of a redirect that truncates (landed 2026-11-02 as `ab07988`: `McpClientKind.VisualStudio`, `McpClientSnippets.TryShape`/`Entry`, `McpConfigWriter`, 25 tests) | 0, and `013` (landed) |
+| 14 | [`023-ide-surface`](023-ide-surface/spec.md) | `ui --serve` — the index as a page on `127.0.0.1`, from one builder both it and `index --status --json` read (landed 2026-11-02 as `1eb0164`: `UiCommand`, `UiServer`, `UiPage`, `UiEndpoint`, `IndexStatusDocument`, 62 tests) | 0, `002` and `013` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -67,7 +68,8 @@ compiler oracle — [`012-compiler-oracle`](012-compiler-oracle/spec.md) — whi
 key, `013` is the evidence server, `015` is F# code intelligence —
 [`015-fsharp-peer`](015-fsharp-peer/spec.md) — which links the F# front end in rather than talking to a
 server, `016` is model roles, `017` is the image view, `019` is image ingress — round 10 — `020` is the turn's image
-budget — round 11 — `021` is image deduplication — round 12 — `022` is the IDE's client configuration — round 13 — and
+budget — round 11 — `021` is image deduplication — round 12 — `022` is the IDE's client configuration — round 13 —
+`023` is the IDE surface itself, a page for the developer rather than for another agent — round 14 — and
 `014` was never assigned.)
 
 ## Decision record
@@ -574,6 +576,44 @@ grew the paragraph. Build 0 warnings; suite 1,356 passed, 0 failed — 25 this r
 from the unrelated phase-timing slice in `002`.
 
 
+
+## Round 14 — `023-ide-surface` (landed 2026-11-02 as `1eb0164`)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–13 took. Rounds 6 and 13
+made this repository's index reachable from other *agents*: three terminals, then an IDE's agent. What none of them did
+was show it to the developer sitting in front of the editor, who could run `index --status` and read nine labelled lines,
+or open one file at a time. `ui --serve` closes that: the same numbers, as a page, in whatever browser the editor already
+has. The argument is [`023-ide-surface/spec.md`](023-ide-surface/spec.md); the probe that settled the platform question,
+the ten decisions and the two things this round did not verify are in its `plan.md`.
+
+**Ships**: `sharpcoreagent ui --serve` — binds `http://127.0.0.1:<port>/` on an ephemeral port (`--port 0` says the same
+thing out loud), prints the URL as the first line of stderr, and serves `GET /` and `GET /api/status.json` until Ctrl+C
+at `0`. `IndexStatusDocument` is the one builder of the twenty-key status object and the five formatters that decide how a
+status reads (`State`, `TierName`, `Slash`, `Number`, `Size`), so `index --status --json` and the route are the same bytes
+— asserted, not asserted-by-inspection. `UiPage` is a pure function of that document and self-contained: inline
+stylesheet, both `prefers-color-scheme` blocks, one script, one fetch, no other origin. The default is `--status`
+semantics (never writes, never walks) and `--refresh` is the opt-in, bounded by `--index-budget`. A foreign `Host` is
+`403` and any other path or method is `404`, both with an empty body that carries no number, and every answer is
+`no-store`.
+
+**Does not ship**: a VS Code extension (`createWebviewPanel` needs a TypeScript project, `npm` and a `.vsix`), a Visual
+Studio tool window (a separate spec with its own authentication story, because a remote-UI channel calls back into the
+IDE), auto-opening a browser (Principle III names two `Process.Start` exceptions and a browser launch is neither), a
+polling page, any write or tool or setting, and `--host`.
+
+**Evidence**: sixty-two cases in four classes. `IndexStatusDocumentTests` (the twenty keys in the contract's order,
+`null` for a build that never finished, and the byte-equality of the two renderings of one open index),
+`UiPageTests` (every FR-009 field, the `missing` page with no card of zeroes, escaping, both colour schemes, no other
+origin), `UiCommandParsingTests` (`--serve` required, `--port` range and spelling, `--refresh` off by default, FR-013's
+eleven flags refused on the command and the panel's three refused elsewhere, and the note naming both editors), and
+`UiServerTests` (one loopback round trip: both routes, a `POST`, a foreign `Host`, an unknown path, and a held port
+reported rather than thrown — skipped rather than failed where the platform refuses the prefix). The `Panel` section of
+the help text is golden, and the exit-code table gained the panel's `0` and `2`. Build 0 warnings; suite 1,418 passed,
+0 failed, 0 skipped — 62 this round's, against 1,356.
+
+The probe is part of the record rather than an anecdote: non-elevated on this machine `http://127.0.0.1:<port>/` binds,
+`http://127.0.0.1:0/` is refused with code 87, a second listener on the same prefix is 183, a port a plain socket holds
+is 32, and port 80 is access-denied at 5 — which is why `--port` checks `0–65535` and lets the bind decide.
 
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
