@@ -60,6 +60,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 13 | [`022-ide-client-config`](022-ide-client-config/spec.md) | `mcp config --client visualstudio`, and `--write` — the block merged into the one `.mcp.json` two IDEs read, instead of a redirect that truncates (landed 2026-11-02 as `ab07988`: `McpClientKind.VisualStudio`, `McpClientSnippets.TryShape`/`Entry`, `McpConfigWriter`, 25 tests) | 0, and `013` (landed) |
 | 14 | [`023-ide-surface`](023-ide-surface/spec.md) | `ui --serve` — the index as a page on `127.0.0.1`, from one builder both it and `index --status --json` read (landed 2026-11-02 as `1eb0164`: `UiCommand`, `UiServer`, `UiPage`, `UiEndpoint`, `IndexStatusDocument`, 62 tests) | 0, `002` and `013` (landed) |
 | 15 | [`024-ide-agent-definition`](024-ide-agent-definition/spec.md) | `ide agent` and `ide tasks` — the profile that puts this server's five tools in the editor's agent picker, and the task that rebuilds the index, both written only where they may be | 0, `013` and `022` (landed) |
+| 16 | [`025-served-index-snapshot`](025-served-index-snapshot/spec.md) | the served call stops reloading what it already knew — one loaded build and one computed status per index, shared across the handles the lease opens and releases, and a harness that says which call its p95 describes (landed 2026-11-02 as `37c5efa`: `IndexReadCache`, `IndexReadState`, `IndexStatusMemo`, `FileStamp`, the bench's warm-up and `cold`, 11 tests) | 0, `002` and `013` (all landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -72,7 +73,8 @@ server, `016` is model roles, `017` is the image view, `019` is image ingress �
 budget — round 11 — `021` is image deduplication — round 12 — `022` is the IDE's client configuration — round 13 —
 `023` is the IDE surface itself, a page for the developer rather than for another agent — round 14 — and
 `024` is the agent definition, the profile such an editor lists and the task such a workspace runs — round 15 —
-while `014` was never assigned.)
+`025` is the served call's own memory, the build and the status a `tools/call` no longer rebuilds — round 16 —
+while `014` was never assigned and `018` stays released, unassigned for a round that wants it.)
 
 ## Decision record
 
@@ -653,6 +655,43 @@ two rows in `HelpTextTests`. Build 0 warnings; suite 1,472 passed, 0 failed, 0 s
 The binary was run against this repository: the profile it wrote is committed, the task list it wrote was read and
 deleted, because its `command` is one machine's absolute path and D8 said so before it happened.
 
+## Round 16 — `025-served-index-snapshot` (landed 2026-11-02 as `37c5efa`)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–15 took. Round 6 could
+publish this repository's index but could not afford to serve it: a `tools/call` cost 3.2 s at p95 against a 300 ms
+budget, and that round recorded the miss rather than moving the number, naming the mechanism in `013/plan.md`. This
+round did the work that paragraph left open and found its other half. The argument is
+[`025-served-index-snapshot/spec.md`](025-served-index-snapshot/spec.md); the two probes, their output and the nine
+decisions are in its `plan.md`.
+
+**Ships**: `IndexReadCache` — one `IndexReadState` per index database per process, holding the `IndexReader` whose
+snapshot the five tools rank against and an `IndexStatusMemo` (a status plus the file stamp it was computed for).
+`SharpCoreDbCodeIndex` takes both from it, and `Dispose` now closes the handle and keeps the answers, which is the
+one line a reviewer should read twice. Both answers keep the keys they already had — `build_id` for the build, the
+file's length and write time for the status — so a rebuild in this process or any other is seen by the next call; the
+map is bounded at four workspaces, evicts the least recently used, and drops an entry whose database file is gone.
+`mcp bench` gains one untimed call before its twelve samples and prints that call as `cold` beside the `p95`, because
+with twelve samples the nearest-rank p95 *is* the slowest sample and the warm one was therefore always the cold one.
+
+**Does not ship**: any change to `LeasedCodeIndex` or `IndexHandleCache` — the handle is still opened per call and
+released in a `finally`, and the round's own test that proves a build in a terminal is never waiting on an idle
+editor passes without an edit. No stamp-gated path that answers a *build* question without opening the database
+(refused in the spec, with the reason). Nothing about the build: `002` T034, the 119–132 s writing run and the 61×
+footprint, stays open.
+
+**Evidence**: eleven cases, ten new and one amended. `IndexReadCacheTests` (10: one database one state, two databases
+never one, the lease's shape sharing a state, `Forget`, the fifth evicting the least recently used, a deleted
+workspace dropped on the next miss, a new instance seeing a build made in this process, a status read by the next
+instance, a status recomputed when the file changes, invalidation reaching every reader), and `McpBenchTests`' new
+`TheCallThatLoadsTheSnapshotIsReportedAndIsNotThePercentile` beside the amended summary row.
+`CodeIndexOpenTests.SecondOpenReusesTheSameHandle` changed because a status no longer opens the database at all, which
+is the change working rather than a casualty of it. Build 0 warnings; suite 1,483 passed, 0 failed, 0 skipped — 11
+this round's, against 1,472.
+
+The number is the point: `mcp bench` twice on this repository's index, 712 files and 13,686 passages, printed
+`p95 261 ms · cold 2641 ms · parity 12/12` and `p95 248 ms · cold 2834 ms · parity 12/12`, against 3,199 ms before.
+SC-005 is restated a third time in `013` and met; the cold call is published beside it rather than averaged into it.
+
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
 empty checkbox.
@@ -666,7 +705,7 @@ empty checkbox.
 | 2 | `008` T031, T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch. T032 (a web search tool) is decided against: see the decision record, 2026-10-31 |
 | 3 | `009` T034–T037 | resources, prompts, sampling, logging, remote transports, server mode, a declarative server list |
 | 4 | `010` T031–T034 | a browser of our own, PDF/video/audio artefacts, retention and deduplication, a catalogue of what was captured — T035 (*showing the screenshot to the model as an image*) is closed by `017` |
-| 6 | `013` SC-005 → the index lease | the served call costs 3.2 s at p95 against a 300 ms budget, re-measured 2026-11-01 on 12 889 passages (4 425 ms on 12 420 when it was first taken). The hop costs nothing: in-process and stdio differ by 6 to 283 ms on calls of 2.5–3.2 s, with neither side consistently the slower one. The cost is the snapshot every call rebuilds — `LeasedCodeIndex` opens a new index per operation, so the `build_id`-keyed cache in `IndexReader` never survives a call and every answer re-reads 12 889 rows of text and 512-wide embeddings. Opening the file itself is 0.36 s, which rules the open out. The criterion is restated with that number beside it (2026-10-29, `spec.md`); what is open is the work the restatement does not do — one snapshot shared across per-call handles, `warm` defined in the harness, and the index size that makes the load expensive at all (`002` T034, `research.md` D17) |
+| 6 | `013` SC-005 — **closed 2026-11-02 by round 16** (`37c5efa`) | the served call cost 3 199 ms at p95 against a 300 ms budget, restated twice as a miss with the mechanism beside it. It now costs **248–261 ms** over two runs, parity 12/12, with the cold first call published at 2 641–2 834 ms instead of averaged into the p95. What closed it: one loaded build and one computed status per index database, shared across the per-call handles the lease opens and releases — the snapshot was 3 917 ms cold, the status 1 347–1 435 ms per call, and both were instance fields the lease threw away. The row that remains open in this subject is the one above it: the index size that makes the load expensive at all (`002` T034, `research.md` D17–D19), not the lease |
 | 9 | `017` T024–T033 | OCR and local vision, PDF/SVG/audio/video, pasted or piped images and an `--image` flag, resizing and re-encoding, images in session files, transcript trimming, an image token estimate, and serving `view_image` over `mcp serve` — T024 (*images inside MCP results*) and T025 (*`fetch_url` returning images*) are closed by `019`, T031's per-turn budget clause by `020`, and T031's deduplication clause by `021`, which is why the row no longer claims any of them |
 | 15 | `024` — five | `group`, `problemMatcher` and `type` in the written task (the page describes them in prose this round did not read, and a guessed matcher is a file the editor rejects); `--force`; a prompt file, an instructions file and an agent skill, each its own format; `mcp-servers` inside the profile, which the reference says IDE agents ignore; and Visual Studio 2026's own agent definition, whose format and location this round read neither of |
 | — | `005` T012, T013 | whether `--credential-file` takes a directory, and whether `credentials --check` exists |
