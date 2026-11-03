@@ -108,8 +108,9 @@ internal static class CommunityAssigner
             return CommunityAssignment.None;
         }
 
-        // The same step twice: rows become a position map and then neighbours. Two entries of one step add up, which
-        // is what the clock was built to do rather than a second name for the second half.
+        // The same step twice, in the order the work happens: the rows become a position map here, and `adjacency`
+        // becomes neighbours below. Two entries of one name add up — which is what the clock was built to do rather
+        // than a sixth name for the second half of one decision.
         var positions = phases.Measure(IndexPhases.Nodes, () => PositionsOf(symbols));
         var (adjacency, connected) = phases.Measure(IndexPhases.Adjacency, () => ReadGraph(database, positions));
 
