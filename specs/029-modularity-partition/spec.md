@@ -18,9 +18,10 @@ Round 19 left one number standing, and it is now the run:
 > `communities` 1 m 10 s (61 %): `nodes` 0.0 s, `adjacency` 0.0 s, `louvain` 1 m 8 s, `degree` 0.0 s, `assign` 1.8 s.
 
 `louvain` is one call to one method the store ships, over a graph of 4 123 declarations and 10 744 undirected
-relations. Twelve seconds per thousand nodes and ten edges is not what a sparse graph costs: at that edge-to-node ratio
-a partition is linear work, and the whole graph fits in a corner of one megabyte. So the question this round asks is the
-one round 19 asked of `assign` and answered with a probe: is the work the graph, or is it the arithmetic around it?
+relations. Seventeen seconds per thousand declarations, where each one has five neighbours on average and the whole
+adjacency list is 86 KiB, is not what a sparse graph costs: at that edge-to-node ratio a partition is linear work. So the
+question this round asks is the one round 19 asked of `assign` and answered with a probe: is the work the graph, or is it
+the arithmetic around it?
 
 ### The measurement, before the code
 
