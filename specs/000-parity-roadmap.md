@@ -779,6 +779,11 @@ report's resolution). The graph reads — the suspect a write-heavy history made
 faster read path would buy nothing. An incremental run over the same index prints five zeros and one commit, so a skipped
 phase is distinguishable from a cheap one.
 
+Neither of the two candidates is proportional to what changed, and that is the sharper half of the finding: a run over this
+index with **two changed files** costs **2 m 39 s**, because `assign` rewrites all 7 305 rows and `louvain` re-partitions all
+10 806 edges whatever the edit was. Round 17 could say a writing run pays a fixed charge; round 18 can say it pays two, and
+name both.
+
 **Left open, with the arithmetic attached**: `assign` is the larger lever and ours; `louvain` is the smaller one and the
 store's, and answering it means a coarser graph or a bounded candidate set — a decision about label stability, and therefore
 a spec of its own. Then the no-op `meta`/open overhead (5.5 s a turn), then the checkpoint's own size. `002` T034 stays open

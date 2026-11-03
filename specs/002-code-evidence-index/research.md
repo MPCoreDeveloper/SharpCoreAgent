@@ -791,6 +791,11 @@ statement's shape, the `symbols` indexes, or the size of the batch.
 edges is a second's work in most implementations, so the number is about the algorithm rather than about this repository. It
 is in third-party code, which makes it a smaller lever than `assign` — but a 40 % step is still a step.
 
+*Neither is proportional to the change.* A run with **two changed files** costs **2 m 39 s** on this index: `assign` rewrites
+all 7 305 rows and `louvain` re-partitions all 10 806 edges whatever was edited. D18 could say a writing run pays a *fixed*
+charge of 119–132 s and could not say what it was; the fixed charge is now two named steps, and that is what stands between
+SC-002's "one changed file inside 3 s" and the truth.
+
 **What that changes about the plan.** Two levers, `assign` first (60 % of the phase, and ours) then `louvain` (40 %, and the
 store's). The second can be answered without a fork by giving Louvain a coarser graph or a bounded candidate set, which is a
 decision about label stability and therefore a spec of its own. D21's third lever — the no-op `meta`/open overhead, 5.5 s a
