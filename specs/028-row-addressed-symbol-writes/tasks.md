@@ -19,7 +19,8 @@ not have; T007–T009 are the gates and the record.
 - [x] **T007** `dotnet build` and `dotnet test` on the solution in Release: 0 warnings, the suite green, and the new cases
   counted against 1 498: 1 502 passed, 0 failed, 0 skipped.
 - [x] **T008** One `index --rebuild --verbose` on this repository, logged outside the repository, and the five steps
-  published beside round 18's `assign` 1 m 21 s (SC-001, NFR-001): `assign` 1.8 s, `communities` 1 m 10 s, the run 1 m 56 s, 27 commits.
+  published beside round 18's `assign` 1 m 21 s (SC-001, NFR-001): `assign` 1.8 s, `communities` 1 m 10 s, the run
+  1 m 56 s, 27 commits.
 - [x] **T009** Record the decision in `specs/002-code-evidence-index/research.md` as D24 with both measurements beside it,
   and round 19 in `specs/000-parity-roadmap.md`: the round section, the rounds table, the numbering note, and `002` T034's
   open item.
