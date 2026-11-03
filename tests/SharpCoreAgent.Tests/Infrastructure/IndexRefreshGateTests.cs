@@ -202,6 +202,9 @@ public sealed class IndexRefreshGateTests
         public ValueTask<IndexBuildReport> PruneAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException("the gate never prunes an index");
 
+        public ValueTask<IndexCompaction> CompactAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException("the gate never compacts an index");
+
         public ValueTask DisposeAsync()
         {
             Released = true;

@@ -74,4 +74,22 @@ public interface ICodeIndexMaintainer
     /// <param name="cancellationToken">Cancels the work.</param>
     /// <returns>A report whose <see cref="IndexBuildReport.Removed"/> counts the pruned files.</returns>
     ValueTask<IndexBuildReport> PruneAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gives back the pages the index file is no longer using.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the rewrite.</param>
+    /// <returns>The file before and after, and whether the rewrite ran at all.</returns>
+    /// <remarks>
+    /// The index is one file, and a file of rows that are rewritten, dropped and rewritten again grows: a delete frees
+    /// the row and not the page, and a rebuild empties every table before filling it. Nothing in this product ever asked
+    /// the store to compact what that leaves behind, which is what makes a 73.2 MiB index reach 787.9 MiB
+    /// (spec 030, and <c>specs/002-code-evidence-index/research.md</c> D26 for the measurement).
+    /// <para>
+    /// This is the one method here that rewrites the whole file, so it holds the same writer lock a build does and it is
+    /// never called from a turn: a compaction of this repository's index costs 0.6 s, which is a number a command can
+    /// wait for and a turn cannot.
+    /// </para>
+    /// </remarks>
+    ValueTask<IndexCompaction> CompactAsync(CancellationToken cancellationToken);
 }

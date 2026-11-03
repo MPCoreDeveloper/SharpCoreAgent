@@ -1004,3 +1004,67 @@ overhead (5.8 s a turn, unchanged and re-measured), the checkpoint, SC-002's 5 0
 between it and "one changed file inside 3 s" is the commit and the open rather than anything the clusterer does.
 
 
+
+## D26 — The file the index left behind (2026-11-03): 787.9 MiB becomes 73.2 MiB in 0.6 s, and no row moves
+
+D25 ended with one number it could not explain: the index file was **787.9 MiB** where round 19 measured **525.2 MiB** for
+the same corpus, twice reproduced by `--rebuild` and again by `--prune`. Round 21 answered it by asking the store the only
+question that produces an answer — *how much of this file are you no longer using?*
+
+*The probes, before any code.* Four temporary ones, on a copy of this repository's index and on a synthetic one, deleted
+with the round:
+
+| probe | measured |
+|---|---|
+| the file | 787.9 MiB; `GetStorageStatistics()`: used 675.6 MiB, free 112.2 MiB, fragmentation **0.0**, 16 blocks, 1 037 pages, 28 732 free pages |
+| the rows | 14 368 passages · 7 336 symbols · 10 879 edges · 767 files; every passage's text 9 153 680 characters, its `tokens` 6 172 832, every heading, doc and signature 1.7 M — **24 MB of characters** |
+| `VacuumAsync(VacuumMode.Full)` | **787.9 → 73.2 MiB in 0.6 s**, reclaimed **714.6 MiB (90.7 %)**, and the rows unchanged: 14 368 · 7 336 · 10 879 · 767 |
+| the same call through `IndexHandleCache` | 0.7 s and the same numbers, with the process's own handle open — no `CloseAll` needed |
+| `VacuumMode.Quick`, `VacuumMode.Incremental` | **0.0 MiB**, 0.0 s each |
+| a one-file index, grown by hand | 6.1 MiB → 14.1 MiB after 2 000 rows of 4 KiB → `DELETE` → **still 14.1 MiB** → `Full` → **6.1 MiB in 0.02 s**, two live passages intact |
+| 2 000 single-row updates on it | **57.3 s** (28.6 ms each), size unchanged |
+
+*What the rows say.* The index is 10.8 times its data, and the store can hand the difference back in two thirds of a
+second without losing a row. A delete frees the row and not the page — the synthetic file proves it at a size a test can
+hold — and nothing in this product ever asked the store to compact what that leaves. That is the whole explanation for
+D25's number: 525.2 MiB was already inflated, 787.9 MiB was the plateau after more writing, and both figures are the file
+rather than the corpus. The plateau is stable because the store re-uses what it frees; it simply never shrinks the file.
+
+*Why the round could not trigger on a measurement.* `StorageStatistics` reports `used` 86 % / `free` 14 % for the bloated
+file and `used` 85 % / `free` 15 % for the compacted one, with fragmentation **0.0 in both states**. Those percentages
+describe the file the store is managing, not the distance between the file and its rows; the only way to learn what a
+compaction would leave is to run one. So the trigger is the operation and not a ratio: `index --rebuild` compacts what it
+wrote, `index --compact` compacts on demand, and the turn-start refresh never compacts because its budget is three
+seconds and a rewrite scales with live data.
+
+*The side finding, recorded and not acted on.* A single-row `UpdateByPrimaryKey` costs **28.6 ms** on this store and does
+not grow the file. That is the same cost round 19 measured at 11 ms per `UPDATE` statement for 7 305 of them, and it is
+three orders of magnitude above what a row update should cost — a fact for whoever next writes a column by hand, and
+outside this round's slice.
+
+*What it changes.* `SharpCoreDbIndexMaintainer.CompactAsync` (the store's `Full` vacuum under the writer lock, reporting
+before/after/reclaimed/elapsed and answering a lost lock or a refusal rather than throwing), the same core called at the
+end of a rebuild that finished the workspace, `index --compact` with a prose block and a `--json` document, and one note
+in the rebuild's report. No schema, no column, no persisted state, no new commit.
+
+*What proves it.* `CompactionTests` (new, four cases): dead space is given back and the passages, the file row and the
+hashes survive; a second compaction reclaims 0 and succeeds; a workspace nobody indexed creates no database and says
+`there is no index to compact`; a rebuild compacts what it left behind and says so in a note — and the note comes first,
+because a repository with skipped binaries produces more notes than the ten a report prints, which this round learned by
+running it. `IndexCommandTests` adds two — the block's before/after/content/state, and a JSON `afterBytes` equal to the
+file on disk — `IndexCommandParsingTests` adds two — `--compact` refuses `--status`/`--verify`, `--prune --compact` is
+allowed — and the refresh gate's fake maintainer answers the new member. Suite 1 508 → 1 516, build clean at zero
+warnings.
+
+*The round on its own corpus.* `index --rebuild` writes **165.4 MiB** and its note reads `compacted 91.9 MiB in 0.5 s
+(165.4 MiB -> 73.5 MiB)`; the file on disk is 73.5 MiB; the run costs 51.9 s, which is round 20's 55.6 s without the
+rewrite's 0.5 s and with a smaller file to write; `index --verify` finds 771 rows for 771 files on disk (766 before this
+round's own five files were added), 0 hash mismatches, 0 orphans. The same rebuild twice leaves 165.4 MiB both times,
+which is the arithmetic the round was missing: a rebuild spends about 1.25× the live data on pages it stops using, and
+nothing was ever giving them back.
+
+*What it does not do.* It does not compact on a writing run (a turn's budget is 3 s and this rewrite scales with live
+data), and it does not fix the writing-run floor: the `meta` batch still costs 2.1 s after the rewrite against 2.9 s
+before, and an open is 0.05 s either way. What it does fix is the file and everything that scans it — the first full
+`chunks` scan is 2.6 s on the bloated file and 0.007 s on the compacted one. SC-002's 5 000-file tree, SC-006's 61× and
+the commit line stay open on `002` T034, which is now one item shorter than it was.

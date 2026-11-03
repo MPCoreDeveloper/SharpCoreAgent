@@ -3,6 +3,7 @@ using System.Globalization;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Indexing.Extraction;
+using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreAgent.Indexing;
@@ -211,7 +212,15 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         try
         {
             ClearRows();
-            return await BuildAsync(started, RebuildBudget, clock, cancellationToken).ConfigureAwait(false);
+            var report = await BuildAsync(started, RebuildBudget, clock, cancellationToken).ConfigureAwait(false);
+
+            // A rebuild is the one command that empties every table before filling it, which is also what leaves the
+            // most pages behind: `index --rebuild` on this repository reclaims 714.6 MiB of a 787.9 MiB file in 0.6 s
+            // (spec 030). An incomplete rebuild is left alone — its budget is spent and its file may grow again on the
+            // next run — so only a run that finished the workspace pays for the rewrite.
+            return report.Incomplete
+                ? report
+                : await CompactAfterBuildAsync(report, started, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -477,6 +486,173 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         {
             ReleaseWriter();
         }
+    }
+
+    /// <summary>
+    /// Gives back the pages the index file is no longer using.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the rewrite.</param>
+    /// <returns>The file before and after, and whether the rewrite ran at all.</returns>
+    /// <remarks>
+    /// The rewrite is the store's own full vacuum, which is the only mode that compacts a single-file database: measured
+    /// on this repository's index, <c>Quick</c> and <c>Incremental</c> reclaim 0.0 MiB where <c>Full</c> reclaims
+    /// 714.6 MiB of 787.9 MiB in 0.6 s (spec 030). A failure to get the lock is reported rather than thrown, the way
+    /// every other write here reports one.
+    /// </remarks>
+    public async ValueTask<IndexCompaction> CompactAsync(CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+
+        if (!await AcquireWriterAsync(LockWaitBudget, cancellationToken).ConfigureAwait(false))
+        {
+            return new IndexCompaction
+            {
+                Status = _reader.GetStatus(),
+                Succeeded = false,
+                Note = BuildingNote,
+                ElapsedMilliseconds = Elapsed(started),
+            };
+        }
+
+        try
+        {
+            var compaction = await CompactCoreAsync(cancellationToken).ConfigureAwait(false);
+
+            // The wait for the lock is part of what the command cost the caller, so the number it reports covers the
+            // window it waited in rather than the rewrite alone.
+            return compaction with { ElapsedMilliseconds = Elapsed(started) };
+        }
+        finally
+        {
+            ReleaseWriter();
+        }
+    }
+
+    /// <summary>
+    /// Compacts the index and folds the outcome into the rebuild's report as one note.
+    /// </summary>
+    /// <param name="report">The rebuild's report, whose counters and phases are kept as they are.</param>
+    /// <param name="started">When the rebuild started, so the report's elapsed time covers the rewrite too.</param>
+    /// <param name="cancellationToken">Cancels the rewrite.</param>
+    /// <returns>The report with the compacted status, one more note and the longer window.</returns>
+    private async ValueTask<IndexBuildReport> CompactAfterBuildAsync(
+        IndexBuildReport report,
+        long started,
+        CancellationToken cancellationToken)
+    {
+        var compaction = await CompactCoreAsync(cancellationToken).ConfigureAwait(false);
+
+        return report with
+        {
+            // The status the build read describes the file it wrote; the file on disk is now a different size, and the
+            // `wrote … (73.5 MiB)` line of the report is read from here.
+            Status = compaction.Status,
+
+            // First, not last: the report prints ten notes and a rebuild of a repository with skipped binaries produces
+            // more than ten, so a note appended at the end is a note nobody reads. This one is about the run rather than
+            // about one file, which is why it leads.
+            Notes = [Describe(compaction), .. report.Notes],
+            ElapsedMilliseconds = Elapsed(started),
+        };
+    }
+
+    /// <summary>
+    /// Runs the rewrite. The caller holds the writer lock.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the rewrite.</param>
+    /// <returns>The compaction, whether or not the store accepted it.</returns>
+    /// <remarks>
+    /// The handle is taken from the cache like every other write, and the status is invalidated afterwards so the size a
+    /// caller prints is the one now on disk. A missing index is not an error and does not create one: asked to compact a
+    /// workspace nobody indexed, the honest answer is that there is nothing to compact.
+    /// <para>
+    /// The elapsed time is this method's own window, not the caller's: a rebuild that compacts reports the rewrite as
+    /// the tenth of a second it cost rather than as the minute the whole command took.
+    /// </para>
+    /// </remarks>
+    private async ValueTask<IndexCompaction> CompactCoreAsync(CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+
+        if (!_paths.DatabaseExists)
+        {
+            return new IndexCompaction
+            {
+                Status = _reader.GetStatus(),
+                Note = "there is no index to compact",
+                ElapsedMilliseconds = Elapsed(started),
+            };
+        }
+
+        long before;
+        long after;
+        bool succeeded;
+        string? note;
+
+        using (var lease = IndexHandleCache.Acquire(_paths, _encryptionPassword, createIfMissing: false))
+        {
+            before = FileLength();
+            var vacuum = await lease.Database.Database
+                .VacuumAsync(VacuumMode.Full, cancellationToken)
+                .ConfigureAwait(false);
+
+            succeeded = vacuum.Success;
+            note = vacuum.Success ? null : vacuum.ErrorMessage;
+
+            // The store's own numbers when it has them, and the file on disk when it does not: a refused rewrite reports
+            // zeroes, and a report of "0 -> 0 bytes" would read as a file that vanished.
+            before = vacuum.FileSizeBefore > 0 ? vacuum.FileSizeBefore : before;
+            after = vacuum.Success && vacuum.FileSizeAfter > 0 ? vacuum.FileSizeAfter : FileLength();
+        }
+
+        _reader.InvalidateStatus();
+
+        return new IndexCompaction
+        {
+            Status = _reader.GetStatus(),
+            BeforeBytes = before,
+            AfterBytes = after,
+            Succeeded = succeeded,
+            Note = note,
+            ElapsedMilliseconds = Elapsed(started),
+        };
+    }
+
+    /// <summary>
+    /// Renders one compaction as the single line a report or a console prints.
+    /// </summary>
+    /// <param name="compaction">The compaction.</param>
+    /// <returns>One sentence, for example <c>compacted 714.6 MiB in 0.6 s (787.9 MiB -&gt; 73.2 MiB)</c>.</returns>
+    private static string Describe(IndexCompaction compaction)
+    {
+        if (!compaction.Succeeded)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"compaction failed: {compaction.Note}");
+        }
+
+        return compaction.ReclaimedBytes == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"compacted nothing: the file is already {Mib(compaction.AfterBytes)}")
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"compacted {Mib(compaction.ReclaimedBytes)} in {compaction.ElapsedMilliseconds / 1000.0:F1} s ({Mib(compaction.BeforeBytes)} -> {Mib(compaction.AfterBytes)})");
+    }
+
+    /// <summary>
+    /// Renders a byte count the way a note prints it.
+    /// </summary>
+    /// <param name="bytes">The size.</param>
+    /// <returns>For example <c>714.6 MiB</c>.</returns>
+    private static string Mib(long bytes) =>
+        string.Create(CultureInfo.InvariantCulture, $"{bytes / 1048576.0:F1} MiB");
+
+    /// <summary>
+    /// Reads the size of the index file, which is what a compaction is measured against.
+    /// </summary>
+    /// <returns>The length in bytes, or zero when the file is gone.</returns>
+    private long FileLength()
+    {
+        var file = new FileInfo(_paths.DatabasePath);
+        return file.Exists ? file.Length : 0;
     }
 
     /// <summary>

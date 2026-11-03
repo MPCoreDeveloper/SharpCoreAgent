@@ -95,7 +95,8 @@ internal static class IndexCommand
         var workspace = opened!;
         await using var index = SharpCoreAgentIndex.Open(workspace);
 
-        var wanted = options.IndexStatus || options.IndexRebuild || options.IndexVerify || options.IndexPrune;
+        var wanted = options.IndexStatus || options.IndexRebuild || options.IndexVerify || options.IndexPrune
+            || options.IndexCompact;
         var exitCode = ExitCodes.Success;
 
         try
@@ -141,6 +142,13 @@ internal static class IndexCommand
                 exitCode = Math.Max(
                     exitCode,
                     await ReportAsync(options, output, workspace, index, "rebuild", "indexing", report, timing, cancellationToken).ConfigureAwait(false));
+            }
+
+            if (options.IndexCompact)
+            {
+                exitCode = Math.Max(
+                    exitCode,
+                    await CompactAsync(options, output, workspace, index, cancellationToken).ConfigureAwait(false));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -398,6 +406,107 @@ internal static class IndexCommand
         await output.WriteLineAsync(builder, cancellationToken).ConfigureAwait(false);
 
         return exitCode;
+    }
+
+    /// <summary>
+    /// Gives back the pages the index file is no longer using and prints what that returned.
+    /// </summary>
+    /// <param name="options">The parsed command line.</param>
+    /// <param name="output">Where the report goes.</param>
+    /// <param name="workspace">The workspace whose index was rewritten.</param>
+    /// <param name="index">The open index.</param>
+    /// <param name="cancellationToken">Cancels the rewrite.</param>
+    /// <returns><see cref="ExitCodes.Success"/>, or <see cref="ExitCodes.Failed"/> when the rewrite did not run.</returns>
+    /// <remarks>
+    /// Non-zero when the compaction did not happen — another process held the writer lock, or the store refused the
+    /// rewrite — for the same reason <c>--verify</c> exits non-zero on drift: a script that compacts before it measures
+    /// wants that answer in its control flow rather than in a line of prose. A file with nothing to reclaim succeeded;
+    /// it is already the size its rows need.
+    /// </remarks>
+    private static async Task<int> CompactAsync(
+        CliOptions options,
+        TextWriter output,
+        Workspace workspace,
+        SharpCoreAgentIndex index,
+        CancellationToken cancellationToken)
+    {
+        var compaction = await index.CompactAsync(cancellationToken).ConfigureAwait(false);
+        var exitCode = compaction.Succeeded ? ExitCodes.Success : ExitCodes.Failed;
+
+        if (options.Json)
+        {
+            WriteJson(output, new Dictionary<string, object?>
+            {
+                ["command"] = "index",
+                ["action"] = "compact",
+                ["workspace"] = IndexStatusDocument.Slash(workspace.Root),
+                ["succeeded"] = compaction.Succeeded,
+                ["state"] = IndexStatusDocument.State(compaction.Status.Freshness),
+                ["beforeBytes"] = compaction.BeforeBytes,
+                ["afterBytes"] = compaction.AfterBytes,
+                ["reclaimedBytes"] = compaction.ReclaimedBytes,
+                ["elapsedMs"] = compaction.ElapsedMilliseconds,
+                ["files"] = compaction.Status.Files,
+                ["passages"] = compaction.Status.Chunks,
+                ["symbols"] = compaction.Status.Symbols,
+                ["edges"] = compaction.Status.Edges,
+                ["note"] = compaction.Note,
+            });
+
+            return exitCode;
+        }
+
+        var status = compaction.Status;
+        var builder = new StringBuilder();
+
+        builder.Append("compacting ").Append(IndexStatusDocument.Slash(workspace.Root))
+            .Append(string.Create(
+                CultureInfo.InvariantCulture,
+                $" ({IndexStatusDocument.TierName(status.Tier)}, {status.Embedder})"))
+            .Append('\n');
+
+        builder.Append(Line("file", compaction.ReclaimedBytes == 0
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"{IndexStatusDocument.Size(compaction.AfterBytes)} · nothing to reclaim")
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{IndexStatusDocument.Size(compaction.BeforeBytes)} → {IndexStatusDocument.Size(compaction.AfterBytes)} · reclaimed {IndexStatusDocument.Size(compaction.ReclaimedBytes)} ({Reclaimed(compaction)})"))).Append('\n');
+
+        // The counters after the rewrite, which is the reassurance the number needs: a compaction that gave back
+        // 714.6 MiB and lost the passages would be a worse index, not a smaller one.
+        builder.Append(Line("content", string.Create(
+            CultureInfo.InvariantCulture,
+            $"{IndexStatusDocument.Number(status.Chunks)} passages · {IndexStatusDocument.Number(status.Symbols)} symbols · {IndexStatusDocument.Number(status.Edges)} edges"))).Append('\n');
+
+        builder.Append(Line("state", compaction.Succeeded
+            ? IndexStatusDocument.State(status.Freshness)
+            : "not compacted"));
+
+        foreach (var note in compaction.Note is { Length: > 0 } line ? new[] { line } : [])
+        {
+            builder.Append('\n').Append("  ").Append(note);
+        }
+
+        await output.WriteLineAsync(builder, cancellationToken).ConfigureAwait(false);
+
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Renders how much of the file a compaction gave back.
+    /// </summary>
+    /// <param name="compaction">The compaction.</param>
+    /// <returns>For example <c>91 % of the file</c>.</returns>
+    private static string Reclaimed(IndexCompaction compaction)
+    {
+        if (compaction.BeforeBytes <= 0)
+        {
+            return "an unmeasured share of the file";
+        }
+
+        var percent = (int)Math.Round(compaction.ReclaimedBytes * 100.0 / compaction.BeforeBytes, MidpointRounding.AwayFromZero);
+        return string.Create(CultureInfo.InvariantCulture, $"{percent} % of the file");
     }
 
     /// <summary>

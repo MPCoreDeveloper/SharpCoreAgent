@@ -120,6 +120,10 @@ public sealed class SharpCoreAgentIndex : ICodeIndex, ICodeIndexMaintainer, IDis
     public ValueTask<IndexBuildReport> PruneAsync(CancellationToken cancellationToken) =>
         _writer.PruneAsync(cancellationToken);
 
+    /// <inheritdoc />
+    public ValueTask<IndexCompaction> CompactAsync(CancellationToken cancellationToken) =>
+        _writer.CompactAsync(cancellationToken);
+
     /// <summary>
     /// Closes the reader's handle. The writer's lock is released by its own asynchronous disposal.
     /// </summary>

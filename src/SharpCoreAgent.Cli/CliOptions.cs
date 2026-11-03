@@ -370,6 +370,9 @@ internal sealed record CliOptions
     /// <summary>Gets a value indicating whether <c>index</c> should drop rows for vanished files.</summary>
     public bool IndexPrune { get; init; }
 
+    /// <summary>Gets a value indicating whether <c>index</c> should give back the file's unused pages.</summary>
+    public bool IndexCompact { get; init; }
+
     /// <summary>
     /// Gets a value indicating whether <c>mcp serve</c> answers from the index as it is.
     /// </summary>
@@ -894,9 +897,19 @@ internal sealed record CliOptions
                     throw new CliUsageException("the index command always uses the index.");
                 }
 
-                if (options.IndexRebuild && (options.IndexStatus || options.IndexVerify || options.IndexPrune))
+                if (options.IndexRebuild
+                    && (options.IndexStatus || options.IndexVerify || options.IndexPrune || options.IndexCompact))
                 {
-                    throw new CliUsageException("--rebuild cannot be combined with --status, --verify or --prune.");
+                    throw new CliUsageException(
+                        "--rebuild cannot be combined with --status, --verify, --prune or --compact.");
+                }
+
+                // `--prune --compact` is a sequence worth typing: drop the rows that no longer belong, then give the
+                // pages back. A status or a verification beside a rewrite is not: they answer a question about the file
+                // that the rewrite is about to change.
+                if (options.IndexCompact && (options.IndexStatus || options.IndexVerify))
+                {
+                    throw new CliUsageException("--compact cannot be combined with --status or --verify.");
                 }
 
                 return options with { Command = CliCommand.Index };
@@ -2024,6 +2037,9 @@ internal sealed record CliOptions
 
             case "--prune":
                 return options with { IndexPrune = true };
+
+            case "--compact":
+                return options with { IndexCompact = true };
 
             // The ui command's three flags. `--serve` is a switch rather than a verb because the command has one action
             // today; `--port` is validated here so a value out of range is a usage error before any socket is touched.

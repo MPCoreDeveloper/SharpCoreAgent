@@ -124,9 +124,10 @@ internal static class HelpText
 
         Index options
           --status                 index       off         print coverage and freshness; never writes
-          --rebuild                index       off         delete every row and build from scratch
+          --rebuild                index       off         empty every table, build from scratch, then compact
           --verify                 index       off         report drift against the workspace; never writes
           --prune                  index       off         drop rows for files that no longer exist
+          --compact                index       off         give back the pages the index file no longer uses
           --no-index               run, chat   off         no index read, write or refresh in this process
           --no-refresh             mcp serve   off         answers describe the index as it is; no walk before a call
           --index-budget <ms>      run, chat   3000        refresh ceiling; 0 keeps reads and stops refresh

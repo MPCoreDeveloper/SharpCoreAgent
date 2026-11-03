@@ -637,6 +637,31 @@ SharpCoreAgent.Domain.Sessions.ICredentialStore
 SharpCoreAgent.Domain.Sessions.ICredentialStore.Find(string! name) -> string?
 SharpCoreAgent.Domain.Sessions.ICredentialStore.GetRequired(string! name) -> string!
 SharpCoreAgent.Domain.Sessions.ISessionStore
+
+SharpCoreAgent.Domain.Index.IndexCompaction
+SharpCoreAgent.Domain.Index.IndexCompaction.<Clone>$() -> SharpCoreAgent.Domain.Index.IndexCompaction!
+SharpCoreAgent.Domain.Index.IndexCompaction.AfterBytes.get -> long
+SharpCoreAgent.Domain.Index.IndexCompaction.AfterBytes.init -> void
+SharpCoreAgent.Domain.Index.IndexCompaction.BeforeBytes.get -> long
+SharpCoreAgent.Domain.Index.IndexCompaction.BeforeBytes.init -> void
+SharpCoreAgent.Domain.Index.IndexCompaction.ElapsedMilliseconds.get -> long
+SharpCoreAgent.Domain.Index.IndexCompaction.ElapsedMilliseconds.init -> void
+SharpCoreAgent.Domain.Index.IndexCompaction.Equals(SharpCoreAgent.Domain.Index.IndexCompaction? other) -> bool
+SharpCoreAgent.Domain.Index.IndexCompaction.IndexCompaction() -> void
+SharpCoreAgent.Domain.Index.IndexCompaction.Note.get -> string?
+SharpCoreAgent.Domain.Index.IndexCompaction.Note.init -> void
+SharpCoreAgent.Domain.Index.IndexCompaction.ReclaimedBytes.get -> long
+SharpCoreAgent.Domain.Index.IndexCompaction.Status.get -> SharpCoreAgent.Domain.Index.IndexStatus!
+SharpCoreAgent.Domain.Index.IndexCompaction.Status.init -> void
+SharpCoreAgent.Domain.Index.IndexCompaction.Succeeded.get -> bool
+SharpCoreAgent.Domain.Index.IndexCompaction.Succeeded.init -> void
+SharpCoreAgent.Domain.Index.ICodeIndexMaintainer.CompactAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.IndexCompaction!>
+override SharpCoreAgent.Domain.Index.IndexCompaction.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.IndexCompaction.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.IndexCompaction.ToString() -> string!
+static SharpCoreAgent.Domain.Index.IndexCompaction.operator !=(SharpCoreAgent.Domain.Index.IndexCompaction? left, SharpCoreAgent.Domain.Index.IndexCompaction? right) -> bool
+static SharpCoreAgent.Domain.Index.IndexCompaction.operator ==(SharpCoreAgent.Domain.Index.IndexCompaction? left, SharpCoreAgent.Domain.Index.IndexCompaction? right) -> bool
+
 SharpCoreAgent.Domain.Sessions.ISessionStore.LoadAsync(string! path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<SharpCoreAgent.Domain.Sessions.SessionSnapshot!>!
 SharpCoreAgent.Domain.Sessions.ISessionStore.SaveAsync(SharpCoreAgent.Domain.Sessions.SessionSnapshot! snapshot, string! path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 SharpCoreAgent.Domain.Sessions.ModelUsage

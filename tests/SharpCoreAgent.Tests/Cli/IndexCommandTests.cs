@@ -185,6 +185,52 @@ public sealed class IndexCommandTests
     }
 
     [Fact]
+    public async Task CompactReportsTheFileBeforeAndAfter()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+        await RunAsync(sandbox, "index");
+
+        var (exitCode, output, error) = await RunAsync(sandbox, "index", "--compact");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Empty(error);
+        Assert.Contains("compacting ", output, StringComparison.Ordinal);
+        Assert.Contains("MiB", output, StringComparison.Ordinal);
+        Assert.Contains("passages", output, StringComparison.Ordinal);
+        Assert.Contains("state       fresh", output, StringComparison.Ordinal);
+
+        // The same answer a script reads: the size on disk after the rewrite, and whether it happened at all.
+        var (jsonExit, json, _) = await RunAsync(sandbox, "index", "--compact", "--json");
+
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(ExitCodes.Success, jsonExit);
+        Assert.Equal("compact", document.RootElement.GetProperty("action").GetString());
+        Assert.True(document.RootElement.GetProperty("succeeded").GetBoolean());
+        Assert.Equal(2, document.RootElement.GetProperty("files").GetInt32());
+        Assert.Equal(
+            new FileInfo(Path.Combine(sandbox.Root, ".sharpcoreagent", "index", "sharpcoreagent.scdb")).Length,
+            document.RootElement.GetProperty("afterBytes").GetInt64());
+    }
+
+    [Fact]
+    public async Task CompactOnAWorkspaceWithoutAnIndexWritesNothing()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write("src/Circle.cs", "internal sealed class Circle { }");
+
+        var (exitCode, output, _) = await RunAsync(sandbox, "index", "--compact");
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("nothing to reclaim", output, StringComparison.Ordinal);
+        Assert.Contains("there is no index to compact", output, StringComparison.Ordinal);
+
+        // The writer lock is a file in the index directory, so the directory may exist; a database inside it may not:
+        // a compaction of nothing must not leave an empty index behind for a later build to trust.
+        Assert.False(File.Exists(Path.Combine(sandbox.Root, ".sharpcoreagent", "index", "sharpcoreagent.scdb")));
+    }
+
+    [Fact]
     public async Task AnIndexDirectoryThatCannotBeCreatedExitsSix()
     {
         using var sandbox = ToolTestWorkspace.Create();

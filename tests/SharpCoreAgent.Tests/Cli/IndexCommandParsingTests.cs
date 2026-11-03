@@ -45,7 +45,28 @@ public sealed class IndexCommandParsingTests
         var error = Assert.Throws<CliUsageException>(() =>
             CliOptions.Parse(["index", "--rebuild", "--verify"], NoEnvironment));
 
-        Assert.Equal("--rebuild cannot be combined with --status, --verify or --prune.", error.Message);
+        Assert.Equal(
+            "--rebuild cannot be combined with --status, --verify, --prune or --compact.",
+            error.Message);
+    }
+
+    [Fact]
+    public void CompactRefusesToShareTheCommandWithAReadOnlyAction()
+    {
+        var error = Assert.Throws<CliUsageException>(() =>
+            CliOptions.Parse(["index", "--compact", "--verify"], NoEnvironment));
+
+        Assert.Equal("--compact cannot be combined with --status or --verify.", error.Message);
+    }
+
+    [Fact]
+    public void PruneAndCompactCombineBecauseTheSecondGivesBackWhatTheFirstFreed()
+    {
+        var options = CliOptions.Parse(["index", "--prune", "--compact"], NoEnvironment);
+
+        Assert.Equal(CliCommand.Index, options.Command);
+        Assert.True(options.IndexPrune);
+        Assert.True(options.IndexCompact);
     }
 
     [Fact]

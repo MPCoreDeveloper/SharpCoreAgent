@@ -268,9 +268,10 @@ keep working on the file that needs repairing.
 | `--no-refresh` | mcp serve | off — answer from the index as it is, with no walk before a call |
 | `--index-budget <ms>` | run, chat | `3000` — the refresh ceiling; `0` keeps reads and stops refreshing |
 | `--status` | index | off — coverage and freshness; never writes |
-| `--rebuild` | index | off — delete every row and build from scratch |
+| `--rebuild` | index | off — empty every table, build from scratch, then compact what it left |
 | `--verify` | index | off — drift against the workspace; never writes, exits `1` on drift |
 | `--prune` | index | off — drop rows for files that no longer exist |
+| `--compact` | index | off — give back the pages the index file no longer uses; a rebuild does it too |
 | `--embedder <mode>` | index | `hashed-local` — the only mode in this build |
 | `--tier <name>` | index | `lean` — the only tier in this build |
 
@@ -675,6 +676,7 @@ sharpcoreagent index                  # incremental: only changed files are re-r
 sharpcoreagent index --status         # files, passages, symbols, edges, freshness — never writes
 sharpcoreagent index --verify         # drift against the workspace; exits 1 when it finds any
 sharpcoreagent index --prune          # drop rows for files that no longer exist
+sharpcoreagent index --compact        # give back the pages the rows no longer use (a rebuild does this too)
 sharpcoreagent index --rebuild        # the repair for a corrupt or newer index
 ```
 
