@@ -189,6 +189,51 @@ public sealed class CommunityAssignerTests
         Assert.True(called <= 1, "degree is normalized, so no declaration may exceed one");
     }
 
+    [Fact]
+    public async Task ABuildLeavesTheColumnsThePassDoesNotOwnUntouched()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteClusters(sandbox);
+
+        await Build(sandbox);
+
+        var paths = IndexPaths.For(sandbox.Workspace);
+        using var lease = IndexHandleCache.Acquire(paths, encryptionPassword: null, createIfMissing: false);
+
+        // The pass writes two of thirteen columns by primary key. A store that replaced the row instead of updating it
+        // would blank everything the extraction wrote, and every reader would still find the columns it asked for.
+        var rows = IndexSql.Query(
+            lease.Database.Database,
+            "SELECT key, name, qualified_name, kind, start_line, end_line, signature, community FROM symbols ORDER BY key");
+
+        Assert.NotEmpty(rows);
+        foreach (var row in rows)
+        {
+            var key = IndexSql.AsText(row.GetValueOrDefault("key"));
+            Assert.False(string.IsNullOrWhiteSpace(key), "every declaration keeps its key");
+            Assert.False(string.IsNullOrWhiteSpace(IndexSql.AsText(row.GetValueOrDefault("name"))), $"'{key}' keeps its name");
+
+            var kind = IndexSql.AsText(row.GetValueOrDefault("kind"));
+            Assert.True(kind is "class" or "method", $"'{key}' keeps its kind, but it reads '{kind}'");
+
+            // The key is the qualified name plus the kind, so the pair is a check on both columns at once: a row replace
+            // would leave either of them empty and this equality would fail.
+            Assert.Equal(IndexSql.AsText(row.GetValueOrDefault("qualified_name")) + "#" + kind, key);
+
+            var start = IndexSql.AsLong(row.GetValueOrDefault("start_line"));
+            Assert.True(start > 0, $"'{key}' keeps its line range");
+            Assert.True(IndexSql.AsLong(row.GetValueOrDefault("end_line")) >= start, $"'{key}' keeps its end line");
+            Assert.True(row.ContainsKey("community"), "the pass writes a label column, even when the label is empty");
+        }
+
+        // And the one row whose label must be empty is still written: an omitted column would leave the previous build's
+        // label behind, and a row that used to be clustered would keep a community that no longer exists.
+        var lonely = rows.Where(row =>
+            IndexSql.AsText(row.GetValueOrDefault("key")).Contains(".Lonely.Name", StringComparison.Ordinal)).ToList();
+        Assert.Single(lonely);
+        Assert.Equal(string.Empty, IndexSql.AsText(lonely[0].GetValueOrDefault("community")));
+    }
+
     private static async Task Build(ToolTestWorkspace sandbox)
     {
         await using var maintainer = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);

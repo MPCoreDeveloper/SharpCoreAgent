@@ -74,7 +74,6 @@ internal static class CommunityAssigner
 
     private const string SelectSymbols = "SELECT id, key FROM symbols";
     private const string SelectEdges = "SELECT source, target FROM edges";
-    private const string UpdateSymbol = "UPDATE symbols SET community = @community, centrality = @centrality WHERE id = @id";
 
     /// <summary>
     /// Clusters the stored graph and writes <c>symbols.community</c> and <c>symbols.centrality</c>.
@@ -355,10 +354,18 @@ internal static class CommunityAssigner
     /// <remarks>
     /// One batch, so an interrupted pass leaves the previous labels rather than half of the new ones.
     /// <para>
+    /// Each row is written by its primary key rather than by a statement. A statement costs the store a formatter pass over
+    /// every value, a parse of the text that produces, and a bind of the values it parsed back out — 11 ms per declaration
+    /// on a real index, 4.5 ms on the controlled table the round measured. The row path pays none of the three and leaves
+    /// the index maintenance that both share: 3 001 declarations went from 12.9 s to 143 ms with nothing else changed
+    /// (spec 028, D1). The bag is built per row because the store may keep its reference until the batch flushes, and a
+    /// shared one would then give every row the last row's values (D2).
+    /// </para>
+    /// <para>
     /// Both ends are charged to <see cref="IndexPhases.Commit"/> and the commit is counted, exactly as
-    /// <see cref="IndexFileWriter"/> does for the rows it writes. Without that, a batch of one statement per
-    /// declaration would report its commit as writing, and a reader comparing the clusterer's steps against the store's
-    /// price would be comparing two different things (spec 027, D4).
+    /// <see cref="IndexFileWriter"/> does for the rows it writes. Without that, a batch of one write per declaration would
+    /// report its commit as writing, and a reader comparing the clusterer's steps against the store's price would be
+    /// comparing two different things (spec 027, D4).
     /// </para>
     /// </remarks>
     private static int Write(
@@ -373,13 +380,15 @@ internal static class CommunityAssigner
         {
             for (var index = 0; index < symbols.Count; index++)
             {
-                IndexSql.Execute(
+                IndexSql.Update(
                     database,
-                    UpdateSymbol,
-                    IndexSql.Parameters(
-                        ("@id", symbols[index].Id),
-                        ("@community", labels[index]),
-                        ("@centrality", centrality[index])));
+                    IndexTable.Symbols,
+                    symbols[index].Id,
+                    new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["community"] = labels[index],
+                        ["centrality"] = centrality[index],
+                    });
             }
 
             phases.Measure(IndexPhases.Commit, database.EndBatchUpdate);

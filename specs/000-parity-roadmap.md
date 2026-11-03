@@ -63,6 +63,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 16 | [`025-served-index-snapshot`](025-served-index-snapshot/spec.md) | the served call stops reloading what it already knew — one loaded build and one computed status per index, shared across the handles the lease opens and releases, and a harness that says which call its p95 describes (landed 2026-11-02 as `37c5efa`: `IndexReadCache`, `IndexReadState`, `IndexStatusMemo`, `FileStamp`, the bench's warm-up and `cold`, 11 tests) | 0, `002` and `013` (all landed) |
 | 17 | [`026-checkpointed-index-writes`](026-checkpointed-index-writes/spec.md) | one commit per checkpoint of 32 files — a rebuild of this index falls from 17 m 51 s to 2 m 53 s and from 700 commits to 26, and the clusterer becomes 74 % of what is left (landed 2026-11-02 as `acf125e`: the checkpoint in `IndexFileWriter`, four boundaries in `IndexWriter`, `PruneAsync`'s one commit, `IndexBuildReport.Commits`, the `--verbose` row, 11 tests) | 16, and `002` (landed) |
 | 18 | [`027-community-pass-steps`](027-community-pass-steps/spec.md) | the clusterer's two minutes split into five steps — it is the 7 305-statement `assign` loop (1 m 21 s) and Louvain (53.4 s), not the 0.3 s of graph reads, and a commit nobody counted is counted (landed 2026-11-02 as `97294a3`: five nested names in `IndexPhases`, a `Func<Task<T>>` overload on the clock, `CommunityAssigner`'s five steps and its commit, 4 tests) | 17, and `002` (landed) |
+| 19 | [`028-row-addressed-symbol-writes`](028-row-addressed-symbol-writes/spec.md) | the clusterer writes both columns by primary key instead of issuing 7 305 `UPDATE` statements — `assign` falls from 1 m 21 s to 1.8 s, `communities` from 2 m 15 s to 1 m 10 s, and `louvain` becomes the run (landed 2026-11-03: `CommunityAssigner.Write` on `IndexSql.Update`, the statement deleted, 4 tests) | 18, and `002` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -77,7 +78,8 @@ budget — round 11 — `021` is image deduplication — round 12 — `022` is t
 `024` is the agent definition, the profile such an editor lists and the task such a workspace runs — round 15 —
 `025` is the served call's own memory, the build and the status a `tools/call` no longer rebuilds — round 16 — and
 `026` is the commit interval, the write phase a build no longer pays once per file — round 17 — `027` is the clusterer's
-own steps, the five decisions that were hiding inside one phase — round 18 —
+own steps, the five decisions that were hiding inside one phase — round 18 — and `028` is the write-back itself, the
+7 305 statements a pass no longer parses — round 19 —
 while `014` was never assigned and `018` stays released, unassigned for a round that wants it.)
 
 ## Decision record
@@ -788,13 +790,59 @@ store's, and answering it means a coarser graph or a bounded candidate set — a
 a spec of its own. Then the no-op `meta`/open overhead (5.5 s a turn), then the checkpoint's own size. `002` T034 stays open
 for SC-002's 5,000-file tree and SC-006's 61×.
 
+
+## Round 19 — `028-row-addressed-symbol-writes` (landed 2026-11-03)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–18 took — and its records
+followed, as round 18's did. Round 19 answers the question round 18 asked and then acted on the answer: `assign` was 7 305
+`UPDATE` statements at 11 ms each, and the store was not slow, it was parsing. The argument is
+[`028-row-addressed-symbol-writes/spec.md`](028-row-addressed-symbol-writes/spec.md); the five decisions, the probe and both
+runs are in its `plan.md`.
+
+**Ships**: `CommunityAssigner.Write` hands each declaration to `IndexSql.Update` — the parser-free, primary-key write
+`IndexFileWriter.WriteMeta` has used for `meta` since that table existed — inside the same one batch, with both ends still
+charged to `commit` and the single commit still counted. `UpdateSymbol` loses its last user and is deleted, so no `UPDATE`
+statement is left in `src/`. One dictionary per row, built in the loop, because the store may hold the reference until the
+batch flushes.
+
+**Does not ship**: nothing the pass computes, and nothing the store stores. Same rows, same label numbering, same
+centrality, same 27 commits, same schema, same indexes, same `--json`. No flag, no public type, no dependency.
+
+**Evidence**: four new cases. `IndexSqlUpdateTests` pins the three facts the change rests on — a row-addressed update inside
+a batch is stored by `EndBatchUpdate`, is discarded by `CancelBatchUpdate` (the promise an interrupted pass makes), and
+changes only the columns it names. `CommunityAssignerTests` gains the case at the pass's own level: through a rebuild every
+declaration keeps its key, name, kind, line range and `qualified_name`, and the isolated declaration still gets an empty
+label rather than an omitted column. Build 0 warnings; suite 1,502 passed, 0 failed, 0 skipped — 4 this round's, against
+1,498. `index` reports `state fresh`; `index --verify` finds 761 rows for 761 files, 0 hash mismatches, 0 orphans.
+
+The probe came before the code, and it is the round's whole justification: 3 001 declaration rows in one index, one batch
+each way, the same values — **12 875–14 483 ms** through `ExecuteSQL` with bound parameters against **86–143 ms** through
+the row API. The statement path formats every value into statement text, parses the text, and binds what it parsed, per
+statement; the row path pays none of the three and keeps the index maintenance both share.
+
+One `index --rebuild --verbose` on this repository's index — 761 files, 14 287 passages, 7 311 symbols, 10 840 edges, 623
+communities, 525.2 MiB; **1 m 56 s** and 27 commits — reads:
+
+> `communities` 1 m 10 s (61 %): `nodes` **0.0 s**, `adjacency` **0.0 s**, `louvain` **1 m 8 s**, `degree` **0.0 s**,
+> `assign` **1.8 s**.
+
+So `assign` fell 45× and `louvain` is now the phase and the run: 58 % of a rebuild, and the reason a run over two changed
+files still costs what a full one costs. That is the store's, and making it smaller means a coarser graph or a bounded
+candidate set — a decision about label stability, and therefore a spec of its own. The residual 1.8 s is 0.25 ms per row on
+a thirteen-column table with four indexes, which is index maintenance and not a lever worth taking (`idx_symbols_community`
+would have to be dropped, and every traversal query would then read differently).
+
+**Left open, with the arithmetic attached**: `louvain` (1 m 8 s, and the fixed charge per writing run), then the no-op
+`meta`/open overhead (5.5 s a turn, measured again at 6.0 s by this round's `index` run), then the checkpoint's own size.
+`002` T034 stays open for SC-002's 5,000-file tree and SC-006's 61×.
+
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
 empty checkbox.
 
 | Round | Open | Why it is still open |
 |---|---|---|
-| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured. **Round 18** (`97294a3`) split that fixed charge instead of moving it: `communities` is `assign` **1 m 21 s** — 7 305 `UPDATE` statements, 11 ms each — plus `louvain` **53.4 s**, with the whole-graph reads at 0.3 s, so the per-writing-run charge is a write-back and a partition and neither has been moved yet |
+| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured. **Round 18** (`97294a3`) split that fixed charge instead of moving it: `communities` is `assign` **1 m 21 s** — 7 305 `UPDATE` statements, 11 ms each — plus `louvain` **53.4 s**, with the whole-graph reads at 0.3 s, so the per-writing-run charge is a write-back and a partition and neither has been moved yet. **Round 19** (`028-row-addressed-symbol-writes`) moved the write-back: the pass writes both columns by primary key instead of parsing 7 305 `UPDATE` statements, and a rebuild is now **1 m 56 s and 27 commits** with `communities` at **1 m 10 s** — `assign` **1.8 s** (was 1 m 21 s) and `louvain` **1 m 8 s**, which is now 58 % of the run and the entire fixed charge per writing run. SC-002's "one changed file inside 3 s" therefore still misses, and the leverage left is Louvain's partition |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |

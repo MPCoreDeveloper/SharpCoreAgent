@@ -819,3 +819,78 @@ positive case — two clusters, all five steps nonzero and nested. `CheckpointTe
 commit, and `IndexCommandTests` pins thirteen phases in `--json` and `of which nodes` in the terminal. Suite 1 494 → 1 498,
 build clean at zero warnings.
 
+## D24 — The write-back without a parser (2026-11-03): 1 m 21 s becomes 1.8 s, and the algorithm is now the run
+
+D23 ended by naming two levers and taking neither: `assign` (60 % of the phase, and ours) and `louvain` (40 %, and the
+store's). This slice takes the first — spec `028-row-addressed-symbol-writes` — and it was not a tuning exercise. `assign`
+was 7 305 `UPDATE` statements; the pass now tells the store which row and which two columns, and lets it do what a table
+already knows how to do.
+
+**The measurement came before the change.** A temporary probe on a controlled table — 3 001 declaration rows in one index,
+one batch each way, same values, same seven labels, run twice so a cold page cache could not flatter whichever went first:
+
+| 3 001 rows, one batch | cold | warm |
+|---|---|---|
+| `ExecuteSQL` with bound parameters | 14 483 ms | 12 875 ms |
+| `IndexSql.Update` (`UpdateByPrimaryKey`) | 86 ms | 143 ms |
+
+The statement path formats every value back into statement text, parses the text, and binds what it parsed — per statement.
+The row path skips all three and keeps the one cost both share, the index maintenance. Two orders of magnitude between them,
+on the same store, in the same batch: the guess D23 wrote down as "the statement's shape, the `symbols` indexes, or the size
+of the batch" was the first of the three, and the batch was never a suspect worth ranking (4.5 ms per statement in a batch
+of 3 001, 11 ms on the real index — the per-statement price does not move with the batch).
+
+**What shipped.** `CommunityAssigner.Write` keeps its batch, its two `commit` measurements and its counted commit, and
+inside the loop it calls `IndexSql.Update` — the write `IndexFileWriter.WriteMeta` has used for `meta` since that table
+existed and that no path had ever measured. The bag is built per row rather than reused, because the store may keep the
+reference until the batch flushes and a shared bag would then give every row the last row's values. `UpdateSymbol` lost its
+last user and was deleted: there is no `UPDATE` statement left in `src/`.
+
+**One rebuild of this repository** (761 files, 14 287 passages, 7 311 symbols, 10 840 edges, 623 communities, 525.2 MiB;
+1 m 56 s wall, 2 m 0 s cpu, 27 commits). The corpus grew by this round's own spec files between the two runs, which is why
+the counts move by less than a percent in the table and the community count moves by a few dozen:
+
+| step | round 18 | round 19 | what it is |
+|---|---|---|---|
+| `nodes` | 0.1 s | 0.0 s | the declarations, read and ordered |
+| `adjacency` | 0.2 s | 0.0 s | the relations, read and renumbered |
+| `louvain` | 53.4 s | **1 m 8 s** | the partition, and its numbering |
+| `degree` | 0.0 s | 0.0 s | the metric |
+| `assign` | **1 m 21 s** | **1.8 s** | both columns, written back |
+| `communities` | 2 m 15 s | 1 m 10 s | 61 % of the run |
+| the run | 3 m 2 s | 1 m 56 s | 27 commits, both times |
+
+**What that says.**
+
+*The parser was the cost, and it was 45×.* `assign` fell from 81 s to 1.8 s. What remains is 0.25 ms per row on a table
+whose rows carry thirteen columns and four indexes, against 40 µs per row on the probe's warm table — that difference is
+the index maintenance the statement path was paying too, which is why the probe's own "86 ms" is the floor of a cost this
+table cannot reach. The floor was never zero and does not need to be.
+
+*`louvain` is now the phase, and the run.* 1 m 8 s of 1 m 10 s, 58 % of the rebuild. D23 called it "a smaller lever than
+`assign`" on the grounds that it is third-party code; it is now the larger one, and it is the one that makes a two-changed-
+file run cost what a full one costs. Making it smaller means a coarser graph or a bounded candidate set, which changes what
+the labels mean — a spec of its own, and the next round's subject rather than this one's.
+
+*The commit did not move, and now it is the second-largest line.* 27 commits both times, `commit` 40.6 s of the run, of
+which the clusterer's is one. D22's finding stands untouched: the commit is the write, and this round made the writing
+between the commits cheap enough that the commits are visible as themselves.
+
+*Nothing about the index changed except its `community` column's cost.* Same schema, same indexes, same rows, same labels
+for the same corpus, same 27 commits, same report shape, no new type or flag, and `--json` unchanged. `index` still reports
+`state fresh`, and `index --verify` still finds 761 rows in the index for 761 files on disk with 0 hash mismatches and 0
+orphans.
+
+**What proves it.** `IndexSqlUpdateTests` (new, three cases) pins the three facts the change rests on: a row-addressed
+update inside a batch is stored by `EndBatchUpdate`, is discarded by `CancelBatchUpdate` — the promise the pass's single
+batch makes to an interrupted build — and changes only the columns it names. `CommunityAssignerTests` gains the case at the
+pass's own level: every declaration keeps its key, name, kind, line range and `qualified_name` through a rebuild, and the
+one isolated declaration still gets an empty label rather than an omitted column. The pass's existing cases — two clusters,
+identical labels across two builds, five nonzero steps, the centrality ranking — pass unmodified. Suite 1 498 → 1 502,
+build clean at zero warnings.
+
+**What it does not do.** It does not touch `louvain`, the `meta`/open overhead (5.5 s a turn, measured again by the no-op
+`index` run at 6.0 s), or SC-002's 5 000-file tree. It does not drop `idx_symbols_community` to buy the residual back; the
+probe says the residual is 1.8 s and dropping an index would change the plan of every query that reads a community.
+
+
