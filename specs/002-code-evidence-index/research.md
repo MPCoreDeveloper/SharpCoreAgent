@@ -893,4 +893,113 @@ build clean at zero warnings.
 `index` run at 6.0 s), or SC-002's 5 000-file tree. It does not drop `idx_symbols_community` to buy the residual back; the
 probe says the residual is 1.8 s and dropping an index would change the plan of every query that reads a community.
 
+## D25 — The partition without the store (2026-11-03): 1 m 8 s becomes 0.1 s, and the partition gets better
+
+D24 ended by naming the last lever and stepping around it: `louvain` at 1 m 8 s, "in third-party code", and smaller only
+at the price of "a decision about label stability — a coarser graph or a bounded candidate set". This slice — spec
+`029-modularity-partition` — takes it, and the measurement refused both of the options D24 expected to have to choose
+between. The labels keep their meaning, the partition scores 34 % higher than the one it replaces, and nothing about it is
+an approximation.
+
+**The measurement came before the change.** Three temporary probes on a copy of this repository's own index, deleted with
+the round. The graph first, because the size of the problem decides which levers exist: 7 311 declarations, 10 840 relation
+rows (calls 10 095, doc_mentions 635, implements 89, inherits 21), **4 123** with at least one relation, 10 744 distinct
+undirected edges, 3 188 with none, largest degree 904 — and **3 999 of the 4 123 are one connected component**, so
+decomposing the work by component, the first idea, was worth 1.7× (42.665 s) and returned a different partition.
+
+| probe | measured |
+|---|---|
+| the store's `LouvainAlgorithm`, the whole graph | **71.100 s**, 12 iterations, 623 communities, its own objective 1.001678 |
+| the stored partition, scored by the definition | 0.490230 |
+| ours, local moving only | 0.0167 s, 7 sweeps, 651 communities, modularity 0.475347 |
+| ours, local moving plus aggregation | **0.1466 s**, 5 levels, 59 communities, modularity **0.655454** |
+| ours, run twice | identical |
+| how much of today's partition survives | 603 of the 623 communities whole; the largest grows from 196 to 494 |
+
+**What the first row is.** `LouvainAlgorithm.ExecuteAsync` calls `CalculateModularity` — a LINQ `GroupBy` over every node,
+then a scan of every adjacency list — once for the starting partition, once per iteration, and once per *candidate move*.
+The graph offers 25 611 candidates per sweep, so twelve sweeps is about 307 000 full-graph scans of a 4 123-node graph, each
+allocating a dictionary of 4 123 entries. That is the 71 s. It is not the graph, and it is not the platform: it is an
+objective recomputed from scratch a third of a million times when the weights a move needs are already in hand.
+
+The second thing the same probe found is the one that decided the round. The implementation reports 1.001678 for its own
+partition, and modularity cannot exceed 1: it counts every internal edge from both endpoints, so what it maximises is
+`2·(internal fraction) − Σ(d_c/2m)²`, not `Σ[l_c/m − (d_c/2m)²]`. Scored by the definition it is named after, the
+partition this index has been storing scores **0.490230**.
+
+**What shipped.** `ModularityPartition`, in `SharpCoreAgent.Indexing/Graph`, three private steps and one public method:
+local moving on a weighted graph with self loops, coarsening that turns communities into nodes and keeps a community's
+internal weight as a self loop, and a level loop that stops when a level merges nothing. `CommunityAssigner.RankAsync`
+became `Rank` and calls it; the `CommunityDetection` namespace left the pass, and `DegreeCentrality` stayed, because the
+degree step is linear and is not this round's subject. The `louvain` step keeps its name: it is still Louvain's local
+moving, and the record compares step names across rounds.
+
+The design was measured rather than chosen. Single-level local moving alone is 3 % *worse* than what it replaces
+(0.475347 against 0.490230) — doing the arithmetic correctly but stopping after one phase would have been a slower-looking
+answer, not a faster one. The hierarchy costs 0.13 s more and lands 34 % above it, which is why the second phase is the
+round rather than decoration.
+
+**One rebuild of this repository** (766 files, 14 348 passages, 7 330 symbols, 10 867 edges, **58 communities**,
+787.9 MiB; 55.6 s wall, 1 m 1 s cpu, 27 commits — run twice, identical, and `--prune` reproduces the same file):
+
+| step | round 19 | round 20 | what it is |
+|---|---|---|---|
+| `nodes` | 0.0 s | 0.0 s | the declarations, read and ordered |
+| `adjacency` | 0.0 s | 0.0 s | the relations, read and renumbered |
+| `louvain` | **1 m 8 s** | **0.1 s** | the partition, and its numbering |
+| `degree` | 0.0 s | 0.0 s | the metric |
+| `assign` | 1.8 s | 2.4 s | both columns, written back |
+| `communities` | 1 m 10 s | **2.6 s** | 5 % of the run |
+| `write` | ~40 s | 44.1 s | the fourteen thousand passages |
+| `meta` | ~2 s | 2.5 s | the one commit's other end |
+| the run | 1 m 56 s | **55.6 s** | 27 commits, both times |
+
+**A writing run, which is the number D23–D25 kept naming.** `index --verbose` over a tree where one file had changed:
+**11.3 s** (11.5 s including the process), of which `communities` **2.2 s** (`louvain` **0.1 s**, `assign` 2.0 s, `commit`
+7.0 s) — against round 19's 1 m 10 s clusterer for the same shape of run, and against the 5.8 s a run that changes nothing
+still costs (`index` with 766 files unchanged, 5.8 s, measured on the same day). The fixed charge the clusterer added to
+every writing run is gone; what is left of that run is the commit and the open, which are `002` T034's own items.
+
+**What that says.**
+
+*The partition was never the expensive part.* 71.100 s to 0.1 s on the same graph, the same nodes and the same edges: a
+680× on the step and 26× on the phase, and a rebuild from 1 m 56 s to 55.6 s. The `louvain` step has fallen out of the
+report's share column, which is what a step that costs a tenth of a second should look like beside `write`.
+
+*The answer got better, not just faster.* Modularity 0.655454 against 0.490230 for the partition it replaces; 58 clusters
+of 70 declarations instead of 623 of 6.3; 603 of the 623 old clusters whole inside a new one, largest 196 → 494. The
+clusters may merge, they do not scatter. That is the label-stability answer D24 deferred: a label still names the
+declarations that belong together, the numbering rule did not move (`c0…` by each community's ordinally-first member), and
+the same corpus still stores the same labels twice — which is a test (`TheSameGraphTwiceIsTheSamePartition`,
+`TwoDisjointClustersGetTwoLabels`) rather than a claim.
+
+*What the store was optimising was not modularity.* Its own number exceeded 1.0, which the definition forbids, because
+internal edges were counted twice. This is worth recording beside the speed: a function that names a well-defined quantity,
+computes a different one, and is 485× slower than the computation it names is not a dependency worth keeping for one step.
+
+*Nothing else moved.* Same schema, same columns, same indexes, same `--json`, same 27 commits, same report shape, and
+`index --verify` finds 766 rows in the index for 766 files on disk with 0 hash mismatches and 0 orphans. `status` reports
+`fresh` and 58 centers.
+
+*One number this round cannot explain.* The index file is **787.9 MiB** where round 19 reported **525.2 MiB** for the same
+corpus, and `--rebuild` (twice) and `--prune` all reproduce today's figure, so it is the store's data rather than a
+one-off. The round changes nothing the writer stores except a column of short label strings, and the labels got shorter
+(58 values instead of 623), so this slice is not its cause — but "not my cause" is not an explanation, and the size is
+already on `002` T034's list. It stays there, unpriced and named, rather than being quietly dropped from the record.
+
+**What proves it.** `ModularityPartitionTests` (new, six cases): two triangles that never meet are two communities; two
+triangles joined by one edge are still two, which is the case that separates a partition from a connected-components walk;
+an edge is one community and a lone node is its own; no single move improves the answer it returns, checked by scoring
+every legal move against the definition; the same graph twice is the same partition; and twenty triangles in a ring merge
+below twenty, which only the level above the first can do. `CommunityAssignerTests` keeps its cases unmodified — two
+clusters, identical labels across two builds, an isolated declaration's empty label, the five measured steps with `louvain`
+and `degree` at exactly zero when the corpus has no relation. Suite 1 502 → 1 508, build clean at zero warnings.
+
+**What it does not do.** It does not touch `degree` (0.0 s, and the store's), the graph's definition (every relation,
+undirected, unweighted — weighting `calls` above `doc_mentions` is a decision about what a label means), or any knob: no
+resolution parameter, no sweep budget, one behaviour. It does not price the index size above, the no-op `meta`/open
+overhead (5.8 s a turn, unchanged and re-measured), the checkpoint, SC-002's 5 000-file tree or SC-006's 61×. Those are
+`002` T034's, and T034 is a smaller item than it was: a writing run now costs 11.3 s rather than 1 m 16 s, and what stands
+between it and "one changed file inside 3 s" is the commit and the open rather than anything the clusterer does.
+
 

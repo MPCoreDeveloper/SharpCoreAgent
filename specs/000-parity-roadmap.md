@@ -64,6 +64,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 17 | [`026-checkpointed-index-writes`](026-checkpointed-index-writes/spec.md) | one commit per checkpoint of 32 files — a rebuild of this index falls from 17 m 51 s to 2 m 53 s and from 700 commits to 26, and the clusterer becomes 74 % of what is left (landed 2026-11-02 as `acf125e`: the checkpoint in `IndexFileWriter`, four boundaries in `IndexWriter`, `PruneAsync`'s one commit, `IndexBuildReport.Commits`, the `--verbose` row, 11 tests) | 16, and `002` (landed) |
 | 18 | [`027-community-pass-steps`](027-community-pass-steps/spec.md) | the clusterer's two minutes split into five steps — it is the 7 305-statement `assign` loop (1 m 21 s) and Louvain (53.4 s), not the 0.3 s of graph reads, and a commit nobody counted is counted (landed 2026-11-02 as `97294a3`: five nested names in `IndexPhases`, a `Func<Task<T>>` overload on the clock, `CommunityAssigner`'s five steps and its commit, 4 tests) | 17, and `002` (landed) |
 | 19 | [`028-row-addressed-symbol-writes`](028-row-addressed-symbol-writes/spec.md) | the clusterer writes both columns by primary key instead of issuing 7 305 `UPDATE` statements — `assign` falls from 1 m 21 s to 1.8 s, `communities` from 2 m 15 s to 1 m 10 s, and `louvain` becomes the run (landed 2026-11-03 as `96de2e4`: `CommunityAssigner.Write` on `IndexSql.Update`, the statement deleted, 4 tests) | 18, and `002` (landed) |
+| 20 | [`029-modularity-partition`](029-modularity-partition/spec.md) | the clusterer stops calling the store's `LouvainAlgorithm` and partitions with modularity it owns — `louvain` falls from 1 m 8 s to 0.1 s, `communities` from 1 m 10 s to 2.6 s, a rebuild from 1 m 56 s to 55.6 s, and the partition rises from 0.490230 to 0.655454 by the definition (landed 2026-11-03 as `TBD`: `ModularityPartition`, `Rank` in place of `RankAsync`, 6 tests, three probes deleted) | 19, and `002` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -836,13 +837,66 @@ would have to be dropped, and every traversal query would then read differently)
 `meta`/open overhead (5.5 s a turn, measured again at 6.0 s by this round's `index` run), then the checkpoint's own size.
 `002` T034 stays open for SC-002's 5,000-file tree and SC-006's 61×.
 
+## Round 20 — `029-modularity-partition` (landed 2026-11-03 as `TBD`)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–19 took — and its records
+followed, as round 19's did. Round 20 answers the question round 19 left standing: `louvain` was 1 m 8 s of a 1 m 56 s
+rebuild and the whole fixed charge on a writing run, and it was not the graph that cost that. The argument is
+[`029-modularity-partition/spec.md`](029-modularity-partition/spec.md); the five decisions, the three probes and both
+runs are in its `plan.md`.
+
+**Ships**: `ModularityPartition` in `SharpCoreAgent.Indexing/Graph` — modularity local moving on a weighted graph, a
+coarsening that keeps each community's internal weight as a self loop, and a level loop that stops when a level merges
+nothing — and `CommunityAssigner.Rank` calling it. The store's `CommunityDetection` namespace leaves the pass;
+`DegreeCentrality` stays. The `louvain` step keeps its name, its nesting and its place in the report.
+
+**Does not ship**: nothing the pass reads and nothing around it. Same graph (every relation, undirected, unweighted), same
+`c0…` numbering by each community's ordinally-first member, same empty label for a declaration with no relation, same
+schema, indexes, flags, `--json`, commit count and report shape. What is different is the granularity of the answer, and it
+is published as a number rather than a footnote: 623 clusters of 6.3 declarations become 58 of 70, and 603 of the old ones
+sit whole inside a new one.
+
+**Evidence**: six new cases in `ModularityPartitionTests` — two triangles apart, two triangles bridged (still two, which is
+what separates a partition from a connected-components walk), one edge, a lone node, no single move improving the answer it
+returns, the same graph twice, and twenty triangles in a ring merging below twenty — plus every existing case of
+`CommunityAssignerTests` unmodified: two clusters, identical labels across two builds, the isolated declaration, and the
+five measured steps with `louvain` and `degree` at exactly zero on a corpus with no relation. Build 0 warnings; suite
+1,508 passed, 0 failed, 0 skipped — 6 this round's, against 1,502. `index` reports `state fresh`; `index --verify` finds
+766 rows for 766 files, 0 hash mismatches, 0 orphans.
+
+The probes came before the code and they are the round's whole justification. On this repository's own graph — 4 123
+connected declarations, 10 744 edges, one connected component holding 3 999 of them — the store's `LouvainAlgorithm` costs
+**71.100 s** over 12 iterations, because it recomputes modularity over the whole graph once per candidate move: 25 611
+candidates a sweep, roughly 307 000 full-graph scans. Decomposing by connected component, the first idea, costs 1.7× less
+and returns a different partition. Its own objective reports 1.001678 for its answer, which modularity cannot exceed — it
+counts each internal edge twice — and scored by the definition it names, that answer is 0.490230. Ours is 0.0167 s at
+0.475347 for one level and **0.1466 s at 0.655454** with the level above it, deterministic on repeat.
+
+One `index --rebuild --verbose` on this repository's index — 766 files, 14 348 passages, 7 330 symbols, 10 867 edges, 58
+communities, 787.9 MiB; run twice, identical; **55.6 s** and 27 commits — reads:
+
+> `communities` 2.6 s (5 %): `nodes` **0.0 s**, `adjacency` **0.0 s**, `louvain` **0.1 s**, `degree` **0.0 s**,
+> `assign` **2.4 s**.
+
+So `louvain` fell 680×, `communities` fell 26×, and the run is now `write` (44.1 s) with the clusterer a footnote in it. A
+writing run over one changed file costs **11.3 s**, of which `communities` **2.2 s** — against round 19's 1 m 10 s charge
+for the same shape of run and the 5.8 s a run that changes nothing still costs. That is the number every round since 17
+named, and it is no longer the clusterer's.
+
+**Left open, with the arithmetic attached**: the index file is **787.9 MiB** where round 19 reported 525.2 MiB for the
+same corpus, and `--rebuild` (twice) and `--prune` reproduce today's figure — the round does not explain it, does not claim
+it, and leaves it on `002` T034's list beside the checkpoint's size. Then the no-op `meta`/open overhead (5.8 s a turn,
+re-measured and unchanged), the `commit` line a writing run now consists of (7.0 s of its 11.3 s), and SC-002's 5,000-file
+tree with SC-006's 61×.
+
+
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
 empty checkbox.
 
 | Round | Open | Why it is still open |
 |---|---|---|
-| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured. **Round 18** (`97294a3`) split that fixed charge instead of moving it: `communities` is `assign` **1 m 21 s** — 7 305 `UPDATE` statements, 11 ms each — plus `louvain` **53.4 s**, with the whole-graph reads at 0.3 s, so the per-writing-run charge is a write-back and a partition and neither has been moved yet. **Round 19** (`96de2e4`) moved the write-back: the pass writes both columns by primary key instead of parsing 7 305 `UPDATE` statements, and a rebuild is now **1 m 56 s and 27 commits** with `communities` at **1 m 10 s** — `assign` **1.8 s** (was 1 m 21 s) and `louvain` **1 m 8 s**, which is now 58 % of the run and the entire fixed charge per writing run. SC-002's "one changed file inside 3 s" therefore still misses, and the leverage left is Louvain's partition |
+| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured. **Round 18** (`97294a3`) split that fixed charge instead of moving it: `communities` is `assign` **1 m 21 s** — 7 305 `UPDATE` statements, 11 ms each — plus `louvain` **53.4 s**, with the whole-graph reads at 0.3 s, so the per-writing-run charge is a write-back and a partition and neither has been moved yet. **Round 19** (`96de2e4`) moved the write-back: the pass writes both columns by primary key instead of parsing 7 305 `UPDATE` statements, and a rebuild is now **1 m 56 s and 27 commits** with `communities` at **1 m 10 s** — `assign` **1.8 s** (was 1 m 21 s) and `louvain` **1 m 8 s**, which is now 58 % of the run and the entire fixed charge per writing run. SC-002's "one changed file inside 3 s" therefore still misses, and the leverage left is Louvain's partition. **Round 20** (`029-modularity-partition`) moved that one too: the store's `LouvainAlgorithm` recomputed modularity over the whole graph once per candidate move, and this repository's replacement — local moving plus the level above it, in `ModularityPartition` — partitions the same graph in **0.1 s** and scores **0.655454** by the definition where the stored partition scored 0.490230. A rebuild is now **55.6 s and 27 commits** with `communities` at **2.6 s**, and a writing run over one changed file costs **11.3 s** — `communities` **2.2 s**, `commit` 7.0 s — against round 19's 1 m 10 s clusterer plus the 5.8 s a run that changes nothing still costs. SC-002's "one changed file inside 3 s" still misses, but what stands in the way is now the commit and the open rather than the clusterer. The 5 000-file synthetic tree, SC-006's 61×, and the index file's 787.9 MiB (round 19 reported 525.2 MiB for the same corpus, and both a rebuild and a prune reproduce today's figure) are still unmeasured |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |

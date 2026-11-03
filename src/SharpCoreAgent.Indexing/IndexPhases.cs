@@ -48,7 +48,7 @@ internal static class IndexPhases
     /// <summary>Reading the stored relations into one adjacency list per declaration.</summary>
     internal const string Adjacency = "adjacency";
 
-    /// <summary>Partitioning the graph with Louvain and numbering the communities it found.</summary>
+    /// <summary>Partitioning the graph into modularity communities and numbering them.</summary>
     internal const string Louvain = "louvain";
 
     /// <summary>Computing each declaration's degree centrality over the same graph.</summary>
