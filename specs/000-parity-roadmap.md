@@ -65,7 +65,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 18 | [`027-community-pass-steps`](027-community-pass-steps/spec.md) | the clusterer's two minutes split into five steps — it is the 7 305-statement `assign` loop (1 m 21 s) and Louvain (53.4 s), not the 0.3 s of graph reads, and a commit nobody counted is counted (landed 2026-11-02 as `97294a3`: five nested names in `IndexPhases`, a `Func<Task<T>>` overload on the clock, `CommunityAssigner`'s five steps and its commit, 4 tests) | 17, and `002` (landed) |
 | 19 | [`028-row-addressed-symbol-writes`](028-row-addressed-symbol-writes/spec.md) | the clusterer writes both columns by primary key instead of issuing 7 305 `UPDATE` statements — `assign` falls from 1 m 21 s to 1.8 s, `communities` from 2 m 15 s to 1 m 10 s, and `louvain` becomes the run (landed 2026-11-03 as `96de2e4`: `CommunityAssigner.Write` on `IndexSql.Update`, the statement deleted, 4 tests) | 18, and `002` (landed) |
 | 20 | [`029-modularity-partition`](029-modularity-partition/spec.md) | the clusterer stops calling the store's `LouvainAlgorithm` and partitions with modularity it owns — `louvain` falls from 1 m 8 s to 0.1 s, `communities` from 1 m 10 s to 2.6 s, a rebuild from 1 m 56 s to 55.6 s, and the partition rises from 0.490230 to 0.655454 by the definition (landed 2026-11-03 as `e339564`: `ModularityPartition`, `Rank` in place of `RankAsync`, 6 tests, three probes deleted) | 19, and `002` (landed) |
-| 21 | [`030-index-compaction`](030-index-compaction/spec.md) | the index file stops being 10.8× the rows it holds — the store's full vacuum gives back 714.6 MiB of 787.9 MiB in 0.6 s with every row intact, a finished rebuild now does it, and `index --compact` does it on demand (`IndexCompaction`, `CompactAsync`, the rebuild hook, the `--compact` block and its `--json`, 8 tests, four probes deleted) | 20, and `002` (landed) |
+| 21 | [`030-index-compaction`](030-index-compaction/spec.md) | the index file stops being 10.8× the rows it holds — the store's full vacuum gives back 714.6 MiB of 787.9 MiB in 0.6 s with every row intact, a finished rebuild now does it, and `index --compact` does it on demand (landed 2026-11-03 as `caa392b`: `IndexCompaction`, `CompactAsync`, the rebuild hook, the `--compact` block and its `--json`, 8 tests, four probes deleted) | 20, and `002` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -891,7 +891,7 @@ re-measured and unchanged), the `commit` line a writing run now consists of (7.0
 tree with SC-006's 61×.
 
 
-## Round 21 — `030-index-compaction` (landed 2026-11-03)
+## Round 21 — `030-index-compaction` (landed 2026-11-03 as `caa392b`)
 
 **Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–20 took. Round 21 answers the
 one number round 20 named and could not explain: an index file of **787.9 MiB** where round 19 measured 525.2 MiB for the
