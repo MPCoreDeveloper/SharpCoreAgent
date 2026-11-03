@@ -50,8 +50,8 @@ public sealed class CheckpointTests
         Assert.Equal(5, result.Added);
         Assert.Equal(5, CountRows(sandbox, "SELECT id FROM files"));
 
-        // The five files are one checkpoint, then the edges are one commit and `meta` is another.
-        Assert.Equal(3, result.Commits);
+        // The five files are one checkpoint, then the edges, the community columns and `meta` are one commit each.
+        Assert.Equal(4, result.Commits);
     }
 
     [Fact]
@@ -65,9 +65,10 @@ public sealed class CheckpointTests
         WriteCorpus(whole, 5);
         var perCheckpoint = await BuildAsync(whole, IndexWriter.CheckpointFiles, TestContext.Current.CancellationToken);
 
-        // Three checkpoints for five files, plus the edges and `meta`; the default carries all five at once.
-        Assert.Equal(5, perTwo.Commits);
-        Assert.Equal(3, perCheckpoint.Commits);
+        // Three checkpoints for five files, plus the edges, the community columns and `meta`; the default carries all
+        // five at once.
+        Assert.Equal(6, perTwo.Commits);
+        Assert.Equal(4, perCheckpoint.Commits);
 
         // A commit boundary is not an accounting boundary: the counters and the rows are the same either way (D8).
         Assert.Equal(perCheckpoint.Added, perTwo.Added);
@@ -189,12 +190,13 @@ public sealed class CheckpointTests
         Assert.True(result.Added < 200, "the budget should have stopped the walk before its last file");
 
         // What the loop held when the budget ran out was committed before it broke: the rows exist and are the ones the
-        // counters name. Then the edges and `meta`, which a partial build still writes — and one commit per checkpoint
-        // for a run that was cut in half is still a commit per checkpoint rather than a commit per file.
+        // counters name. Then the edges, the community columns and `meta`, which a partial build still writes — and one
+        // commit per checkpoint for a run that was cut in half is still a commit per checkpoint rather than a commit per
+        // file.
         var perCheckpoint = (result.Added + IndexWriter.CheckpointFiles - 1) / IndexWriter.CheckpointFiles;
 
         Assert.Equal(result.Added, CountRows(sandbox, "SELECT id FROM files"));
-        Assert.Equal(perCheckpoint + 2, result.Commits);
+        Assert.Equal(perCheckpoint + 3, result.Commits);
         Assert.True(result.Commits < result.Added, "a partial build must not have committed once per file");
     }
 

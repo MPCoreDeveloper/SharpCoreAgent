@@ -139,6 +139,40 @@ public sealed class CommunityAssignerTests
     }
 
     [Fact]
+    public async Task ThePassReportsWhatEachOfItsFiveStepsCost()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteClusters(sandbox);
+
+        await using var maintainer = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
+        var report = await maintainer.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        var phases = report.Phases.ToDictionary(static phase => phase.Name, StringComparer.Ordinal);
+
+        // Every step ran on this corpus: declarations to read, relations to walk, two clusters to find, and two
+        // columns to write back.
+        Assert.True(phases[IndexPhases.Nodes].Wall > TimeSpan.Zero, "reading the declarations must be measured");
+        Assert.True(phases[IndexPhases.Adjacency].Wall > TimeSpan.Zero, "reading the relations must be measured");
+        Assert.True(phases[IndexPhases.Louvain].Wall > TimeSpan.Zero, "the partition must be measured");
+        Assert.True(phases[IndexPhases.Degree].Wall > TimeSpan.Zero, "the ranking must be measured");
+        Assert.True(phases[IndexPhases.Assign].Wall > TimeSpan.Zero, "writing the columns must be measured");
+
+        // None of them is a sibling: each is time already counted in `communities`, which is why every one is nested.
+        string[] steps =
+        [
+            IndexPhases.Nodes,
+            IndexPhases.Adjacency,
+            IndexPhases.Louvain,
+            IndexPhases.Degree,
+            IndexPhases.Assign,
+        ];
+
+        Assert.All(steps, name => Assert.True(phases[name].Nested, $"'{name}' runs inside `communities`"));
+        Assert.True(phases[IndexPhases.Communities].Wall >= phases[IndexPhases.Nodes].Wall);
+        Assert.True(phases[IndexPhases.Communities].Wall >= phases[IndexPhases.Louvain].Wall);
+    }
+
+    [Fact]
     public async Task CentralityRanksACalledDeclarationAboveAnUncalledOne()
     {
         using var sandbox = ToolTestWorkspace.Create();

@@ -215,6 +215,7 @@ public sealed class IndexCommandTests
         Assert.Contains("phases      scan", output, StringComparison.Ordinal);
         Assert.Contains("write", output, StringComparison.Ordinal);
         Assert.Contains("of which commit", output, StringComparison.Ordinal);
+        Assert.Contains("of which nodes", output, StringComparison.Ordinal);
         Assert.Contains("%", output, StringComparison.Ordinal);
     }
 
@@ -273,12 +274,24 @@ public sealed class IndexCommandTests
         using var document = JsonDocument.Parse(output);
         var phases = document.RootElement.GetProperty("phases").EnumerateArray().ToArray();
 
-        Assert.Equal(8, phases.Length);
+        Assert.Equal(13, phases.Length);
         Assert.Equal("scan", phases[0].GetProperty("name").GetString());
         Assert.False(phases[0].GetProperty("nested").GetBoolean());
         Assert.True(phases[^1].GetProperty("nested").GetBoolean());
         Assert.True(phases.Single(phase => phase.GetProperty("name").GetString() == "write")
             .GetProperty("wallMs").GetInt64() >= 0);
+
+        // The clusterer's steps travel with every report, nested and in build order, so a script sees the shape a
+        // terminal does.
+        var names = phases.Select(phase => phase.GetProperty("name").GetString()!).ToArray();
+        string[] clusterer = ["nodes", "adjacency", "louvain", "degree", "assign"];
+
+        Assert.Equal(
+            clusterer,
+            names.SkipWhile(static name => name != "communities").Skip(1).Take(clusterer.Length).ToArray());
+        Assert.All(
+            phases.Where(phase => clusterer.Contains(phase.GetProperty("name").GetString()!)),
+            phase => Assert.True(phase.GetProperty("nested").GetBoolean()));
     }
 
     private static void WriteCorpus(ToolTestWorkspace sandbox)

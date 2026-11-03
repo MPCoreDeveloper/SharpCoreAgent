@@ -79,17 +79,46 @@ public sealed class PhaseTimingTests
             IndexBudgetClock.ProcessorTime,
             TestContext.Current.CancellationToken);
 
-        var nested = report.Phases
-            .Where(static phase => phase.Nested)
-            .Aggregate(TimeSpan.Zero, static (sum, phase) => sum + phase.Wall);
+        var commit = report.Phases.Single(static phase => phase.Name == IndexPhases.Commit).Wall;
 
         var containing = report.Phases
-            .Where(static phase => phase.Name is IndexPhases.Write or IndexPhases.Remove or IndexPhases.Edges or IndexPhases.Meta)
+            .Where(static phase => phase.Name is IndexPhases.Write
+                or IndexPhases.Remove
+                or IndexPhases.Edges
+                or IndexPhases.Assign
+                or IndexPhases.Meta)
             .Aggregate(TimeSpan.Zero, static (sum, phase) => sum + phase.Wall);
 
         Assert.True(
-            nested <= containing + TimeSpan.FromMilliseconds(100),
-            $"the commit took {nested} but the phases containing it took {containing}");
+            commit <= containing + TimeSpan.FromMilliseconds(100),
+            $"the commit took {commit} but the phases containing it took {containing}");
+    }
+
+    [Fact]
+    public async Task TheClusterersFiveStepsStayInsideThePhaseTheyExplain()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+
+        await using var maintainer = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
+        var report = await maintainer.RebuildAsync(
+            IndexBudgetClock.ProcessorTime,
+            TestContext.Current.CancellationToken);
+
+        var phases = report.Phases.ToDictionary(static phase => phase.Name, StringComparer.Ordinal);
+
+        Assert.True(phases[IndexPhases.Nodes].Wall > TimeSpan.Zero, "reading the declarations must be measured");
+        Assert.True(phases[IndexPhases.Adjacency].Wall > TimeSpan.Zero, "reading the relations must be measured");
+        Assert.True(phases[IndexPhases.Assign].Wall > TimeSpan.Zero, "writing the columns must be measured");
+
+        // The two algorithms only run when the corpus has a relation to cluster, and this one declares no call.
+        Assert.Equal(TimeSpan.Zero, phases[IndexPhases.Louvain].Wall);
+        Assert.Equal(TimeSpan.Zero, phases[IndexPhases.Degree].Wall);
+
+        Assert.True(
+            phases[IndexPhases.Communities].Wall >= phases[IndexPhases.Nodes].Wall,
+            "a nested step cannot have cost more than the phase that contains it");
+        Assert.True(phases[IndexPhases.Communities].Wall >= phases[IndexPhases.Assign].Wall);
     }
 
     [Fact]

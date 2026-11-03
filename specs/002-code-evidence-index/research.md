@@ -737,3 +737,80 @@ checkpoint keeps the group (200 files, 100 ms, and the rows equal the counter); 
 a prune of three files commits once; a second begin is refused. `IndexCommandTests` adds the `--verbose` line and the
 absence of a `commits` key in `--json`. Suite 1 483 → 1 494, build clean at zero warnings.
 
+
+---
+
+## D23 — The clusterer's own steps (2026-11-02): two of five, and neither is the one the phase looked like
+
+D22 ended with a sentence that was a promise rather than a finding: "`communities` is now three quarters of a rebuild and it
+is a fixed charge per *writing* run, so the next slice is D21's second lever." This slice is the first half of that lever —
+saying which part of the phase the two minutes is — shipped as spec `027-community-pass-steps`.
+
+**The same lesson, one level down.** D21's finding was that the write phase looked like extraction and was a commit. A phase
+name is a label, not a decomposition, so `communities` could have been a table scan, a statement loop, a commit, or the
+algorithm. Five suspects, two orders of magnitude apart, and the round that acts on this phase without splitting it is the
+round D21 was written to prevent.
+
+**What shipped.** `AssignAsync` takes the build's clock and records five steps: `nodes` (the declarations, read and ordered),
+`adjacency` (the relations, read into neighbour lists and renumbered into the graph), `louvain` (the partition and the
+numbering that makes its labels reproducible), `degree` (the metric) and `assign` (both columns, written back). All five are
+nested inside `communities`, printed as `of which …`, and take no share of the run; `IndexPhases.IsNested` became a lookup
+over six names. `PartitionAsync` split into `ReadGraph`, `BuildGraph` and `RankAsync`, and the clock gained a `Func<Task<T>>`
+overload because the store's algorithms return `Task<T>` while the build's own awaited steps return `ValueTask<T>`.
+
+**A commit that was invisible twice.** The clusterer writes both columns in its own batch rather than through
+`IndexFileWriter`, so its commit sat inside the phase's wall clock and outside both `commits` and the `commit` line: a build
+made 27 commits and reported 26. Both ends are now charged to `commit` and the commit is counted, so the rule from D22 —
+count it where you time it — covers the two places that commit instead of one. Three assertions in `CheckpointTests` moved by
+one, which is the cheapest possible proof that the old number was short.
+
+**One rebuild of this repository** (740 files, 14 231 passages, 7 305 symbols, 10 806 edges, 645 communities, 525.2 MiB;
+3 m 2 s wall, 3 m 7 s cpu, 27 commits):
+
+| step | wall | share of the phase | what it is |
+|---|---|---|---|
+| `nodes` | 0.1 s | — | 7 305 declarations read and ordered |
+| `adjacency` | 0.2 s | — | 10 806 relations read, then renumbered |
+| `louvain` | **53.4 s** | **40 %** | the partition of 7 305 nodes, and its numbering |
+| `degree` | 0.0 s | — | the metric over the same graph |
+| `assign` | **1 m 21 s** | **60 %** | 7 305 `UPDATE` statements in one batch |
+| `communities` | 2 m 15 s | 74 % of the run | the phase itself, unmoved |
+
+**What that says.**
+
+*The reads are not the cost.* 7 305 declarations and 10 806 relations cost 0.3 s together. That is worth writing down because
+the write phase's history made a slow store read feel likely, and because it means a faster read path would buy nothing.
+
+*`assign` is the largest part, and it is the statement, not the commit.* 1 m 21 s for 7 305 `UPDATE`s is 11 ms each, against
+about 1.7 ms per statement for a file's mixed inserts in the write phase. The commit at the end of the batch is inside the
+41.6 s the `commit` line reports, nearly all of which is the writing phase's 24 checkpoints — so the next round can price the
+loop without untangling a store charge from it. What makes an `UPDATE` six times a mixed insert is not yet known: the
+statement's shape, the `symbols` indexes, or the size of the batch.
+
+*`louvain` is 53.4 s over a graph that `degree` crosses below the report's resolution.* A partition of 7 305 nodes with 10 806
+edges is a second's work in most implementations, so the number is about the algorithm rather than about this repository. It
+is in third-party code, which makes it a smaller lever than `assign` — but a 40 % step is still a step.
+
+**What that changes about the plan.** Two levers, `assign` first (60 % of the phase, and ours) then `louvain` (40 %, and the
+store's). The second can be answered without a fork by giving Louvain a coarser graph or a bounded candidate set, which is a
+decision about label stability and therefore a spec of its own. D21's third lever — the no-op `meta`/open overhead, 5.5 s a
+turn — is still open, and after this round it is the cheapest fixed charge left. SC-002's 5 000-file tree and SC-006's 61× are
+untouched.
+
+**What it does not do.** It fixes no cost. The phase is 2 m 15 s before this slice and 2 m 15 s after it, and the run is 3 m 2 s
+both times; the only change a developer would notice is that the report now says where the time goes. Two of this slice's own
+numbers are 0.0 s, which is information — the step is real and too small to see — and not a missing measurement.
+
+**A run that changed nothing reports five zeros, which is the point.** An incremental run over the same index — 0 written,
+0 removed — skipped the pass as it always did and printed `communities 0.0 s` with five `of which` rows at 0.0 s, one commit
+(`meta`, 2.4 s) and the block's 60 % in `other`. The split does not invent work a build did not do, and a reader can tell a
+skipped phase from a cheap one by the row above it.
+
+**What proves it.** `IndexPhaseClockTests` pins the nested set, the order of the clusterer's names, and that a step producing a
+value is timed across its await and hands the value back on both overloads. `PhaseTimingTests` pins the wiring end to end: the
+five rows on a real build, `louvain` and `degree` at exactly zero when the corpus declares no relation, the commit staying
+inside the phases that contain it, and the block still adding up to no more than the run. `CommunityAssignerTests` pins the
+positive case — two clusters, all five steps nonzero and nested. `CheckpointTests` pins the count including the clusterer's
+commit, and `IndexCommandTests` pins thirteen phases in `--json` and `of which nodes` in the terminal. Suite 1 494 → 1 498,
+build clean at zero warnings.
+

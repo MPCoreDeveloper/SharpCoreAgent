@@ -11,8 +11,9 @@ namespace SharpCoreAgent.Domain.Index;
 /// <para>
 /// A build reports every one of its steps, in the order it runs them, including the ones that did nothing — so a
 /// reader can add them up and see what is unaccounted for instead of guessing which numbers are missing.
-/// <see cref="Nested"/> marks the one step that is not a sibling: the engine's commit runs inside whichever step
-/// wrote last, so its time is already counted in that step's.
+/// <see cref="Nested"/> marks a step that is not a sibling: the engine's commit runs inside whichever step wrote
+/// last, and the five steps of the community pass run inside <c>communities</c>, so their time is already counted in
+/// their parent's.
 /// </para>
 /// <para>
 /// The processor time is process-wide and comes from an operating-system counter that is updated a few times a
@@ -24,7 +25,8 @@ public sealed record IndexPhase
 {
     /// <summary>
     /// Gets the name of the step, as the command line prints it: <c>scan</c>, <c>load</c>, <c>write</c>,
-    /// <c>remove</c>, <c>edges</c>, <c>communities</c>, <c>meta</c> or <c>commit</c>.
+    /// <c>remove</c>, <c>edges</c>, <c>communities</c> and its steps <c>nodes</c>, <c>adjacency</c>, <c>louvain</c>,
+    /// <c>degree</c> and <c>assign</c>, <c>meta</c>, or <c>commit</c>.
     /// </summary>
     public required string Name { get; init; }
 
@@ -42,10 +44,12 @@ public sealed record IndexPhase
     /// Gets a value indicating whether this step's time is already counted inside another step's.
     /// </summary>
     /// <remarks>
-    /// Only the engine's commit is nested, and it is nested four times over: the same commit runs inside the writing
-    /// pass, the pass that drops vanished files, the edge resolution and the <c>meta</c> write. It gets one line
-    /// rather than four because the question it answers — how much of the run the store charges for touching it —
-    /// is one question.
+    /// Six steps are nested. The engine's commit is nested five times over: the same commit runs inside the writing
+    /// pass, the pass that drops vanished files, the edge resolution, the community pass and the <c>meta</c> write, and
+    /// it gets one line rather than five because the question it answers — how much of the run the store charges for
+    /// touching it — is one question. The community pass's own five steps are nested once each, inside
+    /// <c>communities</c>, for the same reason at a smaller scale: that phase is one line, and its steps say what the
+    /// line is made of (spec 027, D2).
     /// </remarks>
     public bool Nested { get; init; }
 }

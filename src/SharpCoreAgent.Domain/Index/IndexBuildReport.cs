@@ -75,9 +75,9 @@ public sealed record IndexBuildReport
     /// Gets how many times the work asked the store to commit.
     /// </summary>
     /// <remarks>
-    /// One per checkpoint of files, plus one each for the edges, the removal set and <c>meta</c> — which is what makes
-    /// the price of a build a number that can be counted rather than watched (spec 026, D7). Zero for a report that
-    /// never reached a writer.
+    /// One per checkpoint of files, plus one each for the edges, the removal set, the community columns and
+    /// <c>meta</c> — which is what makes the price of a build a number that can be counted rather than watched
+    /// (spec 026, D7). Zero for a report that never reached a writer.
     /// <para>
     /// It is deliberately not part of the JSON document: a caller reads that document for what the index holds, and this
     /// measures how the writer chose to get there.

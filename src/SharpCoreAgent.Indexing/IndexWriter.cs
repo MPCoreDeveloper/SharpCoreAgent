@@ -234,11 +234,12 @@ internal sealed class IndexWriter
 
         // Communities are a property of the whole graph, so they are recomputed exactly when the graph could have
         // changed: a build that wrote nothing and removed nothing would pay for Louvain to reach the same answer.
+        var assigned = CommunityAssignment.None;
         if (_written.Count > 0 || _removed > 0)
         {
-            await _phases.MeasureAsync(
+            assigned = await _phases.MeasureAsync(
                 IndexPhases.Communities,
-                () => CommunityAssigner.AssignAsync(_database, cancellationToken)).ConfigureAwait(false);
+                () => CommunityAssigner.AssignAsync(_database, _phases, cancellationToken)).ConfigureAwait(false);
         }
 
         _phases.Measure(IndexPhases.Meta, () => WriteMeta(buildId, IndexTimestamps.Format(DateTimeOffset.UtcNow)));
@@ -253,7 +254,10 @@ internal sealed class IndexWriter
             Incomplete = _incomplete,
             Notes = _notes,
             Phases = _phases.Elapsed(),
-            Commits = _files.Commits,
+
+            // The clusterer writes its own columns in a batch of its own rather than through the file writer, so its
+            // commit is added here: `Commits` is every commit the build asked for, not the file writer's share of them.
+            Commits = _files.Commits + assigned.Commits,
         };
     }
 

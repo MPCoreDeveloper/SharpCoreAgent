@@ -105,15 +105,42 @@ internal sealed class IndexPhaseClock
     /// <typeparam name="T">What the work produces.</typeparam>
     /// <param name="phase">The step the work belongs to.</param>
     /// <param name="work">The work.</param>
-    /// <returns>A task that completes when the work does.</returns>
-    internal async Task MeasureAsync<T>(string phase, Func<ValueTask<T>> work)
+    /// <returns>A task that completes with whatever <paramref name="work"/> produced.</returns>
+    /// <remarks>
+    /// This overload and the <see cref="Task{TResult}"/> one below exist for the same reason: the build's own awaited
+    /// steps return a <see cref="ValueTask{TResult}"/> and the store's algorithms return a <see cref="Task{TResult}"/>,
+    /// and a caller that had to wrap one into the other just to be timed would be paying for the measurement.
+    /// </remarks>
+    internal async Task<T> MeasureAsync<T>(string phase, Func<ValueTask<T>> work)
     {
         ArgumentNullException.ThrowIfNull(work);
 
         var started = Begin(phase);
         try
         {
-            await work().ConfigureAwait(false);
+            return await work().ConfigureAwait(false);
+        }
+        finally
+        {
+            End(phase, started);
+        }
+    }
+
+    /// <summary>
+    /// Times one unit of work that completes asynchronously and produces a value.
+    /// </summary>
+    /// <typeparam name="T">What the work produces.</typeparam>
+    /// <param name="phase">The step the work belongs to.</param>
+    /// <param name="work">The work.</param>
+    /// <returns>A task that completes with whatever <paramref name="work"/> produced.</returns>
+    internal async Task<T> MeasureAsync<T>(string phase, Func<Task<T>> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+
+        var started = Begin(phase);
+        try
+        {
+            return await work().ConfigureAwait(false);
         }
         finally
         {

@@ -25,8 +25,17 @@ internal sealed record CommunityAssignment
     /// <summary>Gets how many declarations have no relation at all, and therefore no cluster.</summary>
     public required int Isolated { get; init; }
 
+    /// <summary>Gets how many times the pass asked the store to commit.</summary>
+    /// <remarks>
+    /// One, or zero when the pass wrote nothing: the columns are rewritten in one batch, and that batch's commit is
+    /// the pass's only visit to the store that is not a read. It is counted here rather than in
+    /// <see cref="IndexFileWriter"/> because the pass does not go through that writer, and a commit nobody counts is
+    /// a commit the build's own number would quietly leave out (spec 027, D4).
+    /// </remarks>
+    public required int Commits { get; init; }
+
     /// <summary>Gets the assignment of an index that holds no declarations.</summary>
-    public static CommunityAssignment None { get; } = new() { Communities = 0, Members = 0, Isolated = 0 };
+    public static CommunityAssignment None { get; } = new() { Communities = 0, Members = 0, Isolated = 0, Commits = 0 };
 }
 
 /// <summary>
@@ -71,34 +80,38 @@ internal static class CommunityAssigner
     /// Clusters the stored graph and writes <c>symbols.community</c> and <c>symbols.centrality</c>.
     /// </summary>
     /// <param name="database">The index the build has just finished writing.</param>
+    /// <param name="phases">The clock the pass records its five steps and its commit on.</param>
     /// <param name="cancellationToken">Cancels the pass; the columns then keep their previous values.</param>
     /// <returns>The counters of the pass.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="database"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="database"/> or <paramref name="phases"/> is null.</exception>
     /// <remarks>
     /// Every row is rewritten, including the isolated ones, because a previous build may have clustered a
     /// declaration whose last caller has since been deleted: leaving that label behind would answer with a
     /// community that no longer exists.
+    /// <para>
+    /// The clock is passed in rather than created here because a build has one clock and this pass's time has to land
+    /// in the same report as the steps around it. Its five steps arrive as nested rows under <c>communities</c>, which
+    /// is what turns a two-minute phase into an answer instead of a suspicion (spec 027, D1).
+    /// </para>
     /// </remarks>
     public static async ValueTask<CommunityAssignment> AssignAsync(
         IDatabase database,
+        IndexPhaseClock phases,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(phases);
 
-        var symbols = ReadSymbols(database);
+        var symbols = phases.Measure(IndexPhases.Nodes, () => ReadSymbols(database));
         if (symbols.Count == 0)
         {
             return CommunityAssignment.None;
         }
 
-        var positions = new Dictionary<long, int>(symbols.Count);
-        for (var index = 0; index < symbols.Count; index++)
-        {
-            positions.TryAdd(symbols[index].Id, index);
-        }
-
-        var adjacency = ReadAdjacency(database, positions);
-        var connected = Enumerable.Range(0, symbols.Count).Where(index => adjacency[index].Length > 0).ToArray();
+        // The same step twice: rows become a position map and then neighbours. Two entries of one step add up, which
+        // is what the clock was built to do rather than a second name for the second half.
+        var positions = phases.Measure(IndexPhases.Nodes, () => PositionsOf(symbols));
+        var (adjacency, connected) = phases.Measure(IndexPhases.Adjacency, () => ReadGraph(database, positions));
 
         var labels = new string[symbols.Count];
         var centrality = new double[symbols.Count];
@@ -115,17 +128,19 @@ internal static class CommunityAssigner
                     positions,
                     labels,
                     centrality,
+                    phases,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        Write(database, symbols, labels, centrality);
+        var commits = phases.Measure(IndexPhases.Assign, () => Write(database, phases, symbols, labels, centrality));
 
         return new CommunityAssignment
         {
             Communities = communities,
             Members = connected.Length,
             Isolated = symbols.Count - connected.Length,
+            Commits = commits,
         };
     }
 
@@ -138,8 +153,13 @@ internal static class CommunityAssigner
     /// <param name="positions">The position of each declaration id.</param>
     /// <param name="labels">Filled with the label of each position.</param>
     /// <param name="centrality">Filled with the normalized degree of each position.</param>
+    /// <param name="phases">The clock the three steps are recorded on.</param>
     /// <param name="cancellationToken">Cancels the algorithms.</param>
     /// <returns>The number of communities.</returns>
+    /// <remarks>
+    /// Filling the two arrays from what the algorithms returned is the only work here that is not inside a step, and
+    /// it is a store-free loop over the results; the parent phase holds it either way.
+    /// </remarks>
     private static async ValueTask<int> PartitionAsync(
         IReadOnlyList<SymbolNode> symbols,
         int[][] adjacency,
@@ -147,7 +167,79 @@ internal static class CommunityAssigner
         Dictionary<long, int> positions,
         string[] labels,
         double[] centrality,
+        IndexPhaseClock phases,
         CancellationToken cancellationToken)
+    {
+        // Charged to `adjacency` with the read that produced the lists, because it is the same step at the same size:
+        // rows become neighbours, and neighbours become a graph the algorithms address by index.
+        var graph = phases.Measure(IndexPhases.Adjacency, () => BuildGraph(symbols, adjacency, connected));
+
+        var numbered = await phases.MeasureAsync(
+            IndexPhases.Louvain,
+            () => RankAsync(graph, positions, cancellationToken)).ConfigureAwait(false);
+
+        var degrees = await phases.MeasureAsync(
+            IndexPhases.Degree,
+            () => new DegreeCentrality().CalculateAsync(graph, cancellationToken)).ConfigureAwait(false);
+
+        for (var rank = 0; rank < numbered.Length; rank++)
+        {
+            var label = string.Create(CultureInfo.InvariantCulture, $"{LabelPrefix}{rank}");
+            foreach (var position in numbered[rank])
+            {
+                labels[position] = label;
+            }
+        }
+
+        foreach (var metric in degrees)
+        {
+            if (positions.TryGetValue((long)metric.NodeId, out var position))
+            {
+                centrality[position] = metric.Value;
+            }
+        }
+
+        return numbered.Length;
+    }
+
+    /// <summary>
+    /// Partitions the graph and numbers the communities it found.
+    /// </summary>
+    /// <param name="graph">The graph, addressed by position rather than by declaration id.</param>
+    /// <param name="positions">The position of each declaration id.</param>
+    /// <param name="cancellationToken">Cancels the algorithm.</param>
+    /// <returns>One array of positions per community, in the order the labels are numbered in.</returns>
+    /// <remarks>
+    /// The algorithm and the numbering are one step because they answer one question — which declarations share a
+    /// cluster — and because the numbering is what makes the answer reproducible: the algorithm's own community ids
+    /// depend on the order it merged in, which is an implementation detail rather than a fact about the corpus.
+    /// Numbering by each community's ordinally-first member is not.
+    /// </remarks>
+    private static async ValueTask<int[][]> RankAsync(
+        GraphData graph,
+        Dictionary<long, int> positions,
+        CancellationToken cancellationToken)
+    {
+        var detection = await new LouvainAlgorithm()
+            .ExecuteAsync(graph, cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. detection.Communities
+                .Select(community => community.Members.Select(id => positions[(long)id]).ToArray())
+                .OrderBy(members => members.Min()),
+        ];
+    }
+
+    /// <summary>
+    /// Renumbers the connected declarations densely into the graph the algorithms take.
+    /// </summary>
+    /// <param name="symbols">The declarations, in <c>key</c> order.</param>
+    /// <param name="adjacency">Each declaration's neighbours, as positions in <paramref name="symbols"/>.</param>
+    /// <param name="connected">The positions that have at least one neighbour, ascending.</param>
+    /// <returns>The graph, addressed by node index.</returns>
+    private static GraphData BuildGraph(IReadOnlyList<SymbolNode> symbols, int[][] adjacency, int[] connected)
     {
         // Louvain addresses a node by its index, so the declarations are renumbered densely: only the connected
         // ones enter, in the same key order they arrived in.
@@ -171,41 +263,7 @@ internal static class CommunityAssigner
             neighbours[node] = [.. adjacency[connected[node]].Select(neighbour => nodeOf[neighbour])];
         }
 
-        var graph = new GraphData { NodeIds = ids, AdjacencyList = neighbours };
-
-        var detection = await new LouvainAlgorithm()
-            .ExecuteAsync(graph, cancellationToken)
-            .ConfigureAwait(false);
-        var degrees = await new DegreeCentrality()
-            .CalculateAsync(graph, cancellationToken)
-            .ConfigureAwait(false);
-
-        // Numbering by the ordinally-first member is what makes the labels stable: the algorithm's own community
-        // ids depend on the order it merged in, which is an implementation detail rather than a fact about the
-        // corpus.
-        var numbered = detection.Communities
-            .Select(community => community.Members.Select(id => positions[(long)id]).ToArray())
-            .OrderBy(members => members.Min())
-            .ToArray();
-
-        for (var rank = 0; rank < numbered.Length; rank++)
-        {
-            var label = string.Create(CultureInfo.InvariantCulture, $"{LabelPrefix}{rank}");
-            foreach (var position in numbered[rank])
-            {
-                labels[position] = label;
-            }
-        }
-
-        foreach (var metric in degrees)
-        {
-            if (positions.TryGetValue((long)metric.NodeId, out var position))
-            {
-                centrality[position] = metric.Value;
-            }
-        }
-
-        return numbered.Length;
+        return new GraphData { NodeIds = ids, AdjacencyList = neighbours };
     }
 
     /// <summary>
@@ -225,16 +283,34 @@ internal static class CommunityAssigner
     ];
 
     /// <summary>
+    /// Reads the position of each declaration id in the order <see cref="ReadSymbols"/> returned them.
+    /// </summary>
+    /// <param name="symbols">The declarations, in <c>key</c> order.</param>
+    /// <returns>The position of each declaration id; the first row of a duplicated id keeps it.</returns>
+    private static Dictionary<long, int> PositionsOf(IReadOnlyList<SymbolNode> symbols)
+    {
+        var positions = new Dictionary<long, int>(symbols.Count);
+        for (var index = 0; index < symbols.Count; index++)
+        {
+            positions.TryAdd(symbols[index].Id, index);
+        }
+
+        return positions;
+    }
+
+    /// <summary>
     /// Reads the edge table as an undirected adjacency list over declaration positions.
     /// </summary>
     /// <param name="database">The index to read.</param>
     /// <param name="positions">The position of each declaration id.</param>
-    /// <returns>One sorted, duplicate-free neighbour array per declaration.</returns>
+    /// <returns>
+    /// One sorted, duplicate-free neighbour array per declaration, and the positions that have at least one, ascending.
+    /// </returns>
     /// <remarks>
     /// A relation with an endpoint this build cannot name is skipped rather than counted, which keeps the pass
     /// honest about a half-resolved graph: it clusters what it can address and leaves the rest unlabelled.
     /// </remarks>
-    private static int[][] ReadAdjacency(IDatabase database, Dictionary<long, int> positions)
+    private static (int[][] Adjacency, int[] Connected) ReadGraph(IDatabase database, Dictionary<long, int> positions)
     {
         var adjacency = new HashSet<int>[positions.Count];
         for (var index = 0; index < adjacency.Length; index++)
@@ -258,26 +334,40 @@ internal static class CommunityAssigner
             adjacency[to].Add(from);
         }
 
-        return [.. adjacency.Select(neighbours => neighbours.Order().ToArray())];
+        var neighbours = adjacency.Select(edges => edges.Order().ToArray()).ToArray();
+        var connected = Enumerable.Range(0, neighbours.Length)
+            .Where(index => neighbours[index].Length > 0)
+            .ToArray();
+
+        return (neighbours, connected);
     }
 
     /// <summary>
     /// Writes both columns for every declaration in one batch.
     /// </summary>
     /// <param name="database">The index to write.</param>
+    /// <param name="phases">The clock the batch's commit is recorded on.</param>
     /// <param name="symbols">The declarations, in the order the arrays are indexed by.</param>
     /// <param name="labels">The label of each declaration; empty for one with no cluster.</param>
     /// <param name="centrality">The normalized degree of each declaration.</param>
+    /// <returns>One: the pass asked the store to commit once.</returns>
     /// <remarks>
     /// One batch, so an interrupted pass leaves the previous labels rather than half of the new ones.
+    /// <para>
+    /// Both ends are charged to <see cref="IndexPhases.Commit"/> and the commit is counted, exactly as
+    /// <see cref="IndexFileWriter"/> does for the rows it writes. Without that, a batch of one statement per
+    /// declaration would report its commit as writing, and a reader comparing the clusterer's steps against the store's
+    /// price would be comparing two different things (spec 027, D4).
+    /// </para>
     /// </remarks>
-    private static void Write(
+    private static int Write(
         IDatabase database,
+        IndexPhaseClock phases,
         IReadOnlyList<SymbolNode> symbols,
         string[] labels,
         double[] centrality)
     {
-        database.BeginBatchUpdate();
+        phases.Measure(IndexPhases.Commit, database.BeginBatchUpdate);
         try
         {
             for (var index = 0; index < symbols.Count; index++)
@@ -291,7 +381,8 @@ internal static class CommunityAssigner
                         ("@centrality", centrality[index])));
             }
 
-            database.EndBatchUpdate();
+            phases.Measure(IndexPhases.Commit, database.EndBatchUpdate);
+            return 1;
         }
         catch (Exception)
         {
