@@ -740,10 +740,9 @@ commits, which is a decision about memory this round did not take. The next leve
 ## Round 18 — `027-community-pass-steps` (landed 2026-11-02 as `97294a3`)
 
 **Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–17 took — and its records
-followed in three more, as round 17's did. Round 18 is the
-*first half* of `002` D21's second lever: D22 ended by saying `communities` was three quarters of a rebuild and a fixed
-charge per writing run, which is a phase and not an answer. This round says which part of it costs the two minutes, and
-fixes nothing it measures. The argument is
+followed in three more, as round 17's did. Round 18 is the *first half* of `002` D21's second lever: D22 ended by saying
+`communities` was three quarters of a rebuild and a fixed charge per writing run, which is a phase and not an answer. This
+round says which part of it costs the two minutes, and fixes nothing it measures. The argument is
 [`027-community-pass-steps/spec.md`](027-community-pass-steps/spec.md); the seven decisions, the terminal's output and both
 runs are in its `plan.md`.
 
@@ -779,10 +778,10 @@ report's resolution). The graph reads — the suspect a write-heavy history made
 faster read path would buy nothing. An incremental run over the same index prints five zeros and one commit, so a skipped
 phase is distinguishable from a cheap one.
 
-Neither of the two candidates is proportional to what changed, and that is the sharper half of the finding: a run over this
-index with **two changed files** costs **2 m 39 s**, because `assign` rewrites all 7 305 rows and `louvain` re-partitions all
-10 806 edges whatever the edit was. Round 17 could say a writing run pays a fixed charge; round 18 can say it pays two, and
-name both.
+Neither of the two candidates is proportional to what changed, and that is the sharper half of the finding: a run over
+this index with **two changed files** costs **2 m 39 s**, because `assign` rewrites all 7 305 rows and `louvain`
+re-partitions all 10 806 edges whatever the edit was. Round 17 could say a writing run pays a fixed charge; round 18 can
+say it pays two, and name both.
 
 **Left open, with the arithmetic attached**: `assign` is the larger lever and ours; `louvain` is the smaller one and the
 store's, and answering it means a coarser graph or a bounded candidate set — a decision about label stability, and therefore
