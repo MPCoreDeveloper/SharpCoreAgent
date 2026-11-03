@@ -62,6 +62,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 15 | [`024-ide-agent-definition`](024-ide-agent-definition/spec.md) | `ide agent` and `ide tasks` — the profile that puts this server's five tools in the editor's agent picker, and the task that rebuilds the index, both written only where they may be | 0, `013` and `022` (landed) |
 | 16 | [`025-served-index-snapshot`](025-served-index-snapshot/spec.md) | the served call stops reloading what it already knew — one loaded build and one computed status per index, shared across the handles the lease opens and releases, and a harness that says which call its p95 describes (landed 2026-11-02 as `37c5efa`: `IndexReadCache`, `IndexReadState`, `IndexStatusMemo`, `FileStamp`, the bench's warm-up and `cold`, 11 tests) | 0, `002` and `013` (all landed) |
 | 17 | [`026-checkpointed-index-writes`](026-checkpointed-index-writes/spec.md) | one commit per checkpoint of 32 files — a rebuild of this index falls from 17 m 51 s to 2 m 53 s and from 700 commits to 26, and the clusterer becomes 74 % of what is left (landed 2026-11-02 as `acf125e`: the checkpoint in `IndexFileWriter`, four boundaries in `IndexWriter`, `PruneAsync`'s one commit, `IndexBuildReport.Commits`, the `--verbose` row, 11 tests) | 16, and `002` (landed) |
+| 18 | [`027-community-pass-steps`](027-community-pass-steps/spec.md) | the clusterer's two minutes split into five steps — it is the 7 305-statement `assign` loop (1 m 21 s) and Louvain (53.4 s), not the 0.3 s of graph reads, and a commit nobody counted is counted (landed 2026-11-02 as `97294a3`: five nested names in `IndexPhases`, a `Func<Task<T>>` overload on the clock, `CommunityAssigner`'s five steps and its commit, 4 tests) | 17, and `002` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -75,7 +76,8 @@ budget — round 11 — `021` is image deduplication — round 12 — `022` is t
 `023` is the IDE surface itself, a page for the developer rather than for another agent — round 14 — and
 `024` is the agent definition, the profile such an editor lists and the task such a workspace runs — round 15 —
 `025` is the served call's own memory, the build and the status a `tools/call` no longer rebuilds — round 16 — and
-`026` is the commit interval, the write phase a build no longer pays once per file — round 17 —
+`026` is the commit interval, the write phase a build no longer pays once per file — round 17 — `027` is the clusterer's
+own steps, the five decisions that were hiding inside one phase — round 18 —
 while `014` was never assigned and `018` stays released, unassigned for a round that wants it.)
 
 ## Decision record
@@ -735,13 +737,60 @@ of what the write phase costs, so a larger group would help — and a checkpoint
 commits, which is a decision about memory this round did not take. The next lever is `communities`, then the no-op
 `meta`/open overhead, and `002` T034 stays open for SC-002's 5,000-file tree and SC-006's 61×.
 
+## Round 18 — `027-community-pass-steps` (landed 2026-11-02 as `97294a3`)
+
+**Status**: landed on `main` in one commit, with no merge commit — the shape rounds 6 and 9–17 took — and its records
+followed in three more, as round 17's did. Round 18 is the
+*first half* of `002` D21's second lever: D22 ended by saying `communities` was three quarters of a rebuild and a fixed
+charge per writing run, which is a phase and not an answer. This round says which part of it costs the two minutes, and
+fixes nothing it measures. The argument is
+[`027-community-pass-steps/spec.md`](027-community-pass-steps/spec.md); the seven decisions, the terminal's output and both
+runs are in its `plan.md`.
+
+**Ships**: five steps inside `communities` — `nodes`, `adjacency`, `louvain`, `degree`, `assign` — recorded on the build's
+own clock, ordered after the phase they explain, all nested, and printed as `of which …` without a share of the run so the
+block's arithmetic and its `other` line do not move. `IndexPhases.IsNested` becomes a lookup over six names instead of an
+equality against `commit`. `CommunityAssigner.AssignAsync` takes the clock; `PartitionAsync` splits into `ReadGraph`,
+`BuildGraph` and `RankAsync`, with the numbering that makes labels reproducible inside the partition step; and `Write`
+charges its batch's two ends to `commit` and returns the one commit it made, which `IndexWriter` adds to the count.
+
+**Does not ship**: nothing the pass computes. Same rows, same labels, same centrality, same counters. No incremental
+clustering, no reuse of an unchanged file's label, no cheaper partition, no coarser graph, no flag, and no new public type —
+`IndexPhase.Nested` already existed, and the five names are internal.
+
+**Evidence**: four new cases. `IndexPhaseClockTests` pins the nested set, the order of the clusterer's names, and that a step
+producing a value is timed across its await and hands the value back on both `Task<T>` and `ValueTask<T>`.
+`PhaseTimingTests` pins the wiring: the five rows on a real build, `louvain` and `degree` at exactly zero when the corpus
+declares no relation, the commit inside the phases that contain it, and the block still within the run. `CommunityAssignerTests`
+pins the positive case — two clusters, all five nonzero and nested. `IndexCommandTests` pins thirteen phases in `--json` and
+`of which nodes` on the terminal. Three counts in `CheckpointTests` moved by one, because the clusterer's commit is now
+counted. Build 0 warnings; suite 1,498 passed, 0 failed, 0 skipped — 4 this round's, against 1,494.
+
+The number is the point, and it is not the one the phase looked like. One `index --rebuild --verbose` on this repository's
+index — 740 files, 14 231 passages, 7 305 symbols, 10 806 edges, 645 communities, 525.2 MiB — reports **3 m 2 s** and **27
+commits**, and the phase reads:
+
+> `communities` 2 m 15 s (74 %): `nodes` **0.1 s**, `adjacency` **0.2 s**, `louvain` **53.4 s**, `degree` **0.0 s**,
+> `assign` **1 m 21 s**.
+
+So the two candidates are the statement loop that writes 7 305 rows back (11 ms per `UPDATE` inside one batch, six times the
+per-statement cost a file's mixed inserts pay) and the partition itself (53.4 s over a graph that `degree` crosses below the
+report's resolution). The graph reads — the suspect a write-heavy history made most likely — are 0.2 % of the phase, and a
+faster read path would buy nothing. An incremental run over the same index prints five zeros and one commit, so a skipped
+phase is distinguishable from a cheap one.
+
+**Left open, with the arithmetic attached**: `assign` is the larger lever and ours; `louvain` is the smaller one and the
+store's, and answering it means a coarser graph or a bounded candidate set — a decision about label stability, and therefore
+a spec of its own. Then the no-op `meta`/open overhead (5.5 s a turn), then the checkpoint's own size. `002` T034 stays open
+for SC-002's 5,000-file tree and SC-006's 61×.
+
 Every round shipped with lines left open on purpose. They are recorded in that round's `tasks.md`, which
 is where the argument lives; this section is the index, so nothing has to be found by grepping for an
 empty checkbox.
 
 | Round | Open | Why it is still open |
 |---|---|---|
-| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured |
+| 0 | `002` T034 | the cold build and the index inside their stated budgets — re-measured 2026-11-01: the build is 1.07 s per file (632 s awake; the 8 h 20 m was Modern Standby, not work), so SC-002's cold half misses on corpus size, while one changed file costs 119–132 s against 3 s because a writing run pays a fixed ~120 s at 13 575 passages (`002` `research.md` D17–D19). **Round 17** (`acf125e`) took the first of D21's three levers: a rebuild is now **2 m 53 s and 26 commits** rather than 17 m 51 s and 700, so the per-file cost is 236 ms and `write` 36.9 s — but a seven-file writing run still costs 2 m 18 s, because `communities` is a fixed 2 m 2 s per writing run, and that is the lever that decides whether SC-002's "one changed file inside 3 s" can ever be met. The 5 000-file synthetic tree and SC-006's 61× are still unmeasured. **Round 18** (`97294a3`) split that fixed charge instead of moving it: `communities` is `assign` **1 m 21 s** — 7 305 `UPDATE` statements, 11 ms each — plus `louvain` **53.4 s**, with the whole-graph reads at 0.3 s, so the per-writing-run charge is a write-back and a partition and neither has been moved yet |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing, git checkpoints with `/undo`, automatic compaction — three console features that need a shape this product has not chosen |
 | 1 | `003` T037 | a live re-check of both model catalogues after the providers' next revision |
