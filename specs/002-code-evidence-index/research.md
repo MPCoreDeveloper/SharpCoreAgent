@@ -966,8 +966,9 @@ every writing run is gone; what is left of that run is the commit and the open, 
 680× on the step and 26× on the phase, and a rebuild from 1 m 56 s to 55.6 s. The `louvain` step has fallen out of the
 report's share column, which is what a step that costs a tenth of a second should look like beside `write`.
 
-*The answer got better, not just faster.* Modularity 0.655454 against 0.490230 for the partition it replaces; 58 clusters
-of 70 declarations instead of 623 of 6.3; 603 of the 623 old clusters whole inside a new one, largest 196 → 494. The
+*The answer got better, not just faster.* Modularity 0.655454 against 0.490230 for the partition it replaces; 59 clusters
+of 70 declarations on the probe's copy of the graph — 58 once this round's own five files joined it — instead of 623 of
+6.3; 603 of the 623 old clusters whole inside a new one, largest 196 → 494. The
 clusters may merge, they do not scatter. That is the label-stability answer D24 deferred: a label still names the
 declarations that belong together, the numbering rule did not move (`c0…` by each community's ordinally-first member), and
 the same corpus still stores the same labels twice — which is a test (`TheSameGraphTwiceIsTheSamePartition`,

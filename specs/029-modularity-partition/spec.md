@@ -208,8 +208,8 @@ anybody back to a package's issue tracker.
 - **SC-004**: The two-cluster corpus still stores exactly two communities, and a declaration with no relation still
   stores an empty label.
 - **SC-005**: The partition this index stores scores at least 0.490230 modularity, and `communities` reports the new
-  granularity honestly: 59 clusters of 70 declarations where round 19 stored 623 of 6.3, with 603 of the old ones intact
-  inside the new.
+  granularity honestly: 58 clusters of 70 declarations — 59 on the probe's copy of the graph, before this round's own
+  files joined it — where round 19 stored 623 of 6.3, with 603 of the old ones intact inside the new.
 - **SC-006**: No type from the store's community detection namespace is named in `louvain`'s path, and the suite is green
   with the new cases counted.
 

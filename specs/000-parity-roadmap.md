@@ -853,8 +853,8 @@ nothing — and `CommunityAssigner.Rank` calling it. The store's `CommunityDetec
 **Does not ship**: nothing the pass reads and nothing around it. Same graph (every relation, undirected, unweighted), same
 `c0…` numbering by each community's ordinally-first member, same empty label for a declaration with no relation, same
 schema, indexes, flags, `--json`, commit count and report shape. What is different is the granularity of the answer, and it
-is published as a number rather than a footnote: 623 clusters of 6.3 declarations become 58 of 70, and 603 of the old ones
-sit whole inside a new one.
+is published as a number rather than a footnote: 623 clusters of 6.3 declarations become 58 of 70 (59 on the graph as it
+stood before this round's own five files were indexed), and 603 of the old ones sit whole inside a new one.
 
 **Evidence**: six new cases in `ModularityPartitionTests` — two triangles apart, two triangles bridged (still two, which is
 what separates a partition from a connected-components walk), one edge, a lone node, no single move improving the answer it
