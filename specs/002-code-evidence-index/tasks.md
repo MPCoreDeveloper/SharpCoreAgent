@@ -401,6 +401,18 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     SC-002's 5 000 files are hours rather than 89 minutes. The next slice is a checkpoint interval between commits
     (keeping the per-file failure unit bounded rather than removing it), then `communities`, then the no-op
     `meta`/open overhead. Thirteen new tests; suite 1 319 → 1 332, build clean.
+  - Note (2026-11-03, `research.md` D27): the third of D21's three slices — the no-op `meta`/open overhead — is closed,
+    and it closed by writing nothing rather than by reading less. The two scans were real (`MAX(id)` over six tables was
+    3.6 s at the writer's open, four `COUNT(*)` 2 700 ms) but they were not the cost: with the ids read lazily the `meta`
+    phase became 5 109 ms with 5 107 ms inside the commit, and forcing the counts back on split it 5 235 / 2 537 — the
+    counts had been prefetching the batch. So a pass whose rows and files are all unchanged now records nothing
+    (`IndexIdSequence.For`, `Describes` in `IndexWriter.WriteMeta`, `RefreshCounters` only when a prune removed a row,
+    `GetStatus(countOrphans:)` for a build's status), and it costs **507–662 ms** of a 645–769 ms wall with `meta`
+    1–2 ms and `commit` **0**, against 5.5 s; `--prune` that removes nothing is 465–554 ms. What is left of this task is
+    the writing run by itself: one changed file is **14.2 s with 12.8 s of commit**, and `--prune` that removes a file is
+    10.1 s. SC-006 reads **12.3×** after round 21's vacuum (73.6 MiB of file against 5.98 MB of tracked source), and
+    SC-002's 5 000-file tree and SC-003's p95 are still unmeasured. Round 22, `031-cheap-no-op-refresh`; suite
+    1 516 → 1 518, build clean at 0 warnings.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

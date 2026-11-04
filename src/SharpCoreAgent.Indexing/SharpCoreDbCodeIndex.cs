@@ -118,12 +118,27 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     /// <returns>The status, cached against the database file's stamp.</returns>
     /// <remarks>
     /// The memo lives in <see cref="IndexReadState"/> rather than in this instance, because a status is a statement
-    /// about the file and this instance will be gone after one call. Computing it means reading <c>meta</c>, counting
-    /// the stale, skipped and orphaned rows and scanning the graph: 1 347 ms on this repository's index, paid per
-    /// call for as long as the memo was per instance. The stamp is still the gate, so a build in this process or any
-    /// other is seen by the next read.
+    /// about the file and this instance will be gone after one call. The stamp is still the gate, so a build in this
+    /// process or any other is seen by the next read.
     /// </remarks>
-    internal IndexStatus GetStatus()
+    internal IndexStatus GetStatus() => GetStatus(countOrphans: true);
+
+    /// <summary>
+    /// Reports the status, optionally skipping the one part of it that reads every stored row.
+    /// </summary>
+    /// <param name="countOrphans">
+    /// Whether to count the rows that point at a file that is gone, which walks <c>chunks</c>, <c>symbols</c> and
+    /// <c>edges</c>.
+    /// </param>
+    /// <returns>The status; <see cref="IndexStatus.OrphanRows"/> is 0 when <paramref name="countOrphans"/> is false.</returns>
+    /// <remarks>
+    /// The passage table is the whole cost of a status: 14 434 rows is <c>SELECT file_id FROM chunks</c> and nothing
+    /// else. A build has just written those rows from the files it scanned, so it cannot have left one behind for a
+    /// file it did not insert, and asking it to read them back costs a turn's worth of time to answer a question the
+    /// write already answered. A reader asking about a file somebody else may have damaged is the case the count
+    /// exists for, and that is <see cref="GetStatusAsync"/>, which counts.
+    /// </remarks>
+    internal IndexStatus GetStatus(bool countOrphans)
     {
         lock (_gate)
         {
@@ -141,8 +156,12 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
                 return memo.Status;
             }
 
-            var status = ComputeStatus();
-            _state.Status = stamp is { } taken ? new IndexStatusMemo(taken, status) : null;
+            var status = ComputeStatus(countOrphans);
+
+            // Only an answer that counted the rows may be memoised. The memo is keyed by the file's stamp alone, so a
+            // status computed without the count would be handed to the next reader that asked for the exact one.
+            _state.Status = countOrphans && stamp is { } taken ? new IndexStatusMemo(taken, status) : null;
+
             return status;
         }
     }
@@ -445,7 +464,7 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
         return (IndexFreshness.Fresh, null);
     }
 
-    private IndexStatus ComputeStatus()
+    private IndexStatus ComputeStatus(bool countOrphans)
     {
         var root = _paths.WorkspaceRoot;
         var building = IndexWriterLock.IsHeldByAnotherWriter(_paths);
@@ -476,7 +495,7 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
         {
             try
             {
-                (staleFiles, skippedFiles, orphans) = CountState(OpenDatabase());
+                (staleFiles, skippedFiles, orphans) = CountState(OpenDatabase(), countOrphans);
                 (communities, centers) = CountGraph(OpenDatabase());
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -529,7 +548,14 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
         Dimensions = 0,
         SizeBytes = MeasureSize(),
     };
-    private static (int Stale, int Skipped, int Orphans) CountState(IDatabase database)
+
+    /// <summary>
+    /// Counts the file rows by state, and optionally the stored rows that belong to no file.
+    /// </summary>
+    /// <param name="database">The index to read.</param>
+    /// <param name="countOrphans">Whether to walk the tables that carry a file id.</param>
+    /// <returns>The counts, with <c>Orphans</c> 0 when <paramref name="countOrphans"/> is false.</returns>
+    private static (int Stale, int Skipped, int Orphans) CountState(IDatabase database, bool countOrphans)
     {
         var ids = new HashSet<long>();
         var stale = 0;
@@ -556,6 +582,11 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
         // An orphan is counted per stored row, because that is the number a verification reports and a rebuild
         // repairs. node_embeddings is left out on purpose: its node_id is a symbol id or a chunk id depending on
         // the row, so counting there would need a second lookup to mean anything.
+        if (!countOrphans)
+        {
+            return (stale, skipped, 0);
+        }
+
         var orphans = 0;
         foreach (var table in OrphanedByFileTables)
         {

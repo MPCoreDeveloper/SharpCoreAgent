@@ -286,8 +286,9 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
             await database.ExecuteBatchSQLAsync(ClearStatements, cancellationToken).ConfigureAwait(false);
         }
 
-        var result = await IndexWriter
-            .For(_workspace, database)
+        var writer = IndexWriter.For(_workspace, database);
+
+        var result = await writer
             .WriteAsync(budget, clock, buildId, cancellationToken)
             .ConfigureAwait(false);
 
@@ -297,7 +298,10 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         }
 
         _reader.InvalidateStatus();
-        var status = _reader.GetStatus();
+
+        // The rows were written from the files this pass scanned, so none of them points at a file the pass did not
+        // insert. Counting that anyway would read every passage back to answer what the write already answered.
+        var status = _reader.GetStatus(countOrphans: false);
 
         return new IndexBuildReport
         {
@@ -332,19 +336,25 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     /// Reports that another writer kept the lock for the whole budget.
     /// </summary>
     /// <param name="started">The timestamp the call started at.</param>
-    /// <param name="cancellationToken">Cancels the status read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>A report whose status is <see cref="IndexFreshness.Building"/>.</returns>
-    private async ValueTask<IndexBuildReport> BlockedAsync(long started, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The status skips the orphan count because another process holds the lock and is rewriting those rows; the
+    /// freshness says <see cref="IndexFreshness.Building"/> whatever the count said.
+    /// </remarks>
+    private ValueTask<IndexBuildReport> BlockedAsync(long started, CancellationToken cancellationToken)
     {
-        var blocked = await _reader.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return new IndexBuildReport
+        var blocked = _reader.GetStatus(countOrphans: false);
+
+        return ValueTask.FromResult(new IndexBuildReport
         {
             Status = blocked with { Freshness = IndexFreshness.Building },
             Incomplete = true,
             ElapsedMilliseconds = Elapsed(started),
             Notes = [BuildingNote],
-        };
+        });
     }
 
     /// <summary>
@@ -469,13 +479,20 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
 
                 commits = writer.Commits;
 
-                RefreshCounters(database);
+                // A prune that found nothing to drop left every count as it was, so there is nothing to rewrite.
+                if (removed > 0)
+                {
+                    RefreshCounters(database);
+                }
+
                 _reader.InvalidateStatus();
             }
 
             return new IndexBuildReport
             {
-                Status = _reader.GetStatus(),
+                // Written by this pass, so no row here can be orphaned by it; the count is a pass over every
+                // passage and a refresh runs before a turn.
+                Status = _reader.GetStatus(countOrphans: false),
                 Removed = removed,
                 ElapsedMilliseconds = Elapsed(started),
                 Notes = notes,
@@ -507,7 +524,7 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
         {
             return new IndexCompaction
             {
-                Status = _reader.GetStatus(),
+                Status = _reader.GetStatus(countOrphans: false),
                 Succeeded = false,
                 Note = BuildingNote,
                 ElapsedMilliseconds = Elapsed(started),
@@ -609,7 +626,9 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
 
         return new IndexCompaction
         {
-            Status = _reader.GetStatus(),
+            // The rewrite moved pages, not rows: the counts come from meta, and only the passage walk would notice a
+            // row that was already orphaned before the vacuum.
+            Status = _reader.GetStatus(countOrphans: false),
             BeforeBytes = before,
             AfterBytes = after,
             Succeeded = succeeded,
@@ -768,6 +787,10 @@ internal sealed class SharpCoreDbIndexMaintainer : ICodeIndexMaintainer, IAsyncD
     /// Rewrites the <c>meta</c> counters from the tables as they are now.
     /// </summary>
     /// <param name="database">An open index database.</param>
+    /// <remarks>
+    /// Only for a pass that dropped rows: counting <c>chunks</c> reads every passage, and a prune that removed
+    /// nothing has left the counts a build wrote (spec 002, D27).
+    /// </remarks>
     private static void RefreshCounters(IDatabase database)
     {
         IndexFileWriter.For(database).WriteMeta(

@@ -244,8 +244,10 @@ is a pre-release and an orphan row is a silent wrong answer.
 
 Rules:
 
-- Every write updates `meta['build_utc']` and `meta['build_id']` last, so a crash leaves the previous
-  build id in place and `VerifyAsync` can tell a complete build from a truncated one.
+- Every write that changes a row updates `meta['build_utc']` and `meta['build_id']` last, so a crash leaves the
+  previous build id in place and `VerifyAsync` can tell a complete build from a truncated one. A pass that finds
+  nothing to write or remove writes nothing at all, and the id it leaves names the last build whose rows are stored
+  (research D27).
 - `Building` is not stored; it is reported when the writer lock is held by another process.
 - `Corrupt` requires an explicit recovery: the maintainer deletes and recreates the database on the next
   build and records the reason in `IndexBuildReport.Notes`.

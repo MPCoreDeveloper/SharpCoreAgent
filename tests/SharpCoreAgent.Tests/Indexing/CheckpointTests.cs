@@ -163,9 +163,63 @@ public sealed class CheckpointTests
         Assert.True(result.Incomplete);
         Assert.Equal(0, result.Added);
 
-        // The checkpoint never opened a batch, so the only commit a build that wrote nothing pays is `meta`'s (D2).
+        // The checkpoint never opened a batch, so the only commit a build that wrote nothing pays is `meta`'s (D2):
+        // the pass is incomplete, and `build_state` moving off the empty seed value is what it has to record.
         Assert.Equal(1, result.Commits);
         Assert.Equal(0, CountRows(sandbox, "SELECT id FROM files"));
+    }
+
+    [Fact]
+    public async Task APassThatChangesNothingCommitsNothing()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox, 5);
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var first = await BuildAsync(sandbox, IndexWriter.CheckpointFiles, cancellationToken);
+        var built = Meta(sandbox);
+
+        var second = await BuildAsync(sandbox, IndexWriter.CheckpointFiles, cancellationToken);
+
+        Assert.Equal(0, second.Added);
+        Assert.Equal(0, second.Removed);
+        Assert.Equal(5, second.Unchanged);
+
+        // The rows are the rows the first build left and the counters it wrote are their counts, so every key but the
+        // id and the timestamp would be rewritten with the value it already holds. A batch over `meta` is not free —
+        // it reads the pages it touches, 5 s of a 5.5 s no-op pass on this repository's index — so the pass records
+        // nothing at all and leaves the last build that changed something naming itself (spec 002, D27).
+        Assert.Equal(0, second.Commits);
+
+        var after = Meta(sandbox);
+        Assert.Equal(first.Added.ToString(CultureInfo.InvariantCulture), after["file_count"]);
+        Assert.Equal(built["build_id"], after["build_id"]);
+        Assert.Equal(built["build_utc"], after["build_utc"]);
+        Assert.Equal(built["chunk_count"], after["chunk_count"]);
+    }
+
+    [Fact]
+    public async Task APassThatRemovedAFileRecountsAndRecords()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox, 5);
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await BuildAsync(sandbox, IndexWriter.CheckpointFiles, cancellationToken);
+        var built = Meta(sandbox);
+
+        File.Delete(Path.Combine(sandbox.Root, "src", "Unit04.cs"));
+
+        var pruned = await BuildAsync(sandbox, IndexWriter.CheckpointFiles, cancellationToken);
+        var after = Meta(sandbox);
+
+        // A removal leaves the stored counters describing rows that are gone, so this pass cannot borrow them: it
+        // counts the four tables and stamps an id of its own. The id changing is the evidence that `meta` was
+        // committed — nothing else in the store holds it.
+        Assert.Equal(1, pruned.Removed);
+        Assert.Equal("4", after["file_count"]);
+        Assert.NotEqual(built["chunk_count"], after["chunk_count"]);
+        Assert.NotEqual(built["build_id"], after["build_id"]);
     }
 
     [Fact]
@@ -293,6 +347,13 @@ public sealed class CheckpointTests
         var paths = IndexPaths.For(sandbox.Workspace);
         using var lease = IndexHandleCache.Acquire(paths, encryptionPassword: null, createIfMissing: false);
         return IndexSql.Query(lease.Database.Database, sql).Count;
+    }
+
+    private static Dictionary<string, string> Meta(ToolTestWorkspace sandbox)
+    {
+        var paths = IndexPaths.For(sandbox.Workspace);
+        using var lease = IndexHandleCache.Acquire(paths, encryptionPassword: null, createIfMissing: false);
+        return IndexSchema.ReadMeta(lease.Database.Database);
     }
 
     private static void WriteCorpus(ToolTestWorkspace sandbox, int files)

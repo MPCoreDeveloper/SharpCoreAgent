@@ -67,7 +67,7 @@ internal sealed class IndexFileWriter
         _database = database;
         _extractor = extractor;
         _embedder = embedder;
-        _ids = IndexIdSequence.Load(database);
+        _ids = IndexIdSequence.For(database);
         _phases = phases;
     }
 

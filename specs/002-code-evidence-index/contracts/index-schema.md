@@ -152,8 +152,11 @@ vector leg is one query and not a join.
 
 ## `meta` keys
 
-Every key is written on every build. `build_id` and `build_utc` are written **last**, inside the final
-transaction, so a crash leaves the previous values and `VerifyAsync` can detect an interrupted build.
+Every key is written by every build that has something to record, and `build_id` and `build_utc` are written
+**last**, inside the final transaction, so a crash leaves the previous values and `VerifyAsync` can detect an
+interrupted build. A build that wrote no row and removed no file records nothing when every key but those two would
+be rewritten with the value it already holds: the counters cannot have moved, and the id keeps naming the build that
+did change something (research D27). A pass that changed a row, removed a file or did not finish writes all ten.
 
 | Key | Example | Meaning |
 |---|---|---|

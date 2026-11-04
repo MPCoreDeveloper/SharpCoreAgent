@@ -445,10 +445,31 @@ internal sealed class IndexWriter
     /// they describe the rows this run left behind, and a build that re-derived them under a newer contract
     /// would otherwise be reported stale for ever against the values the first open seeded.
     /// </para>
+    /// <para>
+    /// A pass that wrote no row and removed no file has left every table exactly as the last completed build left
+    /// it, so it records the counters that build already recorded instead of reading them again: counting
+    /// <c>chunks</c> is a scan of every passage — 2 598 ms of 14 434 rows on this repository's index — spent to
+    /// confirm a number the run did not change.
+    /// </para>
+    /// <para>
+    /// And when every key but the id and timestamp would be rewritten with the value it already holds, the batch is
+    /// not committed at all. A batch over <c>meta</c> is not free: SharpCoreDB reads the pages a batch touches, so
+    /// committing ten rows against a 73 MiB index measured 1 774 ms after a run that had already read those pages and
+    /// 5 107 ms after one that had not — the price of the scans this method used to run did not leave the run, it moved
+    /// into the commit (spec 002, D27). Skipping the write is what removes the cost: nothing changed, so nothing is
+    /// recorded, and <c>meta['build_utc']</c> keeps naming the build that did change something.
+    /// </para>
+    /// <para>
+    /// The one state this cannot see is a build that died between its rows and this write: its rows are stored while
+    /// the counters and id still describe the build before it, so the next pass that writes anything recounts all four
+    /// tables and stamps a new id.
+    /// </para>
     /// </remarks>
     private void WriteMeta(string buildId, string buildUtc)
     {
-        _files.WriteMeta(
+        var stored = _written.Count == 0 && _removed == 0 ? IndexSchema.ReadMeta(_database) : null;
+
+        (string Key, string Value)[] rows =
         [
             ("schema_version", IndexSchema.Version.ToString(CultureInfo.InvariantCulture)),
             ("parser_version", IndexSchema.ParserVersion.ToString(CultureInfo.InvariantCulture)),
@@ -456,18 +477,64 @@ internal sealed class IndexWriter
             ("build_id", buildId),
             ("build_utc", buildUtc),
             ("build_state", _incomplete ? IndexSchema.PartialState : IndexSchema.CompleteState),
-            ("file_count", Counter(IndexTable.Files)),
-            ("chunk_count", Counter(IndexTable.Chunks)),
-            ("symbol_count", Counter(IndexTable.Symbols)),
-            ("edge_count", Counter(IndexTable.Edges)),
-        ]);
+            ("file_count", Counter(IndexTable.Files, stored)),
+            ("chunk_count", Counter(IndexTable.Chunks, stored)),
+            ("symbol_count", Counter(IndexTable.Symbols, stored)),
+            ("edge_count", Counter(IndexTable.Edges, stored)),
+        ];
+
+        if (stored is not null && Describes(rows, stored))
+        {
+            return;
+        }
+
+        _files.WriteMeta(rows);
     }
+
+    /// <summary>
+    /// Whether the run's keys already hold the values the index stores, its own id and timestamp aside.
+    /// </summary>
+    /// <param name="rows">The keys this run would write.</param>
+    /// <param name="stored">The keys the index holds.</param>
+    /// <returns>
+    /// <see langword="true"/> when every key but <c>build_id</c> and <c>build_utc</c> would be rewritten unchanged, so
+    /// the write could not tell a reader anything the store does not already say.
+    /// </returns>
+    private static bool Describes(
+        IEnumerable<(string Key, string Value)> rows,
+        Dictionary<string, string> stored) =>
+        rows.All(row => row.Key is "build_id" or "build_utc"
+            || (stored.TryGetValue(row.Key, out var known) && string.Equals(known, row.Value, StringComparison.Ordinal)));
 
     /// <summary>
     /// Reads one table's row count in the format <c>meta</c> stores.
     /// </summary>
     /// <param name="table">The table to count.</param>
+    /// <param name="stored">
+    /// The counters as the last completed build wrote them, when this pass changed no table, or
+    /// <see langword="null"/> when it did.
+    /// </param>
     /// <returns>The count as text.</returns>
-    private string Counter(IndexTable table) =>
-        IndexSql.Count(_database, table).ToString(CultureInfo.InvariantCulture);
+    private string Counter(IndexTable table, Dictionary<string, string>? stored) =>
+        stored is not null && stored.TryGetValue(MetaKey(table), out var known)
+            ? known
+            : IndexSql.Count(_database, table).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Gets the <c>meta</c> key that holds one table's row count.
+    /// </summary>
+    /// <param name="table">One of the four tables <c>meta</c> counts.</param>
+    /// <returns>The key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The table has no counter in <c>meta</c>.</exception>
+    private static string MetaKey(IndexTable table) => table switch
+    {
+        IndexTable.Files => "file_count",
+        IndexTable.Chunks => "chunk_count",
+        IndexTable.Symbols => "symbol_count",
+        IndexTable.Edges => "edge_count",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(table),
+            table,
+            "Only files, chunks, symbols and edges are counted in meta."),
+    };
 }

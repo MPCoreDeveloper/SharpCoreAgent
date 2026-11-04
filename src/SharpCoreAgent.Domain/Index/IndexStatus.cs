@@ -93,6 +93,13 @@ public sealed record IndexStatus
     /// An orphan is the fingerprint of a build that was interrupted between deleting a file's rows and
     /// inserting the replacements, so a non-zero count is a health fact and not an error: the status reports
     /// it, the next refresh repairs it.
+    /// <para>
+    /// Counting it reads every stored row, which is 2.6 s of the 3.1 s <c>index --status</c> takes on this
+    /// repository's index (14 434 passages). So it is counted where the number is the point — a status a reader
+    /// asks for, and <c>index --verify</c> — and left at 0 in the status a build or a compaction reports about the
+    /// rows it has just written, which cannot be orphaned by their own writer. A report that says 0 therefore
+    /// means "not counted here", not "checked and clean".
+    /// </para>
     /// </remarks>
     public int OrphanRows { get; init; }
 

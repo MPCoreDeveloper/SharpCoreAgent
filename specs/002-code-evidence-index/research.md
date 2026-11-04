@@ -1068,3 +1068,68 @@ data), and it does not fix the writing-run floor: the `meta` batch still costs 2
 before, and an open is 0.05 s either way. What it does fix is the file and everything that scans it — the first full
 `chunks` scan is 2.6 s on the bloated file and 0.007 s on the compacted one. SC-002's 5 000-file tree, SC-006's 61× and
 the commit line stay open on `002` T034, which is now one item shorter than it was.
+
+## D27 — The pass that changed nothing (2026-11-03): 5.5 s becomes 0.5–0.7 s, and neither of the two scans was the answer
+
+D22 closed with an item it could not reach: a turn-start refresh on a workspace nobody touched cost **5.5 s** to
+establish that it had nothing to do. Two numbers accounted for it — a `meta` phase of **1 774 ms** and **≈3.6 s** that
+fell outside every phase — and each was a scan:
+
+| what a no-op pass did | measured |
+|---|---|
+| `SELECT MAX(id)` over all six tables when the writer opened | `MAX(id) FROM chunks` **2 598 ms** of 14 434 rows; the six together ≈**3.6 s** |
+| four `COUNT(*)` in `WriteMeta` | `COUNT(*) FROM chunks` **2 700 ms** — a scan of every passage, and the whole of what the four counts cost |
+| the `meta` batch of ten rows | **1 774 ms** on the 73.2 MiB file D26 left |
+
+*What the probes found.* The three columns above were made to print themselves on a Release run of this repository's
+index. Reading each table's `MAX(id)` the first time that table is asked for an id instead of when the writer opens
+(`IndexIdSequence.For`) removed the 3.6 s from outside the phases — and the `meta` phase became **5 109 ms**, of which
+the commit alone was **5 107 ms**. Re-running with the four counts forced back on (`SCA_PROBE_COUNTS=1`) split the same
+period the other way: `meta` **5 235 ms**, of which the commit **2 537 ms**, which is the truth about a batch over a
+table — SharpCoreDB reads the pages a batch touches, so the 2.7 s of counting `chunks` was also, incidentally, the
+prefetch that made the following commit cheap. The scans had not left the run. They had moved into the commit, and the
+pass still cost 5.4–5.7 s across four measured runs.
+
+*What removed it.* Not reading less, but writing nothing. `WriteMeta` now compares the ten keys it would write against
+the ones the index holds — `build_id` and `build_utc` aside, because those are the run's identity rather than its
+content — and returns without a batch when every one of them already holds that value. A pass that wrote no row and
+removed no file has, by definition, left every table as the last completed build left it, so the counters it would
+write are the counters already stored and the lowest id it would need is the one already on disk. The pass then reads no
+table, counts nothing, and commits nothing.
+
+| run (Release, this repository's 771-file / 73.6 MiB index) | wall | inside | `meta` | `commit` |
+|---|---|---|---|---|
+| before this round | ≈5.6 s | 5.5 s | 1 774 ms | 1 774 ms |
+| lazy ids + borrowed counters | 5.4–5.7 s | 5.3–5.5 s | 5 109 ms | 5 107 ms |
+| the same, counts forced on | 5.4–5.7 s | 5.2–5.6 s | 5 235 ms | 2 537 ms |
+| **after: no-op pass, four runs** | **645–769 ms** | **507–662 ms** | **1–2 ms** | **0** |
+
+The phases that remain are the ones the pass is for: `scan` 80–105 ms, `load` 18–21 ms, `write` 99–120 ms, `remove`
+1 ms, and a `meta` phase of 1 ms that reads one table of fifteen rows to learn that it has nothing to say.
+
+*What a no-op pass no longer records.* `meta['build_id']` and `meta['build_utc']` keep naming the last build that
+changed something, because a run that changed nothing has no build to name. That is the honest value rather than a
+regression: `IndexReader` caches its snapshot by `build_id` and a stable id means a stable snapshot of a stable file,
+`--status` shows when the rows were actually derived, and the `--json` report of the pass still prints its own elapsed
+time and the counters it confirmed. Measured rather than argued: after two no-op passes on this repository's index,
+`index --status` printed `state fresh`, `built 2026-11-03T18:30:43Z` — the last build that wrote — and `771 indexed ·
+0 stale · 0 orphan rows` with the counters unchanged. The single state the comparison cannot see is a build that died
+between its rows and its `meta` write: its rows are stored while the counters still describe the build before it, so
+the *next* pass that writes anything recounts all four tables, and `--rebuild` is the repair for the one that never
+writes again.
+
+*What it does not fix.* A writing run still pays for its commits — adding one file to this index cost **14.2 s**, of
+which **12.8 s** was commit time spread over the row, edge, community and `meta` batches — and `index --prune` is
+**465–554 ms** when it has nothing to remove and **10.1 s** when it removes one file. Those are D21/D22's numbers on a
+different day, and the item they belong to (`002` T034) is now two short instead of three.
+
+*What proves it.* `IndexIdSequence.For` reads a table on first use, documented with the 2 598 ms it saves and the reason
+the laziness alone does not save the run; `WriteMeta` borrows the stored counters and skips the batch when nothing would
+change; `SharpCoreDbIndexMaintainer.PruneAsync` recounts only when it removed a row, because a prune that removed
+nothing has the same nothing to record. `CheckpointTests` grows by two — `APassThatChangesNothingCommitsNothing`
+(second build of an untouched corpus: 0 added, 0 removed, 5 unchanged, **0 commits**, and `file_count`/`build_id`/
+`build_utc`/`chunk_count` identical to the first build's) and `APassThatRemovedAFileRecountsAndRecords` (a deletion
+compares 5 files against 5 stored, so it recounts, writes `file_count` 4 and stamps a new id) — and
+`AZeroBudgetCommitsNothingButMeta` keeps its commit for the reason that now defines the rule: an incomplete pass moves
+`build_state` off the seed value, which is a change worth recording. Suite 1 516 → 1 518, build clean at zero warnings.
+
