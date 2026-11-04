@@ -45,5 +45,5 @@ Register the tool beside `dotnet_verify`. No change to `VerifyGate`, `CodingAgen
 ## What this slice does not do
 
 It does not choose commands for Python or Node. A verifier tool has to decide how its project is checked — the profile
-only says which files it owns and what name the gate should wait for. Built-in `python_verify`/`node_verify` tools are a
-later language slice.
+only says which files it owns and what name the gate should wait for. `040-runtime-verifiers` later supplied built-in
+`python_verify` (`unittest`) and `node_verify` (`node --test`) tools on this seam.

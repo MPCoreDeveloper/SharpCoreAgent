@@ -190,7 +190,7 @@ public sealed class PromptLibraryTests
         Assert.Contains("nothing else of this conversation", rule, StringComparison.Ordinal);
         Assert.Contains("its own transcript", rule, StringComparison.Ordinal);
         Assert.Contains("may write only when this session already allows every tool", rule, StringComparison.Ordinal);
-        Assert.Contains("dotnet_verify", rule, StringComparison.Ordinal);
+        Assert.Contains("matching verifier", rule, StringComparison.Ordinal);
 
         // Unconditional, unlike the index and the network rules: every host gets this rule because every host gets the
         // tool it names, so no flag can remove it.

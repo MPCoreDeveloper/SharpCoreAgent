@@ -14,4 +14,10 @@ public static class ToolNames
 {
     /// <summary>Gets the name of the tool that builds or tests a .NET workspace and reports the result.</summary>
     public const string DotnetVerify = "dotnet_verify";
+
+    /// <summary>Gets the name of the tool that runs Python's unittest discovery.</summary>
+    public const string PythonVerify = "python_verify";
+
+    /// <summary>Gets the name of the tool that runs Node's built-in test runner.</summary>
+    public const string NodeVerify = "node_verify";
 }

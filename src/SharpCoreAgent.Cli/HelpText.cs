@@ -65,6 +65,7 @@ internal static class HelpText
           --base-url <url>         run, chat   none        required by openai-compatible
           --credential-file <path> all         none        NAME=value keys, read first; they win over the environment
           --session <path>         run, chat   <workspace>/.sharpcoreagent/sessions/<timestamp>.json
+          --resume [path]          chat        none        list saved transcripts, or open the one named
           --no-session             run, chat   off         do not write a transcript
           --json                   run, index  off         one JSON object per event, or per index report
           --color <mode>           all         auto        auto, always, never; auto honours NO_COLOR and pipes

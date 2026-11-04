@@ -6,11 +6,11 @@
   "turns": [
     { "calls": [{ "name": "read_file", "arguments": { "path": "src/discount.js" } }] },
     { "calls": [{ "name": "replace_in_file", "arguments": { "path": "src/discount.js", "find": "return price - discount;", "replace": "return price * (1 - discount / 100);" } }] },
-    { "calls": [{ "name": "run_shell", "arguments": { "command": "node --test test/discount.test.js", "timeout_seconds": 60 } }] },
+    { "calls": [{ "name": "node_verify", "arguments": { "target": "test/discount.test.js", "timeout_seconds": 60 } }] },
     { "text": "Changed src/discount.js to apply the percentage and verified it with the visible node:test check." }
   ],
   "allowedChanges": ["src/discount.js"],
-  "verification": { "tool": "run_shell", "command": "node --test test/discount.test.js" },
+  "verification": { "tool": "node_verify" },
   "grade": {
     "runtimeProbe": "node --version",
     "command": "node --test grading/discount.hidden.test.js",

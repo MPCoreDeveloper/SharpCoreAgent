@@ -6,11 +6,11 @@
   "turns": [
     { "calls": [{ "name": "read_file", "arguments": { "path": "src/cart.py" } }] },
     { "calls": [{ "name": "replace_in_file", "arguments": { "path": "src/cart.py", "find": "return sum(prices) + len(prices)", "replace": "return sum(prices)" } }] },
-    { "calls": [{ "name": "run_shell", "arguments": { "command": "python -m unittest discover -s tests -v", "timeout_seconds": 60 } }] },
+    { "calls": [{ "name": "python_verify", "arguments": { "target": "tests", "timeout_seconds": 60 } }] },
     { "text": "Changed src/cart.py so total only sums prices; the visible unittest suite passes." }
   ],
   "allowedChanges": ["src/cart.py"],
-  "verification": { "tool": "run_shell", "command": "python -m unittest discover -s tests -v" },
+  "verification": { "tool": "python_verify" },
   "grade": {
     "runtimeProbe": "python --version",
     "command": "python -m unittest discover -s grading -v",

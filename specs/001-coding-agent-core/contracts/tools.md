@@ -44,6 +44,8 @@ Obligations:
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |
 | `run_shell` | Destructive | `CommandRun` | `command` (required), `timeout_seconds?` (default 120, max 600), `working_directory?` | `$ <command>` + exit code + captured output |
 | `dotnet_verify` | Destructive | `CommandRun` | `kind` (required: `build` or `test`), `project?`, `timeout_seconds?` (default 300, max 900) | Labelled header (exit code, passed/failed, warnings, errors, test counts, duration) + the SDK's log (012) |
+| `python_verify` | Destructive | `CommandRun` | `target?` (file or directory), `timeout_seconds?` (default 300, max 900) | Labelled header + `python -m unittest discover -v` output (040) |
+| `node_verify` | Destructive | `CommandRun` | `target?` (file or directory), `timeout_seconds?` (default 300, max 900) | Labelled header + `node --test` output (040) |
 | `git_status` | ReadOnly | none | `path?`, `timeout_seconds?` (default 30, max 120) | Porcelain index/worktree status, one `XY path` per line, renames as `old -> new` (035) |
 | `git_diff` | ReadOnly | none | `scope?` (`working`/`staged`/`head`), `path?`, `timeout_seconds?` (default 30, max 120) | One unified diff, or `no changes` (035) |
 | `task` | Destructive | the child's `Created`/`Modified`/`Deleted`/`CommandRun` | `prompt` (required), `description?` (≤ 120, defaults to the prompt's first line), `max_iterations?` (1–24, default 12) | `task · <description> · <N> model calls · <T> tokens` + the child's final message, verbatim (011) |
@@ -53,7 +55,8 @@ rounds keep their own contracts and are the reference for the tools they add: `r
 `shell_output` and `shell_stop` in `specs/003-terminal-console-agent`, the five index tools in
 `specs/002-code-evidence-index`, `fetch_url` in [`specs/008-web-fetch`](../../008-web-fetch/contracts/web-fetch.md),
 and `dotnet_verify` in [`specs/012-compiler-oracle`](../../012-compiler-oracle/contracts/dotnet-verify.md), and
-`task` in [`specs/011-subagent-task`](../../011-subagent-task/contracts/task-tool.md), and `view_image` — with the
+`python_verify`/`node_verify` in [`specs/040-runtime-verifiers`](../../040-runtime-verifiers/contracts/runtime-verifiers.md),
+and `task` in [`specs/011-subagent-task`](../../011-subagent-task/contracts/task-tool.md), and `view_image` — with the
 `ImageContent` a user message carries and the wire shape that sends it — in
 [`specs/017-image-view`](../../017-image-view/contracts/view-image.md).
 
@@ -180,7 +183,7 @@ three names and their arguments are:
 Every failure carries a stable code — `FSH001`–`FSH006` from the F# adapter, `CSH001`–`CSH006` from the C#
 adapter, `LANG001` for an extension no adapter claims, `LANG002` for an adapter that claims a file without
 implementing the port — and a hint that names a registered tool. None of them closes the turn's verification
-gate: only `dotnet_verify` does.
+gate: only the verifier registered for the edited path's profile does.
 
 ## Git evidence (035)
 
@@ -210,9 +213,10 @@ the edit. The rule lives in `VerifyGate`; the language names do not. A tool impl
 the nudge names.
 
 - **Built-in** — `dotnet_verify` declares `dotnet` / `.NET` with the existing source/build extensions. Its command,
-  schema, parser, prompt and exact unverified sentence are unchanged.
-- **Opt-in** — a host or language adapter registers a tool such as `python_verify` with `python` / `.py`; editing
-  `app.py` then creates a Python gap that only a later passing `python_verify` closes.
+  schema, parser, prompt and exact unverified sentence are unchanged. `python_verify` declares `python` / `Python` with
+  `.py` and `.pyw`, and `node_verify` declares `node` / `JavaScript` with `.js`, `.mjs` and `.cjs` (040).
+- **Opt-in** — a host or language adapter can register another tool such as `ruby_verify` with `ruby` / `.rb`; editing
+  `app.rb` then creates a Ruby gap that only a later passing `ruby_verify` closes.
 - **Order** — the last matching edit and last successful verifier result are compared by result index, so a
   verification that ran before the edit does not close it, and a failed/refused result does not count.
 - **No tool, no gate** — profiles come from registered verifier tools. A registry with none has no bindings and no

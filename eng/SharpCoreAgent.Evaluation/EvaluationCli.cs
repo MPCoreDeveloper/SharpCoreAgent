@@ -1,5 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
+using SharpCoreAgent.Domain.Errors;
+using SharpCoreAgent.Domain.Sessions;
+using SharpCoreAgent.Infrastructure.Credentials;
+using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.Evaluation;
 
@@ -18,21 +22,27 @@ internal static class EvaluationCli
             }
 
             var repository = FindRepository(options.Repository);
-            var destination = Path.GetFullPath(options.Output ?? Path.Combine(repository, "artifacts", "evals", "latest.json"));
+            var execution = ExecutionFor(options);
+            var destination = Path.GetFullPath(
+                options.Output
+                ?? Path.Combine(repository, "artifacts", "evals", execution.Live ? "live.json" : "latest.json"));
+            var recordedBaselinePath = Path.GetFullPath(Path.Combine(repository, "eng", "evals", "baseline.json"));
             var baselinePath = options.Check
-                ? Path.GetFullPath(options.Baseline ?? Path.Combine(repository, "eng", "evals", "baseline.json"))
+                ? Path.GetFullPath(options.Baseline ?? recordedBaselinePath)
                 : null;
             var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            if (string.Equals(destination, baselinePath, pathComparison))
+            if (string.Equals(destination, baselinePath, pathComparison)
+                || (execution.Live && string.Equals(destination, recordedBaselinePath, pathComparison)))
             {
-                throw new EvaluationException("--check cannot write to the baseline it reads; choose a different --output path");
+                throw new EvaluationException("the evaluation cannot write to the recorded baseline; choose a different --output path");
             }
 
+            EnsureLiveCredentials(execution);
             var baseline = baselinePath is null ? null : await ReadReportAsync(baselinePath, cancellationToken).ConfigureAwait(false);
             var scenarios = await EvaluationScenarioLoader.LoadAllAsync(
                 Path.Combine(repository, "eng", "evals", "scenarios"), options.Scenario, cancellationToken)
                 .ConfigureAwait(false);
-            var report = await EvaluationRunner.RunAllAsync(scenarios, cancellationToken).ConfigureAwait(false);
+            var report = await EvaluationRunner.RunAllAsync(scenarios, execution, cancellationToken).ConfigureAwait(false);
             await PrintAsync(report, output, cancellationToken).ConfigureAwait(false);
             await WriteReportAsync(destination, report, cancellationToken).ConfigureAwait(false);
             await output.WriteLineAsync($"report: {destination}".AsMemory(), cancellationToken).ConfigureAwait(false);
@@ -60,6 +70,11 @@ internal static class EvaluationCli
             return 4;
         }
         catch (EvaluationException ex)
+        {
+            await error.WriteLineAsync($"error: {ex.Message}".AsMemory(), CancellationToken.None).ConfigureAwait(false);
+            return 2;
+        }
+        catch (Exception ex) when (ex is CredentialFileException or ArgumentException)
         {
             await error.WriteLineAsync($"error: {ex.Message}".AsMemory(), CancellationToken.None).ConfigureAwait(false);
             return 2;
@@ -116,8 +131,48 @@ internal static class EvaluationCli
         var input = summary.InputTokens?.ToString("N0", CultureInfo.InvariantCulture) ?? "unknown";
         var tokens = summary.OutputTokens?.ToString("N0", CultureInfo.InvariantCulture) ?? "unknown";
         await output.WriteLineAsync(
-            $"metrics: recorded {input} in / {tokens} out · {summary.UnintendedChanges} unexpected change(s)".AsMemory(),
+            $"metrics: {report.Mode} {input} in / {tokens} out · {summary.UnintendedChanges} unexpected change(s)".AsMemory(),
             cancellationToken).ConfigureAwait(false);
+        if (report.Mode == "live")
+        {
+            await output.WriteLineAsync(
+                $"provider: {report.Provider ?? "unknown"} · model: {report.Model ?? "provider default"}".AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static EvaluationExecution ExecutionFor(EvaluationArguments options) => new()
+    {
+        Live = options.Live,
+        Provider = options.Provider ?? ModelCatalog.DefaultProvider,
+        Model = options.Model,
+        BaseUrl = options.BaseUrl,
+        CredentialFile = options.CredentialFile,
+        MaxIterations = options.MaxIterations ?? 40,
+        MaxOutputTokens = options.MaxOutputTokens ?? 4_000,
+        MaxTotalTokens = options.MaxTotalTokens ?? 250_000,
+    };
+
+    private static void EnsureLiveCredentials(EvaluationExecution execution)
+    {
+        if (!execution.Live)
+        {
+            return;
+        }
+
+        var descriptor = ModelCatalog.DescriptorFor(execution.Provider, execution.Model);
+        var names = ModelCatalog.CredentialNames(descriptor.Provider);
+        if (names.Count == 0)
+        {
+            return;
+        }
+
+        var store = EnvironmentCredentialStore.FromFile(execution.CredentialFile);
+        if (!names.Any(store.IsConfigured))
+        {
+            throw new EvaluationException(
+                $"live evaluation needs one of {string.Join(", ", names)} for provider '{descriptor.Provider}'");
+        }
     }
 
     private static async Task<EvaluationReport> ReadReportAsync(string path, CancellationToken cancellationToken)

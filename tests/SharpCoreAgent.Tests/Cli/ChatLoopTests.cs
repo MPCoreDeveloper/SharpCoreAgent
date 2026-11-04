@@ -1,4 +1,8 @@
 using SharpCoreAgent.Cli;
+using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Conversation;
+using SharpCoreAgent.Domain.Sessions;
+using SharpCoreAgent.Infrastructure.Sessions;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Cli;
@@ -55,6 +59,71 @@ public sealed class ChatLoopTests
             Assert.Contains("undo: restored 1 file(s), removed 0 created file(s)", output, StringComparison.Ordinal);
             Assert.Contains("/undo", HelpText.ChatCommands, StringComparison.Ordinal);
             Assert.Equal("original", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
+    [Fact]
+    public async Task ResumeWithoutAPathListsTheWorkspaceTranscripts()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, ".sharpcoreagent", "sessions", "one.json");
+        var now = DateTimeOffset.Parse("2026-11-04T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        await new JsonFileSessionStore().SaveAsync(
+            new SessionSnapshot(
+                directory.Path,
+                "demo",
+                "demo",
+                ApprovalMode.AllowAll,
+                now,
+                now,
+                [ChatMessage.User("hello")],
+                []),
+            path,
+            TestContext.Current.CancellationToken);
+
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = () => true;
+        try
+        {
+            using var console = new ConsoleScope(string.Empty);
+            var exitCode = await ProgramEntry.RunAsync(
+                ["chat", "--resume", "--workspace", directory.Path, "--provider", "demo", "--no-csharp", "--no-git"])
+                .WaitAsync(Ceiling, TestContext.Current.CancellationToken);
+
+            var output = console.Out.ToString();
+            Assert.Equal(0, exitCode);
+            Assert.Contains("1 saved session(s)", output, StringComparison.Ordinal);
+            Assert.Contains("1 message(s)", output, StringComparison.Ordinal);
+            Assert.Contains("demo/demo", output, StringComparison.Ordinal);
+            Assert.Contains(".sharpcoreagent/sessions/one.json", output, StringComparison.Ordinal);
+            Assert.Equal(string.Empty, console.Error.ToString());
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
+    [Fact]
+    public async Task ResumingAMissingTranscriptFailsBeforeACredentialIsNeeded()
+    {
+        using var directory = TempDirectory.Create();
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = () => true;
+        try
+        {
+            using var console = new ConsoleScope(string.Empty);
+            var exitCode = await ProgramEntry.RunAsync(
+                ["chat", "--resume", "missing.json", "--workspace", directory.Path, "--provider", "deepseek"])
+                .WaitAsync(Ceiling, TestContext.Current.CancellationToken);
+
+            Assert.Equal(5, exitCode);
+            Assert.Contains("does not exist", console.Error.ToString(), StringComparison.Ordinal);
+            Assert.Contains("--resume", console.Error.ToString(), StringComparison.Ordinal);
         }
         finally
         {

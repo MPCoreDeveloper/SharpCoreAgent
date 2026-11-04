@@ -346,6 +346,12 @@ internal sealed record CliOptions
     /// <summary>Gets the transcript path, or null for the timestamped default.</summary>
     public string? SessionPath { get; init; }
 
+    /// <summary>Gets a value indicating whether the developer asked to resume or list transcripts.</summary>
+    public bool Resume { get; init; }
+
+    /// <summary>Gets the transcript named by <c>--resume</c>, or null when the request was to list them.</summary>
+    public string? ResumePath { get; init; }
+
     /// <summary>Gets a value indicating whether a transcript should be written.</summary>
     public bool SaveSession { get; init; } = true;
 
@@ -597,10 +603,12 @@ internal sealed record CliOptions
             || named.Contains("reviewer")
             || named.Contains("base-url")
             || options.Fallback is not null
+            || options.Resume
+            || options.ResumePath is not null
             || options.SessionPath is not null)
         {
             throw new CliUsageException(
-                $"{command} runs no model and keeps no transcript: --provider, --model, --planner, --executor, --reviewer, --base-url, --fallback and --session do not apply.",
+                $"{command} runs no model and keeps no transcript: --provider, --model, --planner, --executor, --reviewer, --base-url, --fallback, --session and --resume do not apply.",
                 example);
         }
     }
@@ -875,6 +883,11 @@ internal sealed record CliOptions
 
             case CliCommand.Run:
                 RejectIndexFlags(options);
+                if (options.Resume)
+                {
+                    throw new CliUsageException("--resume is only valid with chat.");
+                }
+
                 var prompt = string.Join(' ', positionals).Trim();
                 if (prompt.Length == 0)
                 {
@@ -897,6 +910,11 @@ internal sealed record CliOptions
                 if (options.Json)
                 {
                     throw new CliUsageException("--json is only valid with run and ui.");
+                }
+
+                if (options.Resume && options.SessionPath is not null)
+                {
+                    throw new CliUsageException("--resume and --session name the same transcript; use one.");
                 }
 
                 return options with { Command = CliCommand.Chat };
@@ -2018,6 +2036,21 @@ internal sealed record CliOptions
 
             case "--session":
                 return options with { SessionPath = TakeValue(args, ref index, name), SaveSession = true };
+
+            case "--resume":
+                // The path is optional: --resume alone lists the workspace's transcripts, while
+                // --resume <path> opens one. A following flag is never mistaken for a missing filename.
+                if (index + 1 < args.Length && !args[index + 1].StartsWith('-'))
+                {
+                    return options with
+                    {
+                        Resume = true,
+                        ResumePath = TakeValue(args, ref index, name),
+                        SaveSession = true,
+                    };
+                }
+
+                return options with { Resume = true, SaveSession = true };
 
             case "--no-session":
                 return options with { SessionPath = null, SaveSession = false };

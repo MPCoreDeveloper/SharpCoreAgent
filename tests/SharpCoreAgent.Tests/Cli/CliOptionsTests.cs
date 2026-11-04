@@ -406,6 +406,43 @@ public sealed class CliOptionsTests
         Assert.Contains("attachment root", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResumeWithoutAPathIsAListRequest()
+    {
+        var options = CliOptions.Parse(["chat", "--resume"], NoEnvironment);
+
+        Assert.True(options.Resume);
+        Assert.Null(options.ResumePath);
+        Assert.Equal(CliCommand.Chat, options.Command);
+    }
+
+    [Fact]
+    public void ResumeWithAPathNamesTheTranscript()
+    {
+        var options = CliOptions.Parse(["chat", "--resume", "sessions/one.json"], NoEnvironment);
+
+        Assert.True(options.Resume);
+        Assert.Equal("sessions/one.json", options.ResumePath);
+    }
+
+    [Fact]
+    public void ResumeAndSessionCannotNameTwoTranscripts()
+    {
+        var error = Assert.Throws<CliUsageException>(() =>
+            CliOptions.Parse(["chat", "--resume", "one.json", "--session", "two.json"], NoEnvironment));
+
+        Assert.Contains("--resume and --session", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResumeIsAChatOnlyFlag()
+    {
+        var error = Assert.Throws<CliUsageException>(() =>
+            CliOptions.Parse(["run", "hello", "--resume"], NoEnvironment));
+
+        Assert.Contains("--resume is only valid with chat", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 
     private static bool NotInteractive() => false;

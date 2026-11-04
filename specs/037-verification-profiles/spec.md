@@ -62,7 +62,7 @@ works.
 ## Non-goals
 
 - Shipping built-in `python_verify` or `node_verify` tools and auto-detecting their commands. The profile seam is the
-  contract they will implement; command choice and project layout belong to those tools.
+  contract they implement; `040-runtime-verifiers` supplied the commands and default registration in a later slice.
 - Changing `dotnet_verify`'s build/test arguments, report parser or command host.
 - A settings-file or CLI flag for profiles. A profile is declared by a registered tool, not typed by the model.
 - Per-profile approval, custom file globs beyond extension suffixes, version-specific profiles, or language server

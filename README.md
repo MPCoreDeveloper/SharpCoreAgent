@@ -363,8 +363,8 @@ session: a standing approval belongs to the conversation that earned it.
 ## Tools
 
 `list_directory`, `read_file`, `view_image`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
-`delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `git_status`, `git_diff`, `task`,
-`file_diagnostics`, `uses_at`, `signature_at`.
+`delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `python_verify`, `node_verify`,
+`git_status`, `git_diff`, `task`, `file_diagnostics`, `uses_at`, `signature_at`.
 
 `git_status` and `git_diff` are the read-only evidence a Plan or Review turn can get without a shell. `git_status`
 reports porcelain index/worktree codes, untracked files, renames and conflicts; `git_diff` shows a unified diff for
@@ -399,10 +399,11 @@ system prompt now says so.
 
 Verification is profile-driven. A tool that implements `IVerificationTool` declares the language profiles it owns, and
 the turn gate waits for that same tool after an edit to a matching path. `dotnet_verify` declares the built-in `.NET`
-profile (`.cs`, `.vb`, `.fs`, the project/build files and solutions); its wording and behavior are unchanged. A host or
-language adapter can register a tool such as `python_verify` with `.py` profiles, and the nudge/report will name it
-without a change to the loop. The built-in registry ships only the .NET verifier; Python and JavaScript verifier tools
-are the next language slice, not an implied command.
+profile (`.cs`, `.vb`, `.fs`, the project/build files and solutions); `python_verify` declares `Python` for `.py`/`.pyw`
+and runs `python -m unittest discover`, and `node_verify` declares `JavaScript` for `.js`/`.mjs`/`.cjs` and runs
+`node --test`. Their wording and the .NET gate are unchanged. A host or language adapter can register another verifier
+with its own profile, and the nudge/report will name it without a change to the loop. A workspace that has a `.py` file
+but no Python runtime gets the verifier's start failure, not a silent unverified completion.
 
 `list_roots` reports the primary root and every read-only attached root, and it is the one tool result
 that prints an absolute path: naming the legal ones is its whole job.
@@ -494,7 +495,7 @@ undo: restored 1 file(s), removed 0 created file(s)
 
 `fetch_url` is an opt-in tool and one of three flags that add tools to the registry. `--web` adds this
 one for a single invocation, and without the flag it is absent from the registry, from the definitions the
-model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-three
+model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-five
 tools a build starts with; `--no-csharp` removes the adapter and its three tools for one invocation, and `--no-git`
 removes `git_status` and `git_diff`. `--fsharp` adds a second adapter behind
 the same three tools, and `--mcp` adds whatever each server offers. Of the optional capabilities,
@@ -925,7 +926,10 @@ Layering is enforced by project references: `Domain` → BCL only; `Application`
 A transcript is written to `<workspace>/.sharpcoreagent/sessions/<timestamp>.json` unless
 `--no-session` is passed, and it is saved after every turn. It holds messages, tool calls, approvals,
 files touched, commands run and token usage per model — never a credential. `--session <path>` resumes
-a transcript, and the file is the authority on which model the conversation was using.
+a transcript, and the file is the authority on which model the conversation was using. `--resume` lists
+the workspace's saved transcripts with their timestamps, message counts and models; `--resume <path>`
+opens one directly (a relative path is resolved inside the workspace) and a missing one is an error, not
+a new conversation.
 
 ## Security
 
@@ -1052,8 +1056,8 @@ the second duplicates settings that would drift.
   `--fallback provider:model` replays a 401 or 5xx turn once at a model the developer named, recording
   both attempts and billing the answer to the model that gave it; and the defaults are now the models
   the providers publish — `deepseek-flash` and `grok-4.7` — with the retired identifiers still listed
-  so an older transcript resumes on the model it was using. Checkpoints, `--resume` and MCP are listed
-  in those specs' `tasks.md` as not started.
+  so an older transcript resumes on the model it was using. Checkpoints and MCP landed in later
+  rounds; `--resume` listing is closed here by `041-session-resume`.
 - `specs/005-credential-file` — `--credential-file` (and `SHARPCOREAGENT_CREDENTIAL_FILE`) reads
   `NAME=value` keys from a file that survives a restart, a new shell and a second machine; its keys win
   over the environment, a bad file exits 3 naming the file and the line, and `models` uses the same
@@ -1206,6 +1210,19 @@ dynamic tool output or live-provider billing tokens.
 This is a **recorded workflow baseline**, not a live-model coding score. It proves the loop and independent grader; it does
 not claim that a provider would solve the same tasks unaided. See [`specs/033-agent-evaluation`](specs/033-agent-evaluation/spec.md)
 for the contract, update procedure and limits.
+
+A live run is opt-in and never becomes the baseline:
+
+```powershell
+$env:DEEPSEEK_API_KEY = '<key>'
+dotnet run --project eng/SharpCoreAgent.Evaluation -c Release -- --live --provider deepseek
+```
+
+It uses the production provider adapter, writes `artifacts/evals/live.json`, and accepts bounded
+`--max-iterations`, `--max-output-tokens`, `--max-total-tokens`, `--model` and `--credential-file` options.
+`--check` is deliberately rejected with `--live`; live results are reviewed by outcome and independent grading, not by
+requiring an identical transcript. A missing credential fails with exit code 2 before any request. See
+[`specs/039-live-model-evaluation`](specs/039-live-model-evaluation/spec.md).
 
 ## Spec-driven development
 

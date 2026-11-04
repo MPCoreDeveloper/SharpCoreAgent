@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SharpCoreAgent.Domain.Tools;
 
 namespace SharpCoreAgent.Evaluation;
 
@@ -117,9 +118,10 @@ internal static class EvaluationScenarioLoader
     private static void ValidateVerification(EvaluationScenario scenario)
     {
         var verification = scenario.Verification;
-        if (verification.Tool is not ("dotnet_verify" or "run_shell"))
+        if (verification.Tool is not (ToolNames.DotnetVerify or ToolNames.PythonVerify or ToolNames.NodeVerify or "run_shell"))
         {
-            throw new EvaluationException($"scenario '{scenario.Id}' verifier must be dotnet_verify or run_shell");
+            throw new EvaluationException(
+                $"scenario '{scenario.Id}' verifier must be dotnet_verify, python_verify, node_verify or run_shell");
         }
 
         if (verification.Tool == "run_shell" && string.IsNullOrWhiteSpace(verification.Command))

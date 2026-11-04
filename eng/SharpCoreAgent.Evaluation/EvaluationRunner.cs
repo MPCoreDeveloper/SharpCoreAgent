@@ -13,40 +13,60 @@ namespace SharpCoreAgent.Evaluation;
 /// <summary>Runs scenarios sequentially against the production composition root and aggregates their reports.</summary>
 internal static class EvaluationRunner
 {
+    public static Task<EvaluationReport> RunAllAsync(
+        IEnumerable<EvaluationScenario> scenarios,
+        CancellationToken cancellationToken) =>
+        RunAllAsync(scenarios, new EvaluationExecution(), cancellationToken);
+
     public static async Task<EvaluationReport> RunAllAsync(
         IEnumerable<EvaluationScenario> scenarios,
+        EvaluationExecution execution,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(execution);
         var reports = new List<ScenarioReport>();
         foreach (var scenario in scenarios)
         {
-            reports.Add(await RunScenarioAsync(scenario, cancellationToken).ConfigureAwait(false));
+            reports.Add(await RunScenarioAsync(scenario, execution, cancellationToken).ConfigureAwait(false));
         }
 
         return new EvaluationReport
         {
+            Mode = execution.Mode,
+            Provider = execution.Live ? execution.Provider : "demo",
+            Model = execution.Model,
             CreatedAtUtc = DateTimeOffset.UtcNow,
             Scenarios = reports,
             Summary = Summarize(reports),
         };
     }
 
+    public static Task<ScenarioReport> RunScenarioAsync(
+        EvaluationScenario scenario,
+        CancellationToken cancellationToken) =>
+        RunScenarioAsync(scenario, new EvaluationExecution(), cancellationToken);
+
     public static async Task<ScenarioReport> RunScenarioAsync(
         EvaluationScenario scenario,
+        EvaluationExecution execution,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scenario);
+        ArgumentNullException.ThrowIfNull(execution);
         using var fixture = EvaluationWorkspace.Create(scenario);
         var before = fixture.Snapshot();
-        var model = new RecordedChatModel(scenario.Turns);
-        using var provider = BuildProvider(fixture.Root, model, scenario.Turns.Count);
+        var recorded = execution.Live ? null : new RecordedChatModel(scenario.Turns);
+        using var provider = BuildProvider(fixture.Root, execution, recorded, scenario.Turns.Count);
         var workspace = Workspace.Create(fixture.Root);
         var registry = provider.GetRequiredService<IToolRegistry>();
         var shell = registry.Find("run_shell")
             ?? throw new EvaluationException("the production registry does not contain run_shell");
+        var model = recorded is null
+            ? provider.GetRequiredService<ModelDescriptor>()
+            : RecordedChatModel.Descriptor;
         var context = new ToolInvocationContext(workspace)
         {
-            Model = RecordedChatModel.Descriptor,
+            Model = model,
             Approval = ApprovalMode.AllowAll,
         };
 
@@ -62,7 +82,7 @@ internal static class EvaluationRunner
 
         var timer = Stopwatch.StartNew();
         var options = provider.GetRequiredService<AgentOptions>();
-        var session = new AgentSession(workspace, RecordedChatModel.Descriptor, ApprovalMode.AllowAll, options.SystemPrompt)
+        var session = new AgentSession(workspace, model, ApprovalMode.AllowAll, options.SystemPrompt)
         {
             Mode = AgentMode.Act,
         };
@@ -104,20 +124,31 @@ internal static class EvaluationRunner
         };
     }
 
-    private static ServiceProvider BuildProvider(string root, RecordedChatModel model, int turnCount)
+    private static ServiceProvider BuildProvider(
+        string root,
+        EvaluationExecution execution,
+        RecordedChatModel? recorded,
+        int turnCount)
     {
         var services = new ServiceCollection();
         services.AddSharpCoreAgent(new SharpCoreAgentOptions
         {
-            Provider = "demo",
+            Provider = execution.Live ? execution.Provider : "demo",
+            ModelId = execution.Live ? execution.Model : null,
+            BaseUrl = execution.Live ? execution.BaseUrl : null,
+            CredentialFilePath = execution.Live ? execution.CredentialFile : null,
             WorkspaceRoot = root,
             IndexEnabled = false,
             Approval = ApprovalMode.AllowAll,
-            MaxIterations = Math.Max(16, turnCount + 2),
-            MaxOutputTokensPerTurn = 4_000,
-            MaxTotalTokens = 500_000,
+            MaxIterations = execution.Live ? execution.MaxIterations : Math.Max(16, turnCount + 2),
+            MaxOutputTokensPerTurn = execution.Live ? execution.MaxOutputTokens : 4_000,
+            MaxTotalTokens = execution.Live ? execution.MaxTotalTokens : 500_000,
         });
-        services.Replace(ServiceDescriptor.Singleton<IChatModelResolver>(model));
+        if (recorded is not null)
+        {
+            services.Replace(ServiceDescriptor.Singleton<IChatModelResolver>(recorded));
+        }
+
         services.Replace(ServiceDescriptor.Singleton<IToolApprover>(new EvaluationApprover()));
         return services.BuildServiceProvider();
     }

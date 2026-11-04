@@ -61,6 +61,8 @@ internal sealed record EvaluationReport
 {
     public int SchemaVersion { get; init; } = 1;
     public string Mode { get; init; } = "recorded";
+    public string? Provider { get; init; }
+    public string? Model { get; init; }
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required IReadOnlyList<ScenarioReport> Scenarios { get; init; }
     public required EvaluationSummary Summary { get; init; }

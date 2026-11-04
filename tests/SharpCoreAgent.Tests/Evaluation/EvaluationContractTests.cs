@@ -62,8 +62,54 @@ public sealed class EvaluationContractTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(2, exit);
-        Assert.Contains("cannot write to the baseline", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("cannot write to the recorded baseline", error.ToString(), StringComparison.Ordinal);
         Assert.Equal(before, await File.ReadAllBytesAsync(baseline, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void LiveAndCheckAreMutuallyExclusive()
+    {
+        var error = Assert.Throws<EvaluationException>(() => EvaluationArguments.Parse(["--live", "--check"]));
+
+        Assert.Contains("deterministic recorded mode", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProviderOptionsRequireLive()
+    {
+        var error = Assert.Throws<EvaluationException>(() =>
+            EvaluationArguments.Parse(["--provider", "grok"]));
+
+        Assert.Contains("require --live", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LiveModeAcceptsProviderAndKeepsItsLimits()
+    {
+        var options = EvaluationArguments.Parse(
+            ["--live", "--provider", "grok", "--model", "grok-4.7", "--max-total-tokens", "12000"]);
+
+        Assert.True(options.Live);
+        Assert.Equal("grok", options.Provider);
+        Assert.Equal("grok-4.7", options.Model);
+        Assert.Equal(12_000, options.MaxTotalTokens);
+    }
+
+    [Fact]
+    public void OpenAiCompatibleLiveModeRequiresABaseUrl()
+    {
+        var error = Assert.Throws<EvaluationException>(() =>
+            EvaluationArguments.Parse(["--live", "--provider", "openai-compatible"]));
+
+        Assert.Contains("--base-url", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HelpMentionsTheLiveModeAndItsLimits()
+    {
+        Assert.Contains("--live", EvaluationArguments.HelpText, StringComparison.Ordinal);
+        Assert.Contains("--max-total-tokens", EvaluationArguments.HelpText, StringComparison.Ordinal);
+        Assert.Contains("--credential-file", EvaluationArguments.HelpText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -75,7 +121,7 @@ public sealed class EvaluationContractTests
         var exit = await EvaluationCli.RunAsync(["--help"], output, error, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, exit);
-        Assert.Contains("recorded coding-task evaluation", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("coding-task evaluation", output.ToString(), StringComparison.Ordinal);
         Assert.Equal(string.Empty, error.ToString());
     }
 }

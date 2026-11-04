@@ -4,6 +4,7 @@ using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Conversation;
+using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Infrastructure.Configuration;
@@ -45,6 +46,37 @@ internal static class ChatCommand
         using var provider = CliHost.Build(cli);
         var baseModel = provider.GetRequiredService<ModelDescriptor>();
         var credentials = provider.GetRequiredService<ICredentialStore>();
+        var store = provider.GetRequiredService<ISessionStore>();
+        var theme = CliHost.ThemeFor(cli);
+
+        // Listing is a read of the workspace's own files, not a model turn: it must work without a key, an endpoint
+        // or an MCP server. The path is resolved before the credential check for the same reason.
+        if (cli.Resume && cli.ResumePath is null)
+        {
+            return await ListSessionsAsync(workspace!.Root, store, scope.ExitToken).ConfigureAwait(false);
+        }
+
+        string? resumePath = null;
+        if (cli.ResumePath is not null)
+        {
+            resumePath = Path.IsPathRooted(cli.ResumePath)
+                ? cli.ResumePath
+                : Path.Combine(workspace!.Root, cli.ResumePath);
+        }
+
+        var path = Path.GetFullPath(
+            resumePath
+            ?? cli.SessionPath
+            ?? CliOptions.DefaultSessionPath(workspace!.Root, DateTimeOffset.UtcNow));
+
+        if (cli.Resume && !File.Exists(path))
+        {
+            await Console.Error.WriteLineAsync(
+                $"error: session '{path}' does not exist; run 'sharpcoreagent chat --resume' to list saved sessions."
+                    .AsMemory(),
+                scope.ExitToken).ConfigureAwait(false);
+            return ExitCodes.SessionIo;
+        }
 
         // `/config` writes the file `config set` writes, so the path the process resolved is threaded
         // through rather than guessed a second time from the environment.
@@ -70,13 +102,8 @@ internal static class ChatCommand
             return ExitCodes.Usage;
         }
 
-        var store = provider.GetRequiredService<ISessionStore>();
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
-        var theme = CliHost.ThemeFor(cli);
-
-        var path = Path.GetFullPath(
-            cli.SessionPath ?? CliOptions.DefaultSessionPath(workspace!.Root, DateTimeOffset.UtcNow));
 
         var (session, failure) = await OpenAsync(cli, workspace!, model, store, credentials, options, path)
             .ConfigureAwait(false);
@@ -615,6 +642,88 @@ internal static class ChatCommand
     }
 
     /// <summary>
+    /// Lists the workspace's saved transcripts, newest first, without opening a model or asking for a credential.
+    /// </summary>
+    /// <param name="root">The workspace root.</param>
+    /// <param name="store">The session store that validates and reads each document.</param>
+    /// <param name="cancellationToken">Cancels a read.</param>
+    /// <returns>Zero for a listing, or the session-I/O code when the directory cannot be read.</returns>
+    private static async Task<int> ListSessionsAsync(
+        string root,
+        ISessionStore store,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.Combine(root, ".sharpcoreagent", "sessions");
+        var display = Path.GetRelativePath(root, directory).Replace('\\', '/');
+        if (!Directory.Exists(directory))
+        {
+            await Console.Out.WriteLineAsync($"no saved sessions in {display}".AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
+            return ExitCodes.Success;
+        }
+
+        string[] files;
+        try
+        {
+            files = [.. Directory.EnumerateFiles(directory, "*.json").Order(StringComparer.Ordinal)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await Console.Error.WriteLineAsync(
+                $"error: could not list '{directory}': {ex.Message}".AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+            return ExitCodes.SessionIo;
+        }
+
+        if (files.Length == 0)
+        {
+            await Console.Out.WriteLineAsync($"no saved sessions in {display}".AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
+            return ExitCodes.Success;
+        }
+
+        var listings = new List<(string Path, SessionSnapshot? Snapshot)>();
+        foreach (var file in files)
+        {
+            try
+            {
+                listings.Add((file, await store.LoadAsync(file, cancellationToken).ConfigureAwait(false)));
+            }
+            catch (Exception ex) when (ex is SessionFormatException or IOException or UnauthorizedAccessException)
+            {
+                listings.Add((file, null));
+            }
+        }
+
+        foreach (var (path, snapshot) in listings
+            .OrderByDescending(entry => entry.Snapshot?.UpdatedAtUtc ?? DateTimeOffset.MinValue)
+            .ThenBy(entry => entry.Path, StringComparer.Ordinal))
+        {
+            var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+            if (snapshot is null)
+            {
+                await Console.Out.WriteLineAsync($"  unreadable  {relative}".AsMemory(), cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
+            var updated = snapshot.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            await Console.Out.WriteLineAsync(
+                $"  {updated}  {snapshot.Messages.Count,3} message(s)  {snapshot.Provider}/{snapshot.ModelId}  {relative}"
+                    .AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        await Console.Out.WriteLineAsync(
+            $"{listings.Count} saved session(s) in {display}".AsMemory(),
+            cancellationToken).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(
+            "resume one with: sharpcoreagent chat --resume <path>".AsMemory(),
+            cancellationToken).ConfigureAwait(false);
+        return ExitCodes.Success;
+    }
+
+    /// <summary>
     /// Opens the conversation: a new session, or the transcript named by <c>--session</c>.
     /// </summary>
     /// <param name="cli">The parsed command line.</param>
@@ -634,7 +743,7 @@ internal static class ChatCommand
         AgentOptions options,
         string path)
     {
-        if (cli.SessionPath is null || !File.Exists(path))
+        if ((cli.SessionPath is null && cli.ResumePath is null) || !File.Exists(path))
         {
             // A named but missing transcript starts a new conversation at the same path, so the first
             // turn writes a file the developer already knows how to find.

@@ -1093,3 +1093,5 @@ SharpCoreAgent.Domain.GitIgnoreMatcher.IsIgnored(string! fullPath, bool isDirect
 SharpCoreAgent.Domain.GitIgnoreMatcher.LoadAncestors(string! path) -> void
 SharpCoreAgent.Domain.GitIgnoreMatcher.LoadFrom(string! directory) -> void
 static SharpCoreAgent.Domain.GitIgnoreMatcher.For(string! root) -> SharpCoreAgent.Domain.GitIgnoreMatcher!
+const SharpCoreAgent.Domain.Tools.ToolNames.NodeVerify = "node_verify" -> string!
+const SharpCoreAgent.Domain.Tools.ToolNames.PythonVerify = "python_verify" -> string!

@@ -153,9 +153,10 @@ public static class ServiceCollectionExtensions
     /// <c>fetch_url</c> is not one of them: it is registered by <see cref="AddWeb"/> only when the developer asked for the
     /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off. The number is the
     /// surface a default build advertises — fifteen tools from rounds 1–3, <c>dotnet_verify</c> from <c>012</c>,
-    /// <c>task</c> from <c>011</c> and <c>view_image</c> from the image round — and <c>TaskToolRegistrationTests</c>
-    /// pins the whole set, so a tool cannot be added or dropped without a failing test. <see cref="AddCodeIntelligence"/>
-    /// adds the three language-neutral code tools by default, making the default process surface twenty-one.
+    /// <c>python_verify</c> and <c>node_verify</c> from <c>040</c>, <c>task</c> from <c>011</c> and <c>view_image</c>
+    /// from the image round — and <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added or
+    /// dropped without a failing test. <see cref="AddCodeIntelligence"/> adds the three language-neutral code tools by
+    /// default, making the default process surface twenty-five.
     ///
     /// The tools are singletons because they are stateless: each call resolves every path through the
     /// workspace it is handed, so one instance serves every session in the process. The five index-backed
@@ -191,6 +192,11 @@ public static class ServiceCollectionExtensions
         // Beside run_shell rather than behind a flag: the prompt tells the model to verify a .NET edit with
         // this tool, and a rule whose tool can be absent teaches the model that instructions are approximate.
         services.AddSingleton<ITool>(provider => new DotnetVerifyTool(provider.GetRequiredService<ShellProcessRegistry>()));
+
+        // The same rule for the two other runtime profiles. They share the shell's process registry so a test
+        // run is tracked and killed with every other child this process owns.
+        services.AddSingleton<ITool>(provider => new PythonVerifyTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new NodeVerifyTool(provider.GetRequiredService<ShellProcessRegistry>()));
 
         // Delegation is unconditional, beside the tools it hands on: the prompt tells the model when to call it, and a
         // rule whose tool can be absent is a rule the model learns to ignore. The registry arrives as a factory because
@@ -380,7 +386,7 @@ public static class ServiceCollectionExtensions
     /// declared".
     /// <para>
     /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface is
-    /// twenty-one workspace tools including the ones that write, start processes and delegate, and the server's
+    /// twenty-five workspace tools including the ones that write, start processes and delegate, and the server's
     /// allow-list is the statement that this container holds none of them. The published set filters this registry
     /// again, so the two gates the contract requires are both present.
     /// </para>
