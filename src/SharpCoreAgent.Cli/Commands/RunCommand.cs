@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Infrastructure.Configuration;
+using SharpCoreAgent.Infrastructure.Images;
 
 namespace SharpCoreAgent.Cli;
 
@@ -64,6 +66,35 @@ internal static class RunCommand
         var options = provider.GetRequiredService<AgentOptions>();
         var agent = provider.GetRequiredService<CodingAgent>();
 
+        var images = new List<ImageContent>();
+        foreach (var path in cli.Images)
+        {
+            if (!ImageFile.TryLoad(workspace!, path, out var image, out var error))
+            {
+                await Console.Error.WriteLineAsync($"error: {error}".AsMemory(), cancellationToken).ConfigureAwait(false);
+                return ExitCodes.Usage;
+            }
+
+            images.Add(image);
+        }
+
+        if (images.Count > 0 && !model.SupportsImages)
+        {
+            await Console.Error.WriteLineAsync(
+                $"error: {model.QualifiedName} is declared text-only in this build and cannot read an attached image.".AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+            return ExitCodes.Usage;
+        }
+
+        var imageBytes = images.Sum(image => image.ByteCount);
+        if (options.MaxTurnImageBytes > 0 && imageBytes > options.MaxTurnImageBytes)
+        {
+            await Console.Error.WriteLineAsync(
+                $"error: the attached images total {imageBytes} bytes; this build allows {options.MaxTurnImageBytes} bytes per turn.".AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+            return ExitCodes.Usage;
+        }
+
         // Before the first model call, not after: a model that is handed an empty index has no way to know it should
         // have waited, and the five retrieval tools answer with "missing" for the whole turn.
         await IndexCommand.RefreshAsync(provider, cli, cli.Quiet || cli.Json, Console.Out, cancellationToken).ConfigureAwait(false);
@@ -79,7 +110,7 @@ internal static class RunCommand
             budget: () => (session.TokensSpent, session.MaxTotalTokens ?? options.MaxTotalTokens));
 
 
-        var report = await agent.RunTurnAsync(session, cli.Prompt, observer, cancellationToken).ConfigureAwait(false);
+        var report = await agent.RunTurnAsync(session, cli.Prompt, images, observer, cancellationToken).ConfigureAwait(false);
 
         if (cli.SaveSession)
         {

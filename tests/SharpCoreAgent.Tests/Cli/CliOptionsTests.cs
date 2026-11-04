@@ -452,6 +452,18 @@ public sealed class CliOptionsTests
         Assert.Equal(0.55, options.ToSharpCoreAgentOptions().CompactAtContextFraction);
     }
 
+    [Fact]
+    public void TheImageFlagIsAcceptedOnlyForRun()
+    {
+        var options = CliOptions.Parse(["run", "look", "--image", "shot.png"], NoEnvironment);
+
+        Assert.Equal(["shot.png"], options.Images);
+
+        var error = Assert.Throws<CliUsageException>(() =>
+            CliOptions.Parse(["chat", "--image", "shot.png"], NoEnvironment));
+        Assert.Contains("--image applies to run", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 
     private static bool NotInteractive() => false;

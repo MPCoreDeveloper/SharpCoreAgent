@@ -249,6 +249,7 @@ keep working on the file that needs repairing.
 | `--workspace <path>` | run, chat, index | current directory |
 | `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
 | `--web` | run, chat | off — `fetch_url` may read http and https pages; the network is off otherwise |
+| `--image <path>` | run | none — attach a PNG, JPEG, GIF or WebP picture to the prompt; repeatable, 4 MiB each |
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
 | `--fsharp` | run, chat | off — add the F# adapter behind the default `file_diagnostics`, `uses_at` and `signature_at` tools |
 | `--no-csharp` | run, chat | C# on — remove the Roslyn adapter and its three code-intelligence tools for this invocation |

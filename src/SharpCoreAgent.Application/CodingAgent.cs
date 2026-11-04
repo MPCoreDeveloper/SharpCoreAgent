@@ -87,9 +87,26 @@ public sealed class CodingAgent
     /// <param name="observer">Receives progress; null discards it.</param>
     /// <param name="cancellationToken">Cancels the turn.</param>
     /// <returns>A report describing how the turn ended. Cancellation is reported, not thrown.</returns>
+    public Task<AgentReport> RunTurnAsync(
+        AgentSession session,
+        string prompt,
+        IAgentObserver? observer = null,
+        CancellationToken cancellationToken = default) =>
+        RunTurnAsync(session, prompt, [], observer, cancellationToken);
+
+    /// <summary>
+    /// Runs one turn with pictures attached to the prompt.
+    /// </summary>
+    /// <param name="session">The conversation to run in; it is mutated in place so partial work survives a failure.</param>
+    /// <param name="prompt">The developer's instruction.</param>
+    /// <param name="images">Pictures attached to the prompt; empty for a text-only turn.</param>
+    /// <param name="observer">Receives progress; null discards it.</param>
+    /// <param name="cancellationToken">Cancels the turn.</param>
+    /// <returns>A report describing how the turn ended. Cancellation is reported, not thrown.</returns>
     public async Task<AgentReport> RunTurnAsync(
         AgentSession session,
         string prompt,
+        IReadOnlyList<ImageContent> images,
         IAgentObserver? observer = null,
         CancellationToken cancellationToken = default)
     {
@@ -104,6 +121,7 @@ public sealed class CodingAgent
         // gets null, and the file tools behave exactly as they did before checkpoints existed.
         using var checkpoint = _checkpoints?.BeginTurn();
         var state = new TurnState(model, AlreadyShown(session), checkpoint, _verifications);
+        state.SeedImages(images);
 
         // A model that cannot call tools would answer in prose and silently ignore every tool, so the
         // turn is refused before a request is spent and before the transcript is polluted.
@@ -118,6 +136,16 @@ public sealed class CodingAgent
                 .ConfigureAwait(false);
         }
 
+        if (images is { Count: > 0 } && !model.SupportsImages)
+        {
+            return await FinishAsync(
+                sink,
+                state.Report(
+                    AgentOutcome.Failed,
+                    $"{model.QualifiedName} is declared text-only in this build and cannot read the attached image(s). Choose a model that supports images."))
+                .ConfigureAwait(false);
+        }
+
         IStreamingChatModel client;
         try
         {
@@ -129,7 +157,7 @@ public sealed class CodingAgent
             return await FinishAsync(sink, state.Report(AgentOutcome.Failed, ex.Message)).ConfigureAwait(false);
         }
 
-        session.Add(ChatMessage.User(prompt));
+        session.Add(ChatMessage.User(prompt, images));
 
         using var turnBudget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         turnBudget.CancelAfter(_options.TurnTimeout);
@@ -507,6 +535,21 @@ public sealed class CodingAgent
         /// as <see langword="null"/>, which says nobody stated a budget at all.
         /// </remarks>
         public long? ImageBytesRemaining(long ceiling) => ceiling <= 0 ? null : Math.Max(0, ceiling - _imageBytes);
+
+        /// <summary>Accounts for pictures already attached to the prompt before the first tool call.</summary>
+        /// <param name="images">The prompt's pictures, in order.</param>
+        /// <remarks>
+        /// The same counters a tool result uses: a prompt picture is re-sent on every request, so it must consume the
+        /// turn's ceiling and be treated as already shown when a tool offers the same bytes again.
+        /// </remarks>
+        public void SeedImages(IReadOnlyList<ImageContent> images)
+        {
+            foreach (var image in images)
+            {
+                _imageBytes += image.ByteCount;
+                shown.Add(image);
+            }
+        }
 
         /// <summary>Gets the pictures the conversation already carries, including the ones this turn attached.</summary>
         public IReadOnlySet<ImageContent> ImagesAlreadyShown => shown;

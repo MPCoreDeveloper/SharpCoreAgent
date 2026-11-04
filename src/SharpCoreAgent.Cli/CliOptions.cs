@@ -190,6 +190,13 @@ internal sealed record CliOptions
     /// <summary>Gets the prompt for <see cref="CliCommand.Run"/>; empty for other commands.</summary>
     public string Prompt { get; init; } = string.Empty;
 
+    /// <summary>Gets image paths attached to a <see cref="CliCommand.Run"/> prompt, in the order named.</summary>
+    /// <remarks>
+    /// Per invocation, like an attached root: a picture is authority for the task the developer is asking about, not a
+    /// preference that should be carried into every later session. The files are read and validated before the turn.
+    /// </remarks>
+    public IReadOnlyList<string> Images { get; init; } = [];
+
     /// <summary>Gets the provider key, matched case-insensitively and normalised.</summary>
     public string Provider { get; init; } = ModelCatalog.DefaultProvider;
 
@@ -955,6 +962,11 @@ internal sealed record CliOptions
                 if (options.Resume && options.SessionPath is not null)
                 {
                     throw new CliUsageException("--resume and --session name the same transcript; use one.");
+                }
+
+                if (options.Images.Count > 0)
+                {
+                    throw new CliUsageException("--image applies to run, not chat; use 'sharpcoreagent run \"...\" --image <path>'.");
                 }
 
                 return options with { Command = CliCommand.Chat };
@@ -2079,6 +2091,9 @@ internal sealed record CliOptions
                 {
                     AdditionalRoots = [.. options.AdditionalRoots, TakeValue(args, ref index, name)],
                 };
+
+            case "--image":
+                return options with { Images = [.. options.Images, TakeValue(args, ref index, name)] };
 
             case "--web":
                 return options with { Web = true };

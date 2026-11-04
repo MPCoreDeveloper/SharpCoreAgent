@@ -297,6 +297,47 @@ public sealed class CodingAgentTests
     }
 
     [Fact]
+    public async Task APromptImageArrivesOnTheFirstUserMessage()
+    {
+        using var directory = TempDirectory.Create();
+        var descriptor = Descriptor with { SupportsImages = true };
+        var model = new ScriptedModel(descriptor, [Completed("seen")]);
+        var session = new AgentSession(Workspace.Create(directory.Path), descriptor, ApprovalMode.AllowAll, "system");
+        var image = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+
+        var report = await Agent(model, []).RunTurnAsync(
+            session,
+            "look",
+            [image],
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        var sent = Assert.Single(model.Requests[0].Messages, message => message.HasImages);
+        Assert.Equal(image, Assert.Single(sent.Images));
+    }
+
+    [Fact]
+    public async Task AnImageWithATextOnlyModelFailsBeforeARequest()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [Completed("never")]);
+        var session = new AgentSession(Workspace.Create(directory.Path), Descriptor, ApprovalMode.AllowAll, "system");
+        var image = new ImageContent { MediaType = "image/png", Base64 = "AAAA" };
+
+        var report = await Agent(model, []).RunTurnAsync(
+            session,
+            "look",
+            [image],
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Failed, report.Outcome);
+        Assert.Contains("text-only", report.Detail!, StringComparison.Ordinal);
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
     public async Task APromptOverTheContextFractionIsCompactedBeforeTheRequest()
     {
         using var directory = TempDirectory.Create();
