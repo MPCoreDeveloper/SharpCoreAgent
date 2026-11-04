@@ -57,20 +57,28 @@ public sealed class GrokChatModel : OpenAiCompatibleModelBase
 
     /// <summary>Gets the models this adapter knows, in display order.</summary>
     /// <remarks>
-    /// <c>grok-4.7</c> leads because it is what the provider's model page lists (500k context, agentic
-    /// tool calling) and the model a turn runs on when none is named. <c>grok-4</c>, <c>grok-3</c> and
-    /// <c>grok-3-mini</c> remain listed, and remain resolvable, because a resumed session that used one
-    /// must still resolve: the transcript is the authority on which model a conversation was using.
+    /// <c>grok-4.7</c> leads because it is the provider's current flagship and the model a turn runs on when none is
+    /// named. The 4.6, 4.5, 4.3, 4.20 and Build identifiers are the text/chat models the live catalogue advertised on
+    /// 2026-11-04; they stay in display order after the default. <c>grok-4</c>, <c>grok-3</c> and <c>grok-3-mini</c>
+    /// remain listed, and remain resolvable, because a resumed session that used one must still resolve: the transcript
+    /// is the authority on which model a conversation was using.
     /// <para>
-    /// The three multimodal identifiers declare <see cref="ModelDescriptor.SupportsImages"/>; <c>grok-3-mini</c>
-    /// does not, because it is the one entry this build is not willing to promise reads a picture. A capability
-    /// declared too generously sends an image a provider rejects and fails the whole turn, which is worse than a
-    /// refusal that names the model — so the small model stays text-only until a measurement says otherwise.
+    /// The entries whose provider page reports Text, Image input declare <see cref="ModelDescriptor.SupportsImages"/>;
+    /// <c>grok-3-mini</c> does not, because it is the one entry this build is not willing to promise reads a picture. A
+    /// capability declared too generously sends an image a provider rejects and fails the whole turn, which is worse
+    /// than a refusal that names the model — so the small model stays text-only until a measurement says otherwise.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
         new(ProviderKey, "grok-4.7", "Grok 4.7", ContextWindow: 500_000, SupportsImages: true),
+        new(ProviderKey, "grok-4.6", "Grok 4.6", ContextWindow: 500_000, SupportsImages: true),
+        new(ProviderKey, "grok-4.5", "Grok 4.5", ContextWindow: 500_000, SupportsImages: true),
+        new(ProviderKey, "grok-4.3", "Grok 4.3", ContextWindow: 1_000_000, SupportsImages: true),
+        new(ProviderKey, "grok-4.20-0309-non-reasoning", "Grok 4.20 (non-reasoning)", ContextWindow: 1_000_000, SupportsImages: true),
+        new(ProviderKey, "grok-4.20-0309-reasoning", "Grok 4.20 (reasoning)", ContextWindow: 1_000_000, SupportsImages: true),
+        new(ProviderKey, "grok-4.20-multi-agent-0309", "Grok 4.20 (multi-agent)", ContextWindow: 1_000_000, SupportsImages: true),
+        new(ProviderKey, "grok-build-0.1", "Grok Build 0.1", ContextWindow: 256_000, SupportsImages: true),
         new(ProviderKey, "grok-4", "Grok 4", ContextWindow: 256_000, SupportsImages: true),
         new(ProviderKey, "grok-3", "Grok 3", ContextWindow: 131_072, SupportsImages: true),
         new(ProviderKey, "grok-3-mini", "Grok 3 Mini", ContextWindow: 131_072),

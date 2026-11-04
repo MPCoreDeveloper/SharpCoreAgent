@@ -66,17 +66,15 @@ public sealed class DeepSeekChatModel : OpenAiCompatibleModelBase
     /// model a conversation was using.
     /// </para>
     /// <para>
-    /// None of them declares <see cref="ModelDescriptor.SupportsImages"/>: the vision model this adapter once
-    /// shared a page with was withdrawn, and every identifier the provider lists today reads text. So
-    /// <c>view_image</c> refuses on DeepSeek with a message that names the model, instead of sending an image
-    /// part the endpoint rejects — and the refusal is the reason the model does not invent what a screenshot
-    /// showed.
+    /// <c>deepseek-flash</c> declares <see cref="ModelDescriptor.SupportsImages"/> because the provider's live
+    /// <c>/models</c> metadata lists its input modalities as text and image (deepseek-v4-pro remains text-only). The
+    /// older aliases stay text-only: they are retained for transcript resolution, not offered as a new capability.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<ModelDescriptor> Catalog { get; } =
     [
-        new(ProviderKey, "deepseek-flash", "DeepSeek Flash", ContextWindow: 1_000_000, EmitsThinking: true),
-        new(ProviderKey, "deepseek-v4-pro", "DeepSeek V4 Pro", ContextWindow: 1_000_000, EmitsThinking: true),
+        new(ProviderKey, "deepseek-flash", "DeepSeek Flash", ContextWindow: 1_048_576, SupportsImages: true, EmitsThinking: true),
+        new(ProviderKey, "deepseek-v4-pro", "DeepSeek V4 Pro", ContextWindow: 1_048_576, EmitsThinking: true),
         new(ProviderKey, "deepseek-chat", "DeepSeek Chat", ContextWindow: 128_000),
         new(ProviderKey, "deepseek-reasoner", "DeepSeek Reasoner", ContextWindow: 128_000, SupportsTools: false, EmitsThinking: true),
     ];

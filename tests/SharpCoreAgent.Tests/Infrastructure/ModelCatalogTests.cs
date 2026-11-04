@@ -54,13 +54,58 @@ public sealed class ModelCatalogTests
     }
 
     [Fact]
+    public void TheCataloguesListTheModelsTheProvidersAdvertisedOnTheLiveCheck()
+    {
+        // Checked against GET /models on 2026-11-04. The retired aliases after the first two entries are kept
+        // deliberately so old transcripts still resolve; a new live model moves this list in a reviewable diff.
+        Assert.Equal(
+            [
+                "deepseek-flash",
+                "deepseek-v4-pro",
+                "deepseek-chat",
+                "deepseek-reasoner",
+            ],
+            DeepSeekChatModel.Catalog.Select(model => model.Id));
+
+        Assert.Equal(
+            [
+                "grok-4.7",
+                "grok-4.6",
+                "grok-4.5",
+                "grok-4.3",
+                "grok-4.20-0309-non-reasoning",
+                "grok-4.20-0309-reasoning",
+                "grok-4.20-multi-agent-0309",
+                "grok-build-0.1",
+                "grok-4",
+                "grok-3",
+                "grok-3-mini",
+            ],
+            GrokChatModel.Catalog.Select(model => model.Id));
+    }
+
+    [Fact]
+    public void TheLiveContextWindowsArePinned()
+    {
+        Assert.Equal(1_048_576, DeepSeekChatModel.DescriptorFor("deepseek-flash").ContextWindow);
+        Assert.Equal(1_048_576, DeepSeekChatModel.DescriptorFor("deepseek-v4-pro").ContextWindow);
+        Assert.Equal(500_000, GrokChatModel.DescriptorFor("grok-4.6").ContextWindow);
+        Assert.Equal(1_000_000, GrokChatModel.DescriptorFor("grok-4.3").ContextWindow);
+        Assert.Equal(1_000_000, GrokChatModel.DescriptorFor("grok-4.20-0309-reasoning").ContextWindow);
+        Assert.Equal(256_000, GrokChatModel.DescriptorFor("grok-build-0.1").ContextWindow);
+    }
+
+    [Fact]
     public void OnlyTheModelsDeclaredToReadImagesSaySo()
     {
         // `view_image` asks the session's model this question before it opens a file, so the flag is a promise
         // made to a tool rather than a line of advertising: an entry that says yes must be one whose provider
         // accepts an `image_url` part, and a text-only entry has to refuse the picture rather than let the model
         // invent a description of one it never saw.
-        Assert.All(DeepSeekChatModel.Catalog, model => Assert.False(model.SupportsImages));
+        Assert.True(DeepSeekChatModel.DescriptorFor("deepseek-flash").SupportsImages);
+        Assert.False(DeepSeekChatModel.DescriptorFor("deepseek-v4-pro").SupportsImages);
+        Assert.False(DeepSeekChatModel.DescriptorFor("deepseek-chat").SupportsImages);
+        Assert.False(DeepSeekChatModel.DescriptorFor("deepseek-reasoner").SupportsImages);
         Assert.All(DemoChatModel.Catalog, model => Assert.False(model.SupportsImages));
 
         Assert.All(
