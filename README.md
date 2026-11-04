@@ -759,9 +759,10 @@ sharpcoreagent index --rebuild        # the repair for a corrupt or newer index
 
 It is one SharpCoreDB file under `.sharpcoreagent/index/` (already gitignored), written by a local,
 deterministic hashed embedder: no network and no credential, so retrieval works with the connection
-unplugged. The first build of this repository costs minutes — 513 s and 69 MiB for 445 files, 10 314
-passages and 5 284 edges, measured on 2026-10-27 — because every file is hashed, chunked and written
-row by row; a build where nothing changed is 4 s. `run` and `chat` bring the index up to date before
+unplugged. The first build of this repository costs **28.1 s and 44.9 MiB** for 735 files, 8 206
+passages and 10 490 edges, measured on 2026-11-04, because every file is hashed, chunked and written
+row by row; a build where nothing changed is **0.55 s**, and one changed file is **9.35 s** (the
+remaining gap to the 3 s target is the store commit; `002` `research.md` D30). `run` and `chat` bring the index up to date before
 the turn, bounded by `--index-budget`; when that budget runs out the last complete build stays readable
 and the next run continues where it stopped. `--no-index` turns the whole feature off for one process,
 and the seven workspace tools still answer.

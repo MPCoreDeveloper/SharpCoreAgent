@@ -269,26 +269,23 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
 - **SC-001**: On a fixed 200-file corpus with 25 recorded queries, the expected file appears in the top
   five for at least 22 of 25 queries, and first for at least 18.
 - **SC-002**: A cold index of a 5 000-file, 50 MB source tree completes in under 90 seconds on a laptop;
-  an incremental run with one changed file completes in under 3 seconds. *(Measured 2026-10-27: not met.
-  This repository — 459 files, 14.28 MiB — is a 513.5 s cold build, and the no-change rebuild is 4.0 s.
-  The criterion stands as the target; `research.md` D16 has the numbers and `tasks.md` T034 is the work.
-  Re-measured 2026-11-01 (`research.md` D17, D18, D19): the cold build is 632 s for a run that added 590 files
-  to 12 889 passages — 1.07 s per file, the rate D16 measured, so a 5 000-file tree would take ~89 min against
-  the 90 s this asks for. The incremental half misses by far more, and it is the half a developer feels: one
-  changed file takes 119–132 s against 3 s, and that cost is fixed per run and grows with the stored passages
-  rather than with the file.)*
-- **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95. *(Not measured
-  2026-10-27: the index this repository builds holds 10 314 passages, half the size, and no latency harness
-  exists. Open, not assumed; `research.md` D16.)*
+  an incremental run with one changed file completes in under 3 seconds. *(Target unchanged; current measured miss
+  accepted. 2026-11-04 (`research.md` D30): this checkout is 735 files / 8 206 passages in **28.1 s** and
+  **44.9 MiB**, which extrapolates to ~191 s for 5 000 files at the same density. One changed file is **9.35 s**
+  against 3 s; `write`/`commit` dominate and the store still reloads every table on each commit. The fixed-width
+  layout D29 measured at 3.44 s is unavailable for the single-file store in the shipped engine, so the target
+  stands as the future engine/storage work rather than a client-side tweak.)*
+- **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95. *(Not measured:
+  this repository's index holds 8 206 passages and no latency harness exists. Open, not assumed; `research.md` D16.)*
 - **SC-004**: On the five recorded benchmark tasks, a turn that uses `search_code` before `read_file`
   consumes at least 30% fewer input tokens than the same turn with the file tools only.
 - **SC-005**: 100% of evidence blocks name a path, a line range and a hash; 0 blocks point outside the
   workspace.
 - **SC-006**: The index directory stays under 50% of the size of the indexed source tree with int8
-  quantisation. *(Measured 2026-10-27: not met — 69.2 MiB for 14.28 MiB of source, 4.8× where this asks for
-  0.5×; `research.md` D16. Re-measured 2026-11-01: 350.2 MiB against 5.98 MB of tracked source, 61×, which is
-  27 KB per passage; it does not come back down — nothing vacuums the file, though one later run that rewrote 43
-  files left it byte-identical — `research.md` D17, D18.)*
+  quantisation. *(Target unchanged; current measured miss accepted. 2026-11-04 (`research.md` D30): 44.9 MiB for
+  7.40 MB of tracked source = **6.4×**; one changed file leaves **9.6×** until `index --compact`, which costs 0.605 s
+  and returns 44.9 MiB. The dead pages, not live data, explain the one-file growth; the 0.5× target remains future
+  engine/storage work.)*
 - **SC-007**: Two runs over an unchanged workspace produce identical query results and index metadata,
   the build timestamp excepted.
 - **SC-008**: With no network available, every requirement above still holds.

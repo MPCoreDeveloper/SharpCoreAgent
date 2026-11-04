@@ -1018,6 +1018,43 @@ with the round:
 |---|---|
 | the file | 787.9 MiB; `GetStorageStatistics()`: used 675.6 MiB, free 112.2 MiB, fragmentation **0.0**, 16 blocks, 1 037 pages, 28 732 free pages |
 | the rows | 14 368 passages · 7 336 symbols · 10 879 edges · 767 files; every passage's text 9 153 680 characters, its `tokens` 6 172 832, every heading, doc and signature 1.7 M — **24 MB of characters** |
+
+## D30 — The current floor, measured (2026-11-04): 28.1 s / 44.9 MiB, and why T034 is a restatement
+
+**Measured**: the shipped CLI on this checkout, .NET 11 Release, the machine D16–D29 used. The index was rebuilt with
+`index --rebuild`, then one tracked file (`src/SharpCoreAgent.Cli/HelpText.cs`) was changed and restored; the two
+incremental runs and one compaction were measured separately. Every number below is the CLI's own `--json` output.
+
+| Run | Wall | CPU | Files | Passages | Symbols | Edges | Size |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `--rebuild` | **28.1 s** | 31.5 s | 735 | 8 206 | 5 819 | 10 490 | **44.9 MiB** |
+| one changed file | **9.35 s** | 10.5 s | 735 | 8 206 | 5 819 | 10 490 | 70.6 MiB before compact |
+| no change | **0.553 s** | 0.625 s | 735 | — | — | — | 70.6 MiB before compact |
+| `index --compact` | **0.605 s** | — | — | — | — | — | **44.9 MiB** |
+
+The one-file run's phases were `write` 4.94 s, `edges` 1.33 s, `communities` 1.52 s, `meta` 1.24 s, and a nested
+`commit` of **8.46 s**. The commit is still the floor: the write phase and the `meta` batch each pay for a store
+reload, and the graph pass pays its own. The cold rebuild was `write` 19.3 s, `edges` 1.45 s, `communities` 1.93 s,
+`meta` 1.47 s and `commit` 21.7 s.
+
+**SC-002 is still missed, and the gap is now measured at both ends.** 28.1 s for 735 files is 38.3 ms per file; a
+5 000-file tree at the same density is about **191 s**, against 90 s. One changed file is **9.35 s** against 3 s. The
+fixed-width layout D29 measured at **3.44 s** remains unavailable in the shipped package: `DatabaseConfig.FixedWidthRecordLayout`
+describes directory-mode tables, and `IDatabase.MigrateTableToFixedWidth` throws `NotSupportedException` for the
+single-file (`.scdb`) storage this index uses. Shipping it needs an engine change or a storage-mode change, not a
+client-side tweak.
+
+**SC-006 is still missed.** The compacted index is 47 112 192 bytes against 7 402 054 tracked source bytes — **6.4×**
+rather than the requested 0.5×. One changed file leaves 70 668 288 bytes (9.6×) until `--compact`; the compaction is
+0.605 s and returns the same 44.9 MiB, so the growth is dead pages rather than new live data. The target is kept
+as written in the spec; this entry records the accepted miss rather than lowering it.
+
+**Decision**: T034's two possible outcomes were "inside the criteria" or "restated with the measurement attached".
+The shipped package cannot reach either number without an engine/storage change already named in D29, so the
+criterion stays the target and the measured miss is accepted. The useful path forward is the engine's fixed-width
+layout for single-file storage (or a directory-mode index with its own portability contract), not another checkpoint
+size or a larger batch.
+
 | `VacuumAsync(VacuumMode.Full)` | **787.9 → 73.2 MiB in 0.6 s**, reclaimed **714.6 MiB (90.7 %)**, and the rows unchanged: 14 368 · 7 336 · 10 879 · 767 |
 | the same call through `IndexHandleCache` | 0.7 s and the same numbers, with the process's own handle open — no `CloseAll` needed |
 | `VacuumMode.Quick`, `VacuumMode.Incremental` | **0.0 MiB**, 0.0 s each |

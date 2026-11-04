@@ -1,7 +1,7 @@
 # Quickstart: Code Evidence Index (SharpAriadne)
 
 **Audience**: a reviewer who wants to see the feature work, in order, in about ten minutes of reading —
-plus two first-index builds of roughly nine minutes each on a repository this size (§2 and §6), which
+plus two first-index builds of roughly half a minute each on a repository this size (§2 and §6), which
 are the only slow steps and can run while you read.
 
 ## 0. Prerequisites
@@ -32,16 +32,16 @@ will name your own files; `.sonarqube/` is gitignored and will not exist in a fr
 
 ```
 indexing D:/repos/MPCoreDeveloper/SharpAgent (lean, hashed-local/512)
-  scanned     445 files · 445 added · 0 changed · 0 removed · 0 unchanged · 14 skipped
-  content     10 314 passages · 4 571 symbols · 5 284 edges
-  communities 329 · centers 329
-  wrote       .sharpcoreagent/index in 513.5 s (69.2 MiB)
+  scanned     735 files · 733 added · 0 changed · 0 removed · 0 unchanged · 2 skipped
+  content     8 206 passages · 5 819 symbols · 10 490 edges
+  communities 53
+  wrote       .sharpcoreagent/index in 28.1 s wall · 31.5 s cpu (44.9 MiB)
   state       fresh
-  .sonarqube/out/ucfg2/cs/2_7.ucfgs: larger than 1024 KiB
-  … 4 more notes
+  assets/SharpCoreAgent-icon.png: binary
+  assets/SharpCoreAgent.jpg: larger than 1024 KiB
 ```
 
-That block was measured on 2026-10-27 (.NET 11, Release, one developer machine) and the labels matter
+That block was measured on 2026-11-04 (.NET 11, Release, one developer machine) and the labels matter
 more than the digits. Two things in it are easy to misread:
 
 - `scanned` is `added + changed + removed + unchanged`, so it does **not** include the files this run
@@ -56,10 +56,10 @@ more than the digits. Two things in it are easy to misread:
   `cpuMs`.
 
 **This is not a two-second command.** A first build hashes and chunks every file, extracts every
-symbol, writes roughly 31 000 rows (files, passages, symbols, edges and their vectors) into one
-SharpCoreDB file and runs community assignment over the graph: 513 s and 69 MiB for the repository
-above. It is paid once. The second run — nothing changed — is `4.0 s`, and that is the path a turn
-takes.
+symbol, writes roughly 30 000 rows (files, passages, symbols, edges and their vectors) into one
+SharpCoreDB file and runs community assignment over the graph: **28.1 s and 44.9 MiB** for the repository
+above. It is paid once. The second run — nothing changed — is **0.55 s**, and that is the path a turn
+takes. One changed file is **9.35 s**, not the 3 s target; the commit is the floor (`research.md` D30).
 
 ## 3. Confirm it is idempotent
 
@@ -68,8 +68,8 @@ dotnet run --project src\SharpCoreAgent.Cli -c Release -- index
 dotnet run --project src\SharpCoreAgent.Cli -c Release -- index --status
 ```
 
-Expected: the second build reports `0 added · 0 changed` and every file under `unchanged` — about four
-seconds instead of nine minutes, because nothing was re-read — and `--status` prints the block that
+Expected: the second build reports `0 added · 0 changed` and every file under `unchanged` — about half a
+second instead of 28 s, because nothing was re-read — and `--status` prints the block that
 answers "what do I have":
 
 ```
@@ -139,7 +139,7 @@ dotnet run --project src\SharpCoreAgent.Cli -c Release -- index --status --json
 ```
 
 `--rebuild` comes first because §5b deleted the index: it throws the database away and builds it again,
-which costs the nine minutes of §2 and is the repair for a corrupt or newer index. On the untouched
+which costs the 28 s build of §2 and is the repair for a corrupt or newer index. On the untouched
 repository it prints the same block as §2; on one where a file was edited, the same call rescues the
 drift that `--verify` reports.
 
@@ -156,7 +156,7 @@ verify · D:/repos/MPCoreDeveloper/SharpAgent
 Delete a file behind the index's back, or edit it, and the same command reports `drift`, names what
 disagrees, prints a `hint` row telling you to run `sharpcoreagent index` (or `--rebuild`) and exits `1`
 — that non-zero code is the point, because a script that checks an index before a build wants it in its
-control flow. `--rebuild` repairs anything, at the price of a first build (nine minutes here); a plain
+control flow. `--rebuild` repairs anything, at the price of a first build (28 s here); a plain
 `index` is enough when the database itself is healthy. `--status --json` prints the same facts as one
 object, for a script that would rather parse than read.
 

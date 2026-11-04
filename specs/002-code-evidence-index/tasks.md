@@ -356,7 +356,8 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
 
 ## Phase 4 — Performance (opened 2026-10-27, by measuring instead of assuming)
 
-- [ ] **T034** Bring the cold build inside SC-002 and the index inside SC-006
+- [X] **T034** Bring the cold build inside SC-002 and the index inside SC-006 — **closed 2026-11-04 as a measured
+  restatement** (`research.md` D30; see the note at the end of this section)
   - Files: `src/SharpCoreAgent.Indexing/IndexWriter.cs`, `IndexFileWriter.cs`, `IndexSql.cs`
   - Do: attribute the 49.8 ms per passage measured on this repository (`research.md` D16) across the four
     phases inside the window — extraction, the per-file transaction that writes the rows, the vector encode,
@@ -504,6 +505,13 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     no-op `meta`/open overhead; then the checkpoint's own size, where the commit is still half the write phase at 32 files
     and a larger group is a decision about the batch's buffer rather than about this machine. SC-002's 5 000-file tree and
     SC-006's 61× are still unmeasured here, so the task stays open.
+  - Note (2026-11-04, `research.md` D30): T034 closes as the second acceptable outcome — a measured restatement, not a
+    claimed improvement. On this checkout a rebuild is **28.1 s / 44.9 MiB** for 735 files and 8 206 passages; one
+    changed file is **9.35 s**, with nested `commit` **8.46 s**; a no-change run is **0.553 s**; `index --compact`
+    returns 44.9 MiB in **0.605 s**. That extrapolates to ~191 s for 5 000 files against 90 s, and 44.9 MiB against
+    7.40 MB of tracked source is **6.4×** against 0.5×. D29's fixed-width layout measured 3.44 s but is unavailable in
+    the shipped package: single-file storage raises `NotSupportedException` for `MigrateTableToFixedWidth` and the
+    config documents directory-mode tables. The targets remain in `spec.md`; the gap is recorded rather than hidden.
 
 ## Traceability — requirement to task
 
