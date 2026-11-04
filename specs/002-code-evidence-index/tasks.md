@@ -413,6 +413,19 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     10.1 s. SC-006 reads **12.3×** after round 21's vacuum (73.6 MiB of file against 5.98 MB of tracked source), and
     SC-002's 5 000-file tree and SC-003's p95 are still unmeasured. Round 22, `031-cheap-no-op-refresh`; suite
     1 516 → 1 518, build clean at 0 warnings.
+  - Note (2026-11-03): the `assign` share of the writing run is closed. The community pass rewrote both columns for
+    every declaration on every writing run — 7 305 `UpdateByPrimaryKey` calls and a commit — and it had never read the
+    answer it was overwriting: `SELECT id, key FROM symbols` was the whole of its read. It now reads `community` and
+    `centrality` with them, compares in the form a reader sees (`null` label against the empty text an unclustered row
+    reads back as, `Int32` and `DBNull` degrees through `IndexSql.AsDouble`), and opens a batch only for the rows that
+    differ, so a pass over an unchanged partition returns `Commits` 0. One changed file at 73.8 MiB is **9.2 s and 2
+    commits** with `assign` **0.0 s**, against 12.2 s, 3 commits and 2.4 s; a run whose graph does move still writes
+    (four files, two new declarations: `communities` 2.3 s, 4 commits). What is left of this task is the commit itself:
+    the write batch's **6.7 s** and `meta`'s **2.1 s** — the write commit priced at 7.2 s for a 103-line document and
+    7.6 s for a 700-line one, and 7.6 s again at 110.4 MiB, so it follows the tables a batch touches rather than the rows
+    it carries — and the run's 2 commits, where 1 would mean giving up `026`'s failure unit. The store also grew
+    73.6 → 110.4 MiB across four such runs. SC-002's 5 000-file tree, SC-006's 12.3× and SC-003's p95 are still
+    unmeasured. Round 23, `032-write-only-what-moved`; suite 1 518 → 1 520, build clean at 0 warnings.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

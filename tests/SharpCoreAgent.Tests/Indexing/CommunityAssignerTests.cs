@@ -2,6 +2,7 @@ using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Indexing;
 using SharpCoreAgent.Tests.Tools;
+using SharpCoreDB.Interfaces;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Indexing;
@@ -234,10 +235,132 @@ public sealed class CommunityAssignerTests
         Assert.Equal(string.Empty, IndexSql.AsText(lonely[0].GetValueOrDefault("community")));
     }
 
+    /// <summary>
+    /// A build whose partition has not moved writes no community row, and its commit count says so.
+    /// </summary>
+    /// <remarks>
+    /// The change is a line in a document: the passages of one file move, and no declaration and no relation does, so
+    /// the second build computes the partition the first one already stored. A document rather than a source file
+    /// because rewriting a source file rewrites its relations, and a commit for those would sit in the same count as
+    /// the one this test is about. Before round 23 such a build rewrote all of its declarations to say what they
+    /// already said, and paid a commit of its own for the privilege.
+    /// </remarks>
+    [Fact]
+    public async Task APassThatFindsTheSameAnswersWritesNothing()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteClusters(sandbox);
+        sandbox.Write("docs/Notes.md", "# Notes\n\nthe first line\n");
+        await Build(sandbox);
+
+        var before = ReadSymbols(sandbox.Workspace);
+
+        sandbox.Write("docs/Notes.md", "# Notes\n\nthe second line\n");
+
+        var result = await BuildReport(sandbox);
+
+        Assert.Equal(1, result.Changed);
+
+        // One commit for the changed document and one for `meta`. A third would be the community columns, and there is
+        // nothing to commit for them: every row already says what the pass computed.
+        Assert.Equal(2, result.Commits);
+        Assert.Equal(before, ReadSymbols(sandbox.Workspace));
+    }
+
+    /// <summary>
+    /// A label no community owns is taken back even when the graph has not moved.
+    /// </summary>
+    /// <remarks>
+    /// This is the case the unconditional rewrite used to cover by accident. A declaration whose last caller has been
+    /// deleted keeps the label of a community that no longer exists, and the build that clears it has no graph change to
+    /// point at: the comparison has to be against the answer rather than against whether the graph moved, or the stale
+    /// label survives every future build.
+    /// <para>
+    /// The stale row is written on the handle both builds share, because it is the one state a build cannot produce on
+    /// its own: asking the store for the same database twice would hand back a second handle that never saw the write.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStaleLabelIsTakenBackEvenWhenTheGraphHasNotMoved()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteClusters(sandbox);
+        sandbox.Write("docs/Notes.md", "# Notes\n\nthe first line\n");
+
+        var paths = IndexPaths.For(sandbox.Workspace);
+        using var lease = IndexHandleCache.Acquire(paths, encryptionPassword: null, createIfMissing: true);
+        var database = lease.Database.Database;
+        IndexSchema.EnsureCreated(database, paths);
+
+        await WriteAsync(sandbox, database);
+
+        var lonely = ReadSymbols(database)
+            .Single(symbol => symbol.Key.Contains(".Lonely.Name", StringComparison.Ordinal));
+        Assert.Equal(string.Empty, lonely.Community);
+
+        WriteCommunity(database, lonely.Key, "c99");
+        Assert.Equal("c99", ReadSymbols(database).Single(symbol => symbol.Key == lonely.Key).Community);
+
+        // A document changes, so a writing run happens and no declaration is re-extracted: the only row the pass has to
+        // write is the one that lies. Rewriting the file that declares it would wipe the label before the pass ran,
+        // which is the build covering for the pass rather than the pass doing its job.
+        sandbox.Write("docs/Notes.md", "# Notes\n\nthe second line\n");
+
+        var result = await WriteAsync(sandbox, database);
+
+        // The changed document, the one community row and `meta`.
+        Assert.Equal(1, result.Changed);
+        Assert.Equal(3, result.Commits);
+
+        var after = ReadSymbols(database).Single(symbol => symbol.Key == lonely.Key);
+        Assert.Equal(string.Empty, after.Community);
+    }
+
     private static async Task Build(ToolTestWorkspace sandbox)
     {
+        await BuildReport(sandbox);
+    }
+
+    private static async Task<IndexBuildReport> BuildReport(ToolTestWorkspace sandbox)
+    {
         await using var maintainer = SharpCoreDbIndexMaintainer.For(sandbox.Workspace);
-        await maintainer.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        return await maintainer.EnsureFreshAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+    }
+
+    private static ValueTask<IndexWriteResult> WriteAsync(ToolTestWorkspace sandbox, IDatabase database) =>
+        IndexWriter
+            .For(sandbox.Workspace, database)
+            .WriteAsync(
+                TimeSpan.FromMinutes(1),
+                IndexBudgetClock.ProcessorTime,
+                IndexBuildId.NewId(),
+                TestContext.Current.CancellationToken);
+
+    /// <summary>
+    /// Puts a label on one stored declaration without going through a build.
+    /// </summary>
+    /// <param name="database">The open index to change.</param>
+    /// <param name="key">The symbol key to relabel.</param>
+    /// <param name="label">The label to store.</param>
+    /// <remarks>
+    /// A build cannot be asked for this state: it writes the labels it computed. The row it leaves behind after a caller
+    /// is deleted looks exactly like this, so the test makes the row directly.
+    /// </remarks>
+    private static void WriteCommunity(IDatabase database, string key, string label)
+    {
+        var rows = IndexSql.Query(
+            database,
+            "SELECT id FROM symbols WHERE key = @key",
+            IndexSql.Parameters(("@key", key)));
+
+        Assert.Single(rows);
+        Assert.True(
+            IndexSql.Update(
+                database,
+                IndexTable.Symbols,
+                IndexSql.AsLong(rows[0].GetValueOrDefault("id")),
+                new Dictionary<string, object>(StringComparer.Ordinal) { ["community"] = label }),
+            $"'{key}' must be a row the store can find by its primary key");
     }
 
     private static void WriteClusters(ToolTestWorkspace sandbox)
@@ -276,10 +399,14 @@ public sealed class CommunityAssignerTests
     {
         var paths = IndexPaths.For(workspace);
         using var lease = IndexHandleCache.Acquire(paths, encryptionPassword: null, createIfMissing: false);
+        return ReadSymbols(lease.Database.Database);
+    }
 
+    private static List<StoredSymbol> ReadSymbols(IDatabase database)
+    {
         var symbols = new List<StoredSymbol>();
         foreach (var row in IndexSql.Query(
-                     lease.Database.Database,
+                     database,
                      "SELECT key, community, centrality FROM symbols ORDER BY key"))
         {
             symbols.Add(new StoredSymbol(

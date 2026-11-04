@@ -26,8 +26,9 @@ internal sealed record CommunityAssignment
 
     /// <summary>Gets how many times the pass asked the store to commit.</summary>
     /// <remarks>
-    /// One, or zero when the pass wrote nothing: the columns are rewritten in one batch, and that batch's commit is
-    /// the pass's only visit to the store that is not a read. It is counted here rather than in
+    /// One, or zero when the pass wrote nothing: the columns that move are rewritten in one batch, and that batch's
+    /// commit is the pass's only visit to the store that is not a read. Zero is what a pass over an unchanged partition
+    /// reports, since every row already says what it computed (round 23). It is counted here rather than in
     /// <see cref="IndexFileWriter"/> because the pass does not go through that writer, and a commit nobody counts is
     /// a commit the build's own number would quietly leave out (spec 027, D4).
     /// </remarks>
@@ -71,7 +72,7 @@ internal static class CommunityAssigner
     /// <summary>The prefix of a stored label; the number is the community's rank in this build.</summary>
     private const string LabelPrefix = "c";
 
-    private const string SelectSymbols = "SELECT id, key FROM symbols";
+    private const string SelectSymbols = "SELECT id, key, community, centrality FROM symbols";
     private const string SelectEdges = "SELECT source, target FROM edges";
 
     /// <summary>
@@ -83,9 +84,10 @@ internal static class CommunityAssigner
     /// <returns>The counters of the pass.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="database"/> or <paramref name="phases"/> is null.</exception>
     /// <remarks>
-    /// Every row is rewritten, including the isolated ones, because a previous build may have clustered a
-    /// declaration whose last caller has since been deleted: leaving that label behind would answer with a
-    /// community that no longer exists.
+    /// A row is rewritten when the answer it holds is not the one this pass computed, isolated declarations
+    /// included: a previous build may have clustered a declaration whose last caller has since been deleted, and
+    /// leaving that label behind would answer with a community that no longer exists. A pass that finds the same
+    /// partition on the same graph writes nothing at all, and its counters say so (round 23).
     /// <para>
     /// The clock is passed in rather than created here because a build has one clock and this pass's time has to land
     /// in the same report as the steps around it. Its five steps arrive as nested rows under <c>communities</c>, which
@@ -273,12 +275,19 @@ internal static class CommunityAssigner
     /// </summary>
     /// <param name="database">The index to read.</param>
     /// <returns>The declarations; a row without an id or a key is dropped, because it cannot be addressed.</returns>
+    /// <remarks>
+    /// The label and the degree travel with the node because the pass decides what to write by comparing them with what
+    /// it computed: a build that reads only the addresses cannot tell a column that has to move from one that already
+    /// says the right thing, and rewrites every row instead (round 23).
+    /// </remarks>
     private static List<SymbolNode> ReadSymbols(IDatabase database) =>
     [
         .. IndexSql.Query(database, SelectSymbols)
             .Select(row => new SymbolNode(
                 IndexSql.AsLong(row.GetValueOrDefault("id")),
-                IndexSql.AsText(row.GetValueOrDefault("key"))))
+                IndexSql.AsText(row.GetValueOrDefault("key")),
+                IndexSql.AsText(row.GetValueOrDefault("community")),
+                IndexSql.AsDouble(row.GetValueOrDefault("centrality"))))
             .Where(symbol => symbol.Id > 0 && symbol.Key.Length > 0)
             .OrderBy(symbol => symbol.Key, StringComparer.Ordinal)
             .ThenBy(symbol => symbol.Id),
@@ -345,16 +354,28 @@ internal static class CommunityAssigner
     }
 
     /// <summary>
-    /// Writes both columns for every declaration in one batch.
+    /// Writes both columns for every declaration whose stored answer this pass would change.
     /// </summary>
     /// <param name="database">The index to write.</param>
     /// <param name="phases">The clock the batch's commit is recorded on.</param>
-    /// <param name="symbols">The declarations, in the order the arrays are indexed by.</param>
+    /// <param name="symbols">The declarations, in the order the arrays are indexed by, each with the answer it holds.</param>
     /// <param name="labels">The label of each declaration; empty for one with no cluster.</param>
     /// <param name="centrality">The normalized degree of each declaration.</param>
-    /// <returns>One: the pass asked the store to commit once.</returns>
+    /// <returns>One when the batch ran, zero when every row already said what this pass computed.</returns>
     /// <remarks>
     /// One batch, so an interrupted pass leaves the previous labels rather than half of the new ones.
+    /// <para>
+    /// A row is rewritten when its stored label or its stored degree is not the one this pass computed. Two values that
+    /// agree are not written, because a row that already says what the pass would say is a write the store pays for and
+    /// nobody can observe — and on this repository every writing run rewrote all 7 305 declarations that way, for 2.4 s
+    /// and a commit of its own on top of the 12.2 s a one-file refresh already cost (round 23).
+    /// </para>
+    /// <para>
+    /// The comparison is against the answer rather than against the graph, which is what keeps a stale label from
+    /// surviving: a declaration whose last caller has been deleted holds a label no community owns any more, and it
+    /// differs from the empty one this pass computed, so it is rewritten even though nothing about the graph moved in
+    /// the direction the label came from.
+    /// </para>
     /// <para>
     /// Each row is written by its primary key rather than by a statement. A statement costs the store a formatter pass over
     /// every value, a parse of the text that produces, and a bind of the values it parsed back out — 11 ms per declaration
@@ -377,19 +398,41 @@ internal static class CommunityAssigner
         string[] labels,
         double[] centrality)
     {
+        var moves = new List<(long Id, string Label, double Degree)>();
+        for (var index = 0; index < symbols.Count; index++)
+        {
+            // A declaration with no cluster has no label: the pass leaves it null and the store keeps "no value", which
+            // reads back as empty text. The two are one answer, so the comparison is made in the form a reader sees
+            // rather than in the shape the writer happened to use.
+            var label = labels[index] ?? string.Empty;
+
+            if (string.Equals(symbols[index].Community, label, StringComparison.Ordinal)
+                && SameDegree(symbols[index].Centrality, centrality[index]))
+            {
+                continue;
+            }
+
+            moves.Add((symbols[index].Id, labels[index], centrality[index]));
+        }
+
+        if (moves.Count == 0)
+        {
+            return 0;
+        }
+
         phases.Measure(IndexPhases.Commit, database.BeginBatchUpdate);
         try
         {
-            for (var index = 0; index < symbols.Count; index++)
+            foreach (var (id, label, degree) in moves)
             {
                 IndexSql.Update(
                     database,
                     IndexTable.Symbols,
-                    symbols[index].Id,
+                    id,
                     new Dictionary<string, object>(StringComparer.Ordinal)
                     {
-                        ["community"] = labels[index],
-                        ["centrality"] = centrality[index],
+                        ["community"] = label,
+                        ["centrality"] = degree,
                     });
             }
 
@@ -403,8 +446,30 @@ internal static class CommunityAssigner
         }
     }
 
-    /// <summary>One declaration as the pass needs it: the row it is written back to, and its ordering key.</summary>
+    /// <summary>
+    /// Answers whether a stored degree is the number this pass computed.
+    /// </summary>
+    /// <param name="stored">The value the row holds.</param>
+    /// <param name="computed">The value the pass just computed.</param>
+    /// <returns><see langword="true"/> when the two are the same number.</returns>
+    /// <remarks>
+    /// The same number, not an approximate one: a tolerance would call a degree that moved by less than the tolerance
+    /// unchanged and leave the old value in the row, which is the one outcome this comparison exists to prevent. The
+    /// bits are compared because the alternative is a floating-point equality check whose intent a reader has to take on
+    /// trust, and because these two values are one arithmetic run repeated rather than two measurements of a quantity.
+    /// A pair that is equal but has different bits, such as <c>0</c> and <c>-0</c>, costs a row: never an answer.
+    /// </remarks>
+    private static bool SameDegree(double stored, double computed) =>
+        BitConverter.DoubleToInt64Bits(stored) == BitConverter.DoubleToInt64Bits(computed);
+
+    /// <summary>One declaration as the pass needs it: the row it is written back to, its ordering key, and its answer.</summary>
     /// <param name="Id">The <c>symbols.id</c>.</param>
     /// <param name="Key">The unique key the declarations are ordered by.</param>
-    private readonly record struct SymbolNode(long Id, string Key);
+    /// <param name="Community">The label the row holds now; empty when it holds none.</param>
+    /// <param name="Centrality">The degree the row holds now.</param>
+    /// <remarks>
+    /// The last two are the row's current answer rather than the pass's, which is the whole point of carrying them: the
+    /// write compares them with what the algorithm returned and skips the rows that already agree.
+    /// </remarks>
+    private readonly record struct SymbolNode(long Id, string Key, string Community, double Centrality);
 }

@@ -205,6 +205,19 @@ internal static class IndexSql
     public static string AsText(object? value) => Normalise(value)?.ToString() ?? string.Empty;
 
     /// <summary>
+    /// Reads a value as a number with a fractional part.
+    /// </summary>
+    /// <param name="value">The raw column value, possibly <see langword="null"/> or <see cref="DBNull"/>.</param>
+    /// <returns>The value, or <c>0</c> when the column is absent.</returns>
+    /// <remarks>
+    /// A <c>REAL</c> column reads back as the double it was written as, so a value compared against the one this
+    /// assembly would write is either the same number or a different one; there is no tolerance to pick. A caller that
+    /// compares two of these and gets it wrong writes a row it did not have to, which is a cost rather than an answer.
+    /// </remarks>
+    public static double AsDouble(object? value) =>
+        Normalise(value) is { } present ? Convert.ToDouble(present, CultureInfo.InvariantCulture) : 0;
+
+    /// <summary>
     /// Reads a value as optional text.
     /// </summary>
     /// <param name="value">The raw column value, possibly <see langword="null"/> or <see cref="DBNull"/>.</param>
