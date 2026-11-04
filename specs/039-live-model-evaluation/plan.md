@@ -48,7 +48,9 @@ never written to stdout, stderr or the report.
 
 The recorded baseline comparer rejects non-recorded reports. Live mode sets `mode: "live"` and is therefore ineligible
 for `--check` both by argument validation and by the baseline reader. Live reports are dated observations; the three
-task grades and the `unexpectedChanges` list are the reviewable result.
+task grades and the `unexpectedChanges` list are the reviewable result. Expected files must exist in both modes, but a
+live run does not require the exact source fragment recorded in the scenario: the independent grading command decides
+whether an alternative implementation is correct.
 
 ## Safety
 

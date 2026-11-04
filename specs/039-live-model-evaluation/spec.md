@@ -49,7 +49,9 @@ baseline would make the default gate nondeterministic and would turn a provider 
 - **FR-007**: The report records `mode: "live"`, the provider and the selected model. Existing recorded reports keep
   `mode: "recorded"` and remain schema version 1.
 - **FR-008**: Independent grading is identical in both modes. A live task qualifies only when the expected workspace
-  changes, verification evidence and post-turn grading command all pass.
+  changes, verification evidence and post-turn grading command all pass. File existence is checked in both modes;
+  exact source-fragment assertions are recorded-only, because a live model may choose an equivalent implementation and
+  the independent behavior check is the authority.
 - **FR-009**: A live run is never a CI gate by default. The repository's normal commands and `--check` remain offline and
   deterministic.
 - **FR-010**: Cancellation still returns exit code 4; provider/task failures return 1; malformed arguments return 2.

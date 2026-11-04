@@ -92,8 +92,13 @@ internal static class EvaluationRunner
 
         var changes = fixture.ChangesSince(before);
         var unexpected = EvaluationGrader.UnexpectedChanges(scenario, changes);
-        var failures = await EvaluationGrader.CheckTurnAsync(scenario, fixture.Root, report, unexpected, cancellationToken)
-            .ConfigureAwait(false);
+        var failures = await EvaluationGrader.CheckTurnAsync(
+            scenario,
+            fixture.Root,
+            report,
+            unexpected,
+            cancellationToken,
+            requireSourceFragments: !execution.Live).ConfigureAwait(false);
 
         fixture.MaterialiseGrading(scenario);
         var grade = await EvaluationGrader.GradeAsync(scenario, shell, context, cancellationToken).ConfigureAwait(false);

@@ -66,8 +66,9 @@ reports are not accepted by `ReadReportAsync` as a baseline; the mode check is d
 
 ## Comparison rules
 
-- Recorded: equality on scenario status/outcome, verification, unexpected changes and semantic metrics, as implemented
-  by `BaselineComparer`.
-- Live: independent grading plus human review. Different iteration counts, token counts, tool order and final prose
-  are expected and are not regressions.
+- Recorded: equality on scenario status/outcome, verification, unexpected changes, semantic metrics and the exact
+  expected source fragments, as implemented by `BaselineComparer`/`EvaluationGrader`.
+- Live: independent grading plus human review. Expected files must exist, but their exact source text is not required;
+  a different equivalent implementation is accepted when the independent behavior check passes. Different iteration
+  counts, token counts, tool order and final prose are expected and are not regressions.
 - No live report is promoted automatically.

@@ -1221,7 +1221,9 @@ dotnet run --project eng/SharpCoreAgent.Evaluation -c Release -- --live --provid
 It uses the production provider adapter, writes `artifacts/evals/live.json`, and accepts bounded
 `--max-iterations`, `--max-output-tokens`, `--max-total-tokens`, `--model` and `--credential-file` options.
 `--check` is deliberately rejected with `--live`; live results are reviewed by outcome and independent grading, not by
-requiring an identical transcript. A missing credential fails with exit code 2 before any request. See
+requiring an identical transcript. Expected files must exist, but an equivalent implementation is accepted when the
+independent behavior check passes; exact source-fragment assertions remain recorded-only. A missing credential fails
+with exit code 2 before any request. See
 [`specs/039-live-model-evaluation`](specs/039-live-model-evaluation/spec.md).
 
 ## Spec-driven development

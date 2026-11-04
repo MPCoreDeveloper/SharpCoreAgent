@@ -24,7 +24,8 @@ internal static class EvaluationGrader
         string root,
         AgentReport report,
         IReadOnlyList<string> unexpected,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool requireSourceFragments = true)
     {
         var failures = new List<string>();
         if (report.Outcome != AgentOutcome.Completed)
@@ -44,6 +45,14 @@ internal static class EvaluationGrader
             if (!File.Exists(path))
             {
                 failures.Add($"expected file is missing: {expected.Path}");
+                continue;
+            }
+
+            // A recorded scenario pins the exact edit it was authored with. A live model may choose a
+            // different but equivalent implementation, so live mode checks that the file exists and lets
+            // the independent grading command decide whether the behaviour is right.
+            if (!requireSourceFragments)
+            {
                 continue;
             }
 
