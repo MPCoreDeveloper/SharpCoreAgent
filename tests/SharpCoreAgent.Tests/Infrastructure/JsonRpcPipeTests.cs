@@ -73,6 +73,26 @@ public sealed class JsonRpcPipeTests
     }
 
     [Fact]
+    public async Task ALoggingNotificationIsRenderedAsAServerLogLine()
+    {
+        var log = new List<string>();
+        using var pair = new PipePair();
+        await using var pipe = new JsonRpcPipe(pair.ClientInput, pair.ClientOutput, log.Add);
+        var server = new StreamReader(pair.ServerInput, Encoding.UTF8);
+        var writer = new StreamWriter(pair.ServerOutput, new UTF8Encoding(false)) { AutoFlush = true };
+
+        var pending = pipe.RequestAsync("tools/list", null, TimeSpan.FromSeconds(5), Token);
+        var id = ReadId(await ReadAsync(server));
+        await SendAsync(
+            writer,
+            """{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"warning","logger":"test","data":"careful"}}""");
+        await SendAsync(writer, Answer(id, "fine"));
+
+        await pending;
+        Assert.Contains(log, line => line.Contains("[warning] test: careful", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ANotificationIsWrittenWithoutAnIdAndWithItsParameters()
     {
         using var pair = new PipePair();

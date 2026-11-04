@@ -102,7 +102,7 @@ next pass has a real list rather than a memory.
 
 ## Deliberately not in this round
 
-- [ ] T034 MCP resources, prompts, sampling and logging.
+- [ ] T034 MCP resources, prompts and sampling. Logging notifications are done in `046-mcp-log-notifications`.
 - [ ] T035 Remote transports (HTTP+SSE, streamable HTTP).
 - [ ] T036 Server mode, reconnection and supervision.
 - [ ] T037 A declarative server list read from a file.

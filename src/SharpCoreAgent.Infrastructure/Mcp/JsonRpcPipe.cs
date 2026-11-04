@@ -230,7 +230,18 @@ internal sealed class JsonRpcPipe : IAsyncDisposable
 
             if (hasMethod)
             {
-                _log?.Invoke(string.Create(CultureInfo.InvariantCulture, $"notification: {method.GetString()}"));
+                var methodName = method.GetString() ?? string.Empty;
+                if (string.Equals(methodName, "notifications/message", StringComparison.Ordinal)
+                    && root.TryGetProperty("params", out var parameters)
+                    && parameters.ValueKind == JsonValueKind.Object)
+                {
+                    _log?.Invoke(ServerLog(parameters));
+                }
+                else
+                {
+                    _log?.Invoke(string.Create(CultureInfo.InvariantCulture, $"notification: {methodName}"));
+                }
+
                 return;
             }
 
@@ -268,6 +279,34 @@ internal sealed class JsonRpcPipe : IAsyncDisposable
 
             waiter.TrySetException(new JsonRpcException(0, "the answer carries neither result nor error"));
         }
+    }
+
+    private static string ServerLog(JsonElement parameters)
+    {
+        var level = parameters.TryGetProperty("level", out var levelValue) && levelValue.ValueKind == JsonValueKind.String
+            ? levelValue.GetString() ?? "info"
+            : "info";
+        var logger = parameters.TryGetProperty("logger", out var loggerValue) && loggerValue.ValueKind == JsonValueKind.String
+            ? loggerValue.GetString()
+            : null;
+        string message;
+        if (!parameters.TryGetProperty("data", out var data))
+        {
+            message = string.Empty;
+        }
+        else
+        {
+            message = data.ValueKind == JsonValueKind.String ? data.GetString() ?? string.Empty : data.GetRawText();
+        }
+
+        if (message.Length > 500)
+        {
+            message = message[..500] + "…";
+        }
+
+        return logger is { Length: > 0 }
+            ? $"server log [{level}] {logger}: {message}"
+            : $"server log [{level}]: {message}";
     }
 
     private void Answer(string method, JsonElement id)
