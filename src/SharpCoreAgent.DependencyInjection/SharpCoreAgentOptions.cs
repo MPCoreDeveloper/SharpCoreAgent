@@ -85,6 +85,12 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the session-wide token budget. Default 10 000 000.</summary>
     public long MaxTotalTokens { get; init; } = 10_000_000;
 
+    /// <summary>
+    /// Gets the fraction of the model's advertised context window at which the loop compacts before a request.
+    /// Default 0.8; zero disables the size-aware trigger.
+    /// </summary>
+    public double CompactAtContextFraction { get; init; } = 0.8;
+
     /// <summary>Gets the largest tool result the model is handed. Default 24 000 characters.</summary>
     public int MaxToolResultChars { get; init; } = 24_000;
 
@@ -205,6 +211,7 @@ public sealed record SharpCoreAgentOptions
             MaxIterations = MaxIterations,
             MaxOutputTokensPerTurn = MaxOutputTokensPerTurn,
             MaxTotalTokens = MaxTotalTokens,
+            CompactAtContextFraction = CompactAtContextFraction,
             MaxToolResultChars = MaxToolResultChars,
             Temperature = Temperature,
             Approval = Approval,

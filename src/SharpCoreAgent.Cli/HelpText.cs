@@ -61,6 +61,7 @@ internal static class HelpText
           --max-iterations <n>     run, chat   400
           --max-output-tokens <n>  run, chat   8000
           --max-total-tokens <n>   run, chat   10000000    the ceiling a session starts with; /budget raises it
+          --compact-at <fraction>  run, chat   0.8         compact before the estimated prompt exceeds this fraction of the model window; 0 disables
           --temperature <x>        run, chat   0.2
           --base-url <url>         run, chat   none        required by openai-compatible
           --credential-file <path> all         none        NAME=value keys, read first; they win over the environment

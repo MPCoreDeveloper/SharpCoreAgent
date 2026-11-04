@@ -316,6 +316,9 @@ internal sealed record CliOptions
     /// </remarks>
     public long MaxTotalTokens { get; init; } = 10_000_000;
 
+    /// <summary>Gets the fraction of the model's context window that triggers automatic compaction. Default 0.8; zero disables it.</summary>
+    public double CompactAtContextFraction { get; init; } = 0.8;
+
     /// <summary>Gets the sampling temperature.</summary>
     public double Temperature { get; init; } = 0.2;
 
@@ -455,6 +458,7 @@ internal sealed record CliOptions
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
         MaxTotalTokens = MaxTotalTokens,
+        CompactAtContextFraction = CompactAtContextFraction,
         Temperature = Temperature,
         BaseUrl = BaseUrl,
         CredentialFilePath = CredentialFile,
@@ -2021,6 +2025,9 @@ internal sealed record CliOptions
 
             case "--max-total-tokens":
                 return options with { MaxTotalTokens = ParseLong(name, TakeValue(args, ref index, name)) };
+
+            case "--compact-at":
+                return options with { CompactAtContextFraction = ParseDouble(name, TakeValue(args, ref index, name)) };
 
             case "--temperature":
                 return options with { Temperature = ParseDouble(name, TakeValue(args, ref index, name)) };

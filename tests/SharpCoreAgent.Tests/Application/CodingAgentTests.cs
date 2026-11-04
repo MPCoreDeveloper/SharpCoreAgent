@@ -297,6 +297,60 @@ public sealed class CodingAgentTests
     }
 
     [Fact]
+    public async Task APromptOverTheContextFractionIsCompactedBeforeTheRequest()
+    {
+        using var directory = TempDirectory.Create();
+        var descriptor = Descriptor with { ContextWindow = 200 };
+        var model = new ScriptedModel(descriptor, [Completed("still here")]);
+        var observer = new RecordingObserver();
+        var session = new AgentSession(Workspace.Create(directory.Path), descriptor, ApprovalMode.AllowAll, "system");
+
+        for (var index = 0; index < 20; index++)
+        {
+            session.Add(ChatMessage.User(new string('x', 200)));
+        }
+
+        var report = await AgentWithOptions(
+                new AgentOptions { MaxContextMessages = 0, CompactAtContextFraction = 0.5 },
+                model,
+                [])
+            .RunTurnAsync(session, "and now", observer, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        var compacted = Assert.Single(observer.Events.OfType<ContextCompacted>());
+        Assert.True(compacted.Dropped > 0, "the estimated prompt exceeded half of the 200-token window");
+        Assert.True(session.Messages.Count < 22, $"the transcript is still {session.Messages.Count} messages long");
+        Assert.True(
+            PromptTokenEstimator.Estimate(session.Messages, []) <= 100,
+            "the loop has to stop with a request that fits the configured fraction");
+    }
+
+    [Fact]
+    public async Task AContextFractionOfZeroLeavesTheTranscriptAlone()
+    {
+        using var directory = TempDirectory.Create();
+        var descriptor = Descriptor with { ContextWindow = 200 };
+        var model = new ScriptedModel(descriptor, [Completed("still here")]);
+        var observer = new RecordingObserver();
+        var session = new AgentSession(Workspace.Create(directory.Path), descriptor, ApprovalMode.AllowAll, "system");
+        for (var index = 0; index < 20; index++)
+        {
+            session.Add(ChatMessage.User(new string('x', 200)));
+        }
+
+        var before = session.Messages.Count;
+        var report = await AgentWithOptions(
+                new AgentOptions { MaxContextMessages = 0, CompactAtContextFraction = 0 },
+                model,
+                [])
+            .RunTurnAsync(session, "and now", observer, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Empty(observer.Events.OfType<ContextCompacted>());
+        Assert.Equal(before + 2, session.Messages.Count);
+    }
+
+    [Fact]
     public async Task AToolThatThrowsIsReportedAsAFailure()
     {
         using var directory = TempDirectory.Create();

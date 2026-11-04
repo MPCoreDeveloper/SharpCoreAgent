@@ -161,7 +161,7 @@ public sealed class CodingAgent
 
             // Before the request, because the window is what the request carries. A session left open all afternoon
             // outgrows any provider's limit, and a rejected request reads to the model as a bug it should retry.
-            await CompactAsync(session, sink, turnBudget.Token).ConfigureAwait(false);
+            await CompactAsync(session, model, sink, turnBudget.Token).ConfigureAwait(false);
 
             var request = new ChatRequest(
                 model,
@@ -202,29 +202,55 @@ public sealed class CodingAgent
     /// Drops the oldest messages when the transcript has outgrown the configured window.
     /// </summary>
     /// <param name="session">The conversation to trim.</param>
+    /// <param name="model">The model whose advertised context window bounds the estimated prompt.</param>
     /// <param name="sink">Receives the notice, so a silent loss of memory becomes a visible one.</param>
     /// <param name="cancellationToken">Cancels the notice.</param>
     /// <returns>How many messages were dropped; zero when the transcript already fits.</returns>
     /// <remarks>
-    /// Half the window is kept rather than all of it: keeping the full window would drop nothing until the
-    /// transcript is twice what the model accepts, and keeping the newest handful would throw away the
-    /// instruction that started the work. <see cref="AgentSession.Compact(int)"/> is what does the trimming, so
-    /// this cannot split a tool round — the two agree by construction, and <c>/compact</c> stays the manual door
-    /// to the same behaviour.
+    /// There are two triggers. The message count is the cheap one and keeps a long conversation from growing without
+    /// bound; the context fraction is the size-aware one, and it sees what a count cannot — one huge tool result, a long
+    /// system prompt or the tool definitions themselves. Both use <see cref="AgentSession.Compact(int)"/>, so neither can
+    /// split a tool round, and <c>/compact</c> remains the manual door to the same behavior. The size loop keeps halving
+    /// the recent window until the estimate fits; if a cut would orphan the only tool result, it stops rather than
+    /// producing a request no provider accepts.
     /// </remarks>
-    private async Task<int> CompactAsync(AgentSession session, IAgentObserver sink, CancellationToken cancellationToken)
+    private async Task<int> CompactAsync(
+        AgentSession session,
+        ModelDescriptor model,
+        IAgentObserver sink,
+        CancellationToken cancellationToken)
     {
+        var dropped = 0;
+        var kept = 0;
         var window = _options.MaxContextMessages;
-        if (window <= 0 || session.Messages.Count <= window)
+        if (window > 0 && session.Messages.Count > window)
         {
-            return 0;
+            kept = Math.Max(window / 2, 1);
+            dropped += session.Compact(kept);
         }
 
-        var keep = Math.Max(window / 2, 1);
-        var dropped = session.Compact(keep);
+        var fraction = _options.CompactAtContextFraction;
+        if (fraction > 0 && model.ContextWindow is > 0 and var contextWindow)
+        {
+            var threshold = (int)Math.Floor(contextWindow * fraction);
+            while (PromptTokenEstimator.Estimate(MessagesFor(session), DefinitionsFor(session)) > threshold)
+            {
+                var before = session.Messages.Count;
+                var keep = 1;
+                var removed = session.Compact(keep);
+                if (removed <= 0 || session.Messages.Count >= before)
+                {
+                    break;
+                }
+
+                kept = keep;
+                dropped += removed;
+            }
+        }
+
         if (dropped > 0)
         {
-            await sink.OnEventAsync(new ContextCompacted(dropped, keep), cancellationToken).ConfigureAwait(false);
+            await sink.OnEventAsync(new ContextCompacted(dropped, kept), cancellationToken).ConfigureAwait(false);
         }
 
         return dropped;

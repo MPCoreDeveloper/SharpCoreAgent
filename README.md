@@ -253,6 +253,7 @@ keep working on the file that needs repairing.
 | `--max-iterations <n>` | run, chat | `400` — a turn that reads, edits, builds and retests is tens of model calls |
 | `--max-output-tokens <n>` | run, chat | `8000` |
 | `--max-total-tokens <n>` | run, chat | `10000000` — the ceiling a session starts with; `/budget` raises it |
+| `--compact-at <fraction>` | run, chat | `0.8` — compact before the estimated prompt exceeds this fraction of the model window; `0` disables |
 | `--temperature <x>` | run, chat | `0.2` |
 | `--base-url <url>` | run, chat | none — required by `openai-compatible` |
 | `--credential-file <path>` | all | none — `NAME=value` keys read first; they win over the environment |
@@ -289,7 +290,9 @@ In `chat`, the loop understands `/model grok:grok-4` (switch provider and model 
 conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/roles` (what each job runs on),
 `/review [focus]` (one read-only turn on the reviewer's model, inside this transcript), `/approval`,
 `/mode plan|act`, `/compact [n]`, `/budget [n|+n|unlimited]`, `/continue`, `/usage`, `/cost`, `/files`,
-`/undo`, `/session`, `/roots`, `/help` and `/exit` (or `/quit`).
+`/undo`, `/session`, `/roots`, `/help` and `/exit` (or `/quit`). `/compact [n]` is the manual window; the loop also
+compacts automatically when the estimated prompt exceeds `--compact-at` (default 0.8) of the model's context window,
+keeping the system prompts and the newest message and never splitting a tool round.
 
 Three jobs, three models. `--planner`, `--executor` and `--reviewer` name the model a plan turn, an act
 turn and `/review` run on — planning on the model that reasons best, execution on the one that is fastest

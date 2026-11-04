@@ -40,6 +40,10 @@ public sealed class AgentOptionsTests
         // long before the oldest messages have to go.
         Assert.Equal(120, options.MaxContextMessages);
 
+        // The size-aware trigger is the one that sees a single oversized result, a long prompt or the tool
+        // definitions; eighty percent leaves room for the response and the provider's own per-message overhead.
+        Assert.Equal(0.8, options.CompactAtContextFraction);
+
         // Sixteen mebibytes of picture per turn — four pictures at the per-image ceiling, or dozens of screenshots,
         // and twenty-one megabytes of base64 inside the smallest provider request limit this program targets.
         Assert.Equal(16 * 1024 * 1024, options.MaxTurnImageBytes);
@@ -60,6 +64,27 @@ public sealed class AgentOptionsTests
         var exception = Assert.Throws<ArgumentOutOfRangeException>(
             () => new AgentOptions { MaxContextMessages = 19 }.Validate());
         Assert.Equal("MaxContextMessages", exception.ParamName);
+    }
+
+    [Fact]
+    public void TheContextFractionMayBeDisabledOrSetAtItsEdges()
+    {
+        var off = new AgentOptions { CompactAtContextFraction = 0 };
+        Assert.Same(off, off.Validate());
+
+        var smallest = new AgentOptions { CompactAtContextFraction = 0.1 };
+        Assert.Same(smallest, smallest.Validate());
+
+        var wholeWindow = new AgentOptions { CompactAtContextFraction = 1 };
+        Assert.Same(wholeWindow, wholeWindow.Validate());
+
+        var tooSmall = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentOptions { CompactAtContextFraction = 0.09 }.Validate());
+        Assert.Equal("CompactAtContextFraction", tooSmall.ParamName);
+
+        var notANumber = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentOptions { CompactAtContextFraction = double.NaN }.Validate());
+        Assert.Equal("CompactAtContextFraction", notANumber.ParamName);
     }
 
     [Fact]

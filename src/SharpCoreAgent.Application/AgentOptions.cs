@@ -14,6 +14,7 @@ namespace SharpCoreAgent.Application;
 /// <item><description><see cref="MaxToolResultChars"/> stops one <c>list_directory</c> from filling the context;</description></item>
 /// <item><description><see cref="MaxTurnImageBytes"/> stops a turn's pictures from outgrowing the request that carries them;</description></item>
 /// <item><description><see cref="MaxContextMessages"/> keeps a long conversation inside the model's window;</description></item>
+    /// <item><description><see cref="CompactAtContextFraction"/> compacts before the estimated prompt outgrows the model's window;</description></item>
 /// <item><description><see cref="TurnTimeout"/> stops a hung provider from hanging the terminal.</description></item>
 /// </list>
 /// <para>
@@ -73,6 +74,19 @@ public sealed record AgentOptions
     /// </remarks>
     public int MaxContextMessages { get; init; } = 120;
 
+    /// <summary>
+    /// Gets the fraction of the model's context window above which the loop compacts before a request. Default 0.8;
+    /// zero disables the token-based trigger.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MaxContextMessages"/> is a count and cannot see a single 200 KB tool result; this is the size-aware
+    /// companion. The estimate includes the system prompts, the recent transcript and the advertised tool definitions.
+    /// The loop keeps the system prompts and compacts the oldest messages until the estimate fits, using the same
+    /// tool-round-safe operation as <c>/compact</c>. A model that advertises no context window is never compacted by this
+    /// trigger, and the message-count trigger still applies.
+    /// </remarks>
+    public double CompactAtContextFraction { get; init; } = 0.8;
+
     /// <summary>Gets the wall-clock ceiling for one turn. Default thirty minutes.</summary>
     /// <remarks>
     /// Before this was raised, a turn that queued a build was cancelled mid-answer with
@@ -115,6 +129,17 @@ public sealed record AgentOptions
         if (MaxContextMessages is not 0)
         {
             Require(MaxContextMessages, 20, 10_000, nameof(MaxContextMessages));
+        }
+
+        // Zero is the documented "do not compact by size" switch. A fraction below ten percent would compact
+        // almost every ordinary request; above one would never trigger.
+        if (CompactAtContextFraction is not 0
+            && (double.IsNaN(CompactAtContextFraction) || CompactAtContextFraction < 0.1 || CompactAtContextFraction > 1))
+        {
+            throw OutOfRange(
+                nameof(CompactAtContextFraction),
+                CompactAtContextFraction,
+                "CompactAtContextFraction must be 0 or between 0.1 and 1.");
         }
 
         if (TurnTimeout < TimeSpan.FromSeconds(10) || TurnTimeout > TimeSpan.FromHours(1))

@@ -443,6 +443,15 @@ public sealed class CliOptionsTests
         Assert.Contains("--resume is only valid with chat", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CompactAtIsParsedAsAFraction()
+    {
+        var options = CliOptions.Parse(["chat", "--compact-at", "0.55"], NoEnvironment);
+
+        Assert.Equal(0.55, options.CompactAtContextFraction);
+        Assert.Equal(0.55, options.ToSharpCoreAgentOptions().CompactAtContextFraction);
+    }
+
     private static string? NoEnvironment(string name) => null;
 
     private static bool NotInteractive() => false;

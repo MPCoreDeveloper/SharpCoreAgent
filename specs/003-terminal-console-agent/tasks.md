@@ -52,7 +52,9 @@ pass has a real list rather than a memory.
   process-local journal over `write_file`, `replace_in_file` and `delete_file`, with sub-agent merges and post-turn
   drift checks; it is not Git-based. A Git-backed variant remains out of scope: `035` keeps Git read-only and `036`
   deliberately works without a repository.
-- [ ] T034 Compact automatically when a turn's prompt exceeds a configurable fraction of the model's context window.
+- [X] T034 Compact automatically when a turn's prompt exceeds a configurable fraction of the model's context window.
+  Done in `042-context-fraction-compaction`: `--compact-at <fraction>` (default 0.8, zero disables) measures the
+  estimated prompt, compacts before the request with `AgentSession.Compact(1)`, and never splits a tool round.
 
 ## Phase 4 — Provider depth
 
