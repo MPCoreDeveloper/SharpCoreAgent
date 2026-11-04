@@ -445,6 +445,15 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     `chunks` row; that one is a single option in `SharpCoreDbIndexDatabase.Create` plus a rebuild, and the only lever
     this repository can pull alone. All three are unstarted; D28 carries the instrumented numbers and this note is the
     task's pointer to them.
+  - Note (2026-11-03, `research.md` D29): the layout lever was tried, and it works — but it cannot ship alone. With
+    `DatabaseConfig.FixedWidthRecordLayout` on and the codec's three unboxing casts widened in the sibling checkout, a
+    cold build falls **46.6 → 20.6 s** and one changed document **9.5 → 3.44 s**, while the compacted file stays **73.0
+    MiB against 74.0**; the no-op pass is the one cost, 0.5 → 0.67 s. Three things block it: the engine hard-unboxes, so
+    this writer's boxed `long` ids into `INTEGER` columns throw `Unable to cast Int64 to Int32`; the JSON→binary
+    migration dies on `chunks` (`Checksum mismatch … attempting self-heal`, then `'0xED' is an invalid start of a
+    value`), so a layout change has to recreate the index rather than convert it; and three `CompactionTests` stop
+    reading a positive `ReclaimedBytes`, because the dead space they build now lives in the overflow arena, which a
+    flush sweeps before a vacuum can see it. The flag is off again, no test was bent, and the tree is green at 1 520.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,

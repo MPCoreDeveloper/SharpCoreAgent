@@ -1191,5 +1191,58 @@ one in `SingleFileDatabase` — with the per-table lines above; the local-checko
 name is the one on disk; a post-restore `index` at **0.5 s with `commits` 0**; and the suite green at **1 520 of
 1 520** with 0 warnings once both repositories were put back.
 
+## D29 — The binary record layout (2026-11-03): 9.5 s becomes 3.4 s, and it cannot ship alone
+
+D28 named `DatabaseConfig.FixedWidthRecordLayout` as the one lever this repository could pull alone, and it pulls: with
+the flag on, a cold build of this repository's 763 indexed files is **20.6 s** against **46.6 s** on the same machine
+minutes apart, and one changed document is **3.44 s** against 9.5 s. What D28 attributed as JSON parse-and-serialise cost
+inside the reload is exactly what the conversion removes.
+
+| Release, this repository (763 indexed files, 14 500 passages) | JSON | fixed-width |
+|---|---|---|
+| cold build | 46.6 s, 136.6 MiB | **20.6 s**, 148.3 MiB |
+| the same file after `index --compact` | 62.6 MiB reclaimed (46 %) → **74.0 MiB** | 75.3 MiB reclaimed (51 %) → **73.0 MiB** |
+| one changed document | 9.5 s (write 6.5, meta 2.3, 2 commits) | **3.44 s** (write 2.2, meta 0.6, commit 2.3, 2 commits) |
+| a pass over an unchanged workspace | **0.5 s**, commits 0 | 0.67 s, commits 0 |
+
+The size worry that made this look like a trade disappears on inspection: the pre-vacuum file is 12 MiB *larger*, and the
+live file is a megabyte *smaller* — 73.0 against 74.0. The one regression is the no-op pass, 0.5 → 0.67 s, which is the
+open path decoding every table instead of parsing a smaller JSON body; it is also the number D27 spent a whole round
+getting down to 507–662 ms.
+
+*Why it does not ship today.* Three blockers, none hypothetical, all measured:
+
+1. **The codec hard-unboxes and this writer does not care about box types.** `Table.WriteTypedValueToSpan` writes
+   `(int)value` into an `INTEGER` slot, `(long)value` into a `LONG` one, `(double)value` into a `REAL` one; the index
+   binds boxed `long` ids into columns declared `INTEGER`, which the JSON path has accepted for two years. The first
+   flush died with `error: Unable to cast object of type 'System.Int64' to type 'System.Int32'.` Widening those three
+   casts with `Convert.To*` in the sibling checkout — temporary, reverted — is what makes the numbers above exist at
+   all. Shipping needs either that widening in the engine (with a decision about narrowing: `Convert.ToInt32` throws
+   above 2 147 483 647, so the honest fix is typed binding, or `UseSqliteIntegerAffinity` plus a column-type audit in
+   `IndexWriter`) or this writer binding every column at exactly its declared type.
+2. **The migration path is unsafe.** Turning the flag on under the existing 74 MiB JSON index made its next flush
+   rewrite `chunks` as binary, and the run died: `[SingleFileStorageProvider] Checksum mismatch for block
+   'table:chunks:data', attempting self-heal`, then `'0xED' is an invalid start of a value. Path: $ | LineNumber: 0` —
+   binary bytes handed to the JSON parser. A store created fresh works; a store converted in place does not. Shipping
+   needs the rule "a layout change recreates the index", which `schema_version` can carry the way it carried T035's.
+3. **Spec 030's compaction contract changes shape.** Three `CompactionTests` fail —
+   `SecondCompactionFindsNothingLeftToGiveBack` on `Assert.True(first.ReclaimedBytes > 0, "the first rewrite had dead
+   space to reclaim")`, and the other two on their own `ReclaimedBytes > 0` — because the fixture makes dead space by
+   inserting 40 × 256 KiB `text` values and deleting them: inline in the JSON row block, arena traffic in the new
+   layout, and the arena is swept at flush (`arena.FreeUnreferenced`, `SingleFileTable.FlushCache`), so that space never
+   reaches the file as pages a vacuum can hand back. The product still compacts — 148.3 → 73.0 MiB on a real store — so
+   this is a contract to re-derive, not a regression.
+
+*A fourth thing stops being optional.* A cold build leaves **51 %** of the file reclaimable (JSON left 46 %, so the habit
+is older than the flag): the compaction policy D26 measured and D30 deferred becomes load-bearing the moment a build is
+expected to leave a tight file behind.
+
+*What proves it.* Two JSON cold builds of one corpus (46.6 s, and the 136.6 → 74.0 MiB compaction); one fixed-width cold
+build (20.6 s, 148.3 → 73.0 MiB); one writing run of one changed document in each layout (9.5 s, then 3.44 s — the
+fixed-width one taken on the *larger* 148.3 MiB file, before its vacuum); the no-op pair (0.5 s / 0.67 s, `commits` 0
+both); the suite at **1 520 with 3 failures** on the patched engine plus the flag, then **1 520 green** after both
+reverts, with `git status` clean in both repositories and the packaged engine DLL (1 924 KiB) back in `bin`.
+
+
 
 
