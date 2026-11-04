@@ -45,7 +45,7 @@ internal static class ConfigCommand
 
         return cli.ConfigAction switch
         {
-            ConfigAction.Get => Get(cli, output),
+            ConfigAction.Get => Get(cli, path, output),
             ConfigAction.Set => Set(cli, path, output),
             ConfigAction.Unset => Unset(cli, path, output),
             ConfigAction.Path => WritePath(path, output),
@@ -67,7 +67,14 @@ internal static class ConfigCommand
 
         var document = AgentSettingsFile.Read(path);
         var theme = CliHost.ThemeFor(cli);
-        var width = CliOptions.SettableNames.Max(name => name.Length) + 2;
+        var sectionKeys = document.Keys
+            .Where(key => ProviderSetting.TryParse(key, out var provider, out _)
+                && string.Equals(provider, cli.Provider, StringComparison.OrdinalIgnoreCase))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var width = Math.Max(
+            CliOptions.SettableNames.Max(name => name.Length),
+            sectionKeys.Length == 0 ? 0 : sectionKeys.Max(key => key.Length)) + 2;
 
         foreach (var name in CliOptions.SettableNames)
         {
@@ -75,6 +82,15 @@ internal static class ConfigCommand
                 name.PadRight(width),
                 Value(cli, name).PadRight(34),
                 theme.Dim(Source(cli, name, document, readEnvironment))));
+        }
+
+        foreach (var key in sectionKeys)
+        {
+            var display = CliOptions.EnsureSettable(key);
+            output.WriteLine(string.Concat(
+                display.PadRight(width),
+                Value(cli, display).PadRight(34),
+                theme.Dim(Source(cli, display, document, readEnvironment))));
         }
 
         output.WriteLine(string.Concat(theme.Dim("credential".PadRight(width)), Credential(cli, theme)));
@@ -89,11 +105,22 @@ internal static class ConfigCommand
     /// Prints one value and nothing else, so a script can substitute it.
     /// </summary>
     /// <param name="cli">The merged options.</param>
+    /// <param name="path">The settings file, for a section that belongs to an unselected provider.</param>
     /// <param name="output">Where the value goes.</param>
     /// <returns>The exit code.</returns>
-    private static int Get(CliOptions cli, TextWriter output)
+    private static int Get(CliOptions cli, string path, TextWriter output)
     {
         ArgumentNullException.ThrowIfNull(output);
+
+        if (ProviderSetting.TryParse(cli.ConfigName, out var provider, out var setting)
+            && !string.Equals(provider, cli.Provider, StringComparison.OrdinalIgnoreCase))
+        {
+            var document = AgentSettingsFile.Read(path);
+            var key = ProviderSetting.Canonical(provider, setting);
+            output.WriteLine(document.TryGetValue(key, out var stored) ? stored : "default");
+            return ExitCodes.Success;
+        }
+
         output.WriteLine(Value(cli, cli.ConfigName ?? string.Empty));
         return ExitCodes.Success;
     }
@@ -112,7 +139,9 @@ internal static class ConfigCommand
 
         var name = cli.ConfigName ?? string.Empty;
         var value = cli.ConfigValue ?? string.Empty;
-        var candidate = CliOptions.WithSetting(cli, name, value);
+        var candidate = ProviderSetting.TryParse(name, out var provider, out var setting)
+            ? CliOptions.WithSetting(cli with { Provider = provider }, setting, value)
+            : CliOptions.WithSetting(cli, name, value);
         EnsureRunnable(candidate, name, value);
 
         var settings = new Dictionary<string, string>(AgentSettingsFile.Read(path), StringComparer.Ordinal);
@@ -223,8 +252,15 @@ internal static class ConfigCommand
     /// <param name="cli">The merged options.</param>
     /// <param name="name">The canonical setting name.</param>
     /// <returns>The value as a person reads it.</returns>
-    private static string Value(CliOptions cli, string name) => name switch
+    private static string Value(CliOptions cli, string name)
     {
+        if (ProviderSetting.TryParse(name, out _, out var scoped))
+        {
+            return Value(cli, scoped);
+        }
+
+        return name switch
+        {
         "provider" => cli.Provider,
         "model" => cli.Model ?? "provider default",
         "planner" => cli.PlannerModel ?? "session model",
@@ -245,6 +281,7 @@ internal static class ConfigCommand
         "credential-file" => cli.CredentialFile ?? "none",
         _ => string.Empty,
     };
+    }
 
     /// <summary>
     /// Names the layer a value came from.
@@ -260,12 +297,14 @@ internal static class ConfigCommand
         IReadOnlyDictionary<string, string> document,
         Func<string, string?> readEnvironment)
     {
-        if (cli.CommandLineSettings.Contains(name))
+        var effective = ProviderSetting.TryParse(name, out _, out var scoped) ? scoped : name;
+
+        if (cli.CommandLineSettings.Contains(effective))
         {
             return "command line";
         }
 
-        if (CliOptions.EnvironmentVariableFor(name) is { } variable
+        if (CliOptions.EnvironmentVariableFor(effective) is { } variable
             && !string.IsNullOrWhiteSpace(readEnvironment(variable)))
         {
             return "environment";

@@ -680,6 +680,18 @@ internal sealed record CliOptions
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
+        if (ProviderSetting.TryParse(name, out var provider, out var setting))
+        {
+            if (!string.Equals(provider, options.Provider, StringComparison.OrdinalIgnoreCase))
+            {
+                // A section for a provider this command did not select is a stored default for another
+                // session, not a change to this one.
+                return options;
+            }
+
+            return WithSetting(options, setting, value);
+        }
+
         var flag = FlagFor(name)
             ?? throw new CliUsageException(
                 $"'{name}' is not a setting.",
@@ -725,11 +737,24 @@ internal sealed record CliOptions
     /// </summary>
     /// <param name="name">The name as written, in any case, with either separator.</param>
     /// <returns>The canonical kebab-case name, or <see langword="null"/> when it names no setting.</returns>
-    public static string? CanonicalName(string? name) =>
-        string.IsNullOrWhiteSpace(name)
-            ? null
-            : SettableNames.FirstOrDefault(setting =>
-                string.Equals(NormalizeName(setting), NormalizeName(name), StringComparison.Ordinal));
+    public static string? CanonicalName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        var global = SettableNames.FirstOrDefault(setting =>
+            string.Equals(NormalizeName(setting), NormalizeName(name), StringComparison.Ordinal));
+        if (global is not null)
+        {
+            return global;
+        }
+
+        return ProviderSetting.TryParse(name, out var provider, out var setting)
+            ? ProviderSetting.Canonical(provider, setting)
+            : null;
+    }
 
     /// <summary>
     /// Compares two names without caring about case or separator.
@@ -1569,8 +1594,16 @@ internal sealed record CliOptions
         }
 
         var merged = options;
+        var sections = new List<(string Raw, string Provider, string Setting, string Value)>();
         foreach (var (rawName, value) in settings.Values)
         {
+            if (ProviderSetting.TryParse(rawName, out var provider, out var setting))
+            {
+                SettableNameIn(rawName, settings.Path);
+                sections.Add((rawName, provider, setting, value));
+                continue;
+            }
+
             var name = SettableNameIn(rawName, settings.Path);
             if (options.CommandLineSettings.Contains(name)
                 || (EnvironmentVariableFor(name) is { } variable && !string.IsNullOrWhiteSpace(environment(variable))))
@@ -1588,6 +1621,29 @@ internal sealed record CliOptions
             {
                 throw new ConfigurationFileException(
                     $"the settings file '{settings.Path}' sets '{name}' to a value this build refuses: {ex.Message}",
+                    ex);
+            }
+        }
+
+        // A provider section applies only when that provider is the one this command selected. The global
+        // merge ran first because `provider` itself may come from the file.
+        foreach (var (rawName, provider, setting, value) in sections)
+        {
+            if (!string.Equals(provider, merged.Provider, StringComparison.OrdinalIgnoreCase)
+                || options.CommandLineSettings.Contains(setting)
+                || (EnvironmentVariableFor(setting) is { } variable && !string.IsNullOrWhiteSpace(environment(variable))))
+            {
+                continue;
+            }
+
+            try
+            {
+                merged = WithSetting(merged, rawName, value);
+            }
+            catch (CliUsageException ex)
+            {
+                throw new ConfigurationFileException(
+                    $"the settings file '{settings.Path}' sets '{rawName}' to a value this build refuses: {ex.Message}",
                     ex);
             }
         }

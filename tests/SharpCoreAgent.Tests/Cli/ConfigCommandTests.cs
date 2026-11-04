@@ -183,6 +183,75 @@ public sealed class ConfigCommandTests
     }
 
     [Fact]
+    public void AProviderSectionAppliesOnlyWhenThatProviderIsSelected()
+    {
+        using var directory = TempDirectory.Create();
+        var json = """{"provider":"grok","providers.grok.model":"grok-4.6"}""";
+
+        var (grok, _) = Load(directory, json, ["chat"]);
+        Assert.Equal("grok-4.6", grok.Model);
+
+        var (deepseek, _) = Load(directory, json, ["chat", "--provider", "deepseek"]);
+        Assert.Null(deepseek.Model);
+    }
+
+    [Fact]
+    public void ACommandLineModelBeatsAProviderSection()
+    {
+        using var directory = TempDirectory.Create();
+        var (cli, _) = Load(
+            directory,
+            """{"provider":"grok","providers.grok.model":"grok-4.6"}""",
+            ["chat", "--model", "grok-4.7"]);
+
+        Assert.Equal("grok-4.7", cli.Model);
+    }
+
+    [Fact]
+    public void SetAndGetAProviderSection()
+    {
+        using var directory = TempDirectory.Create();
+        var (set, path) = Load(directory, json: null, ["config", "set", "providers.grok.model", "grok-4.6"]);
+
+        Assert.Equal(0, ConfigCommand.Execute(set, path, NoEnvironment, new StringWriter()));
+        Assert.Contains("\"providers.grok.model\": \"grok-4.6\"", File.ReadAllText(path), StringComparison.Ordinal);
+
+        var (get, _) = Load(
+            directory,
+            File.ReadAllText(path),
+            ["config", "get", "providers.grok.model"]);
+
+        var output = new StringWriter();
+        Assert.Equal(0, ConfigCommand.Execute(get, path, NoEnvironment, output));
+        Assert.Equal("grok-4.6" + System.Environment.NewLine, output.ToString());
+    }
+
+    [Fact]
+    public void ShowPrintsTheSelectedProvidersSection()
+    {
+        using var directory = TempDirectory.Create();
+        var (cli, path) = Load(
+            directory,
+            """{"provider":"grok","providers.grok.model":"grok-4.6"}""",
+            ["config"]);
+
+        var output = new StringWriter();
+        Assert.Equal(0, ConfigCommand.Execute(cli, path, NoEnvironment, output));
+
+        Assert.Contains("providers.grok.model", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("grok-4.6", Row(output.ToString(), "providers.grok.model"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnUnknownProviderSectionIsAUsageError()
+    {
+        var error = Assert.Throws<CliUsageException>(() =>
+            Parse(["config", "get", "providers.nope.model"]));
+
+        Assert.Contains("not a setting", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GetPrintsOneValueAndNothingElse()
     {
         using var directory = TempDirectory.Create();

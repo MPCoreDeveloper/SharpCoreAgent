@@ -122,7 +122,8 @@ internal static class HelpText
 
           Settings are provider, model, planner, executor, reviewer, base-url, approval, mode, temperature,
           max-iterations, max-output-tokens, max-total-tokens and credential-file; each accepts what its
-          flag accepts. The file is %APPDATA%\sharpcoreagent\config.json on Windows and
+          flag accepts. Provider sections add providers.&lt;name&gt;.model and providers.&lt;name&gt;.base-url,
+          which apply only when that provider is selected. The file is %APPDATA%\sharpcoreagent\config.json on Windows and
           $XDG_CONFIG_HOME/sharpcoreagent/config.json (or ~/.config/sharpcoreagent/config.json)
           elsewhere; SHARPCOREAGENT_CONFIG names a different one. The command line beats the
           environment, which beats the file, which beats the built-in default.

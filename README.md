@@ -221,13 +221,18 @@ sharpcoreagent config                              # every setting, its value an
 sharpcoreagent config set provider grok
 sharpcoreagent config set approval readonly
 sharpcoreagent config set model grok-4.7
+sharpcoreagent config set providers.grok.model grok-4.7
+sharpcoreagent config set providers.deepseek.model deepseek-flash
 sharpcoreagent config set planner grok:grok-4.7      # plan turns on Grok, act turns on the rest
 sharpcoreagent config get provider                 # one value, alone, for a script
+sharpcoreagent config get providers.grok.model     # works even while another provider is selected
 sharpcoreagent config unset approval               # the built-in default applies again
 ```
 
 The command line beats the environment, which beats the file, which beats the built-in default, and
-`config show` prints which layer each value came from. The file never holds a key: `config set api-key`
+`config show` prints which layer each value came from. A `providers.<name>.model` or `.base-url` section
+applies only when that provider is selected; switching `--provider` changes which section is read without
+rewriting the file, and a command-line `--model` still wins for one run. The file never holds a key: `config set api-key`
 is refused, because a preferences file is copied and committed — `--credential-file` is where a key
 goes. `config show` reports only whether the provider's credential is *present*, never its value, and a
 file the build cannot apply exits 7 with the key named, so `config set`/`config unset`/`config path`
