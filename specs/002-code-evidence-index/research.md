@@ -1133,3 +1133,63 @@ compares 5 files against 5 stored, so it recounts, writes `file_count` 4 and sta
 `AZeroBudgetCommitsNothingButMeta` keeps its commit for the reason that now defines the rule: an incomplete pass moves
 `build_state` off the seed value, which is a change worth recording. Suite 1 516 → 1 518, build clean at zero warnings.
 
+## D28 — The commit that reloads the store (2026-11-03): 4.1 s of a 9.2 s run is reading back tables nobody wrote
+
+Round 23 (`032-write-only-what-moved`) left one number standing: one changed file costs **6.7 s of `write` and 2.1 s of
+`meta`**, and the commit under them had been priced three times — 7.2 s for a 103-line document, 7.6 s for a 700-line
+one, 7.6 s again on a file 37 % larger — which is the signature of a cost that follows the *tables* a batch touches
+rather than the rows it carries. The working hypothesis was the one the engine's own comments invite: a batch commit
+rebuilds the indexes of every table it dirtied, so a document that touches `chunks` pays for 14 494 rows of index.
+
+*What the probe was.* A temporary `Stopwatch` in the commit path of the sibling SharpCoreDB checkout, built into this
+repository through the csproj's documented escape hatch — `-p:SharpCoreAgentUseLocalSharpCoreDb=true`, the path that
+exists for the day the index needs an engine change that is not packaged yet — one writing run per shape, both
+repositories restored afterwards. The instrumented build is gone; this entry is the only trace it left. The
+local-checkout build was made to reproduce the shipped numbers before being trusted to explain them: 9.2–9.9 s wall and
+`commits` 2 across three runs, against 9.2 s and 2 from the packages.
+
+| one changed document, 74.0 MiB, two commits | write commit | `meta` commit |
+|---|---|---|
+| per-table `CommitTransaction` | 874.5 ms (all of it `chunks`) | 0.2 ms |
+| `storageProvider.CommitTransactionAsync()` — the write and the fsync | 145.4 ms | 3.0 ms |
+| `tableDirectoryManager.Flush()` | 0.0 ms | 0.0 ms |
+| **`ReloadFromStorage()` on all seven tables** | **1 905.1 ms** | **2 209.8 ms** |
+| `EndBatchUpdate` total | 2 928.3 ms | 2 215.8 ms |
+
+*What it found.* The first probe went into `Database.BatchUpdateTransaction.cs` and never fired. That class — the one
+whose header promises "5–10× speedup for batch updates with deferred index updates" and a "bulk index rebuild" — is
+`Database`, and the handle this index holds is `SingleFileDatabase` (`DatabaseExtensions.cs:146`, chosen by
+`StorageMode.SingleFile`). The commit that actually runs is four steps: commit each table, commit the storage provider,
+flush the directory, then **reload every table from storage**. The fourth step is where the time is, and it runs on
+every commit whether or not the batch touched the table: the `meta` commit, which writes ten rows, spends 2 209.8 ms
+re-reading `chunks` (1 366.8 ms over 14 494 rows), `node_embeddings` (645.1 ms over 8 098), `symbols` (100.9), `edges`
+(69.6) and `docs` (20.6) to discover that none of them changed.
+
+Both remaining suspects are smaller and neither is the index. `Table.RebuildIndex` returns immediately outside columnar
+storage mode, so no index is rebuilt on any of this; and the per-table commit serialises the whole `_rowCache`
+(`FlushCache()` writes one data block per table), which is why a thirty-row delta in `chunks` costs 850.9 ms. The file
+write itself — everything the engine does to the page and the fsync — is 148.4 ms of the 5 144.1 ms the two commits
+take.
+
+*What it explains.* D21's "a batch commit costs the whole store" is now a mechanism rather than an observation: the cost
+is the sum of the rows of the tables a commit reloads, a commit reloads all of them, so the store's size sets a floor
+no batch shape can get under, and the number of tables a batch touches sets how far above that floor a run lands. It is
+also why 103 lines and 700 lines priced identically: the rows of the changed file were never in the sum.
+
+*What it does not fix.* Nothing in this repository changed, and it owns none of the three levers. In order of expected
+value: reload only the tables the commit dirtied (≈**4.1 s** of a 9.2 s run, and the `meta` commit becomes free); make
+a table commit write its delta rather than its cache (874.5 ms); and turn on `DatabaseConfig.FixedWidthRecordLayout`,
+`false` in `SharpCoreDbIndexDatabase.Create` today, so that every flush and every reload stops going through JSON at
+**88 µs per row** of `chunks`. The third is one option plus a rebuild and can be measured from this side alone; the
+first two are engine changes and need a round here (`033` is free by the register) and tests there. Round 23's 2
+commits are still worth folding into 1, but this re-orders them: a `meta` commit that costs 2 215.8 ms is worth
+folding, and one that costs 0.2 ms is not.
+
+*What proves it.* Three instrumented runs — two in the class that never fired, which is how the wrong class was found,
+one in `SingleFileDatabase` — with the per-table lines above; the local-checkout build matching the packaged build's
+9.2–9.9 s before its attribution is trusted; `index --compact` reporting 117.0 → 74.0 MiB so the baseline the numbers
+name is the one on disk; a post-restore `index` at **0.5 s with `commits` 0**; and the suite green at **1 520 of
+1 520** with 0 warnings once both repositories were put back.
+
+
+

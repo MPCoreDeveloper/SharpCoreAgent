@@ -426,6 +426,25 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     it carries — and the run's 2 commits, where 1 would mean giving up `026`'s failure unit. The store also grew
     73.6 → 110.4 MiB across four such runs. SC-002's 5 000-file tree, SC-006's 12.3× and SC-003's p95 are still
     unmeasured. Round 23, `032-write-only-what-moved`; suite 1 518 → 1 520, build clean at 0 warnings.
+  - Note (2026-11-03, `research.md` D28): the commit is a reload of every table, not index maintenance. Attributed
+    inside the engine — temporary `Stopwatch`s in `SingleFileDatabase.EndBatchUpdate` (`DatabaseExtensions.cs`), built
+    against the sibling checkout through the csproj's documented `-p:SharpCoreAgentUseLocalSharpCoreDb=true`, reverted
+    after the run — one changed document at 74.0 MiB is two commits of 2 928.3 ms and 2 215.8 ms, and the forced
+    `ReloadFromStorage()` after each commit is 1 905.1 ms of the first and 2 209.8 ms of the second: it re-reads all
+    seven tables whether or not the batch touched them (`chunks` 1 288.8 / 1 366.8 ms for 14 494 rows,
+    `node_embeddings` 396.7 / 645.1 for 8 098, `symbols` 130.4, `edges` 63.0). The per-table commit is 874.5 ms and all
+    of it is `chunks`, because `FlushCache()` serialises `_rowCache` whole — a thirty-row delta rewrites the table.
+    The file write itself, `_storageProvider.CommitTransactionAsync()`, is 148.4 ms across both commits, so nothing
+    here is the disk's fault, and the index rebuild this task has been blaming cannot be: `RebuildIndex` returns at
+    once outside columnar mode, and `Database.BatchUpdateTransaction.cs` — the class whose comments promise the 5–10×
+    batch — is not the class our handle is (`SingleFileDatabase`, `DatabaseExtensions.cs:146`). The local-checkout
+    build reproduces the shipped numbers (9.2–9.9 s wall, 2 commits), so the attribution is of the code CI ships.
+    D21's "a batch commit costs the whole store" now has a mechanism. The levers, in order: reload only the tables a
+    commit dirtied (≈ 4.1 s of a 9.2 s run, engine), commit the delta rather than the cache (874.5 ms, engine), and
+    `DatabaseConfig.FixedWidthRecordLayout` — `false` here, so every flush and every reload is JSON at 88 µs per
+    `chunks` row; that one is a single option in `SharpCoreDbIndexDatabase.Create` plus a rebuild, and the only lever
+    this repository can pull alone. All three are unstarted; D28 carries the instrumented numbers and this note is the
+    task's pointer to them.
 
 - [x] **T035** An incremental build must not overflow an array
   - Files: `src/SharpCoreAgent.Indexing/IndexFileWriter.cs`, `IndexSql.cs`, `IndexSchema.cs`,
