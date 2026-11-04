@@ -25,6 +25,7 @@ internal static class HelpText
           sharpcoreagent run "<prompt>" [options]      one turn, then exit
           sharpcoreagent chat [options]                interactive loop
           sharpcoreagent models [--provider <name>]    list the models this build knows
+          sharpcoreagent credentials --check           which provider keys are configured, and where
           sharpcoreagent index [options]               build, inspect or repair the code index
           sharpcoreagent config [show|get|set|unset|path]
                                                        settings, and where each value comes from
@@ -69,6 +70,7 @@ internal static class HelpText
           --resume [path]          chat        none        list saved transcripts, or open the one named
           --no-session             run, chat   off         do not write a transcript
           --json                   run, index  off         one JSON object per event, or per index report
+          --check                  credentials —          report the provider keys and their provenance; never the values
           --color <mode>           all         auto        auto, always, never; auto honours NO_COLOR and pipes
           --mode <mode>            run, chat   act         plan reads only and answers with a plan
           --quiet                  run, chat   off         no thinking, tool lines or summary
@@ -104,6 +106,11 @@ internal static class HelpText
           this is a setting: with no --mcp there is no client in the process at all. Search is not built
           in: a server, such as @brave/brave-search-mcp-server with BRAVE_API_KEY set, is what the flag
           is for.
+
+        Credentials
+          sharpcoreagent credentials --check          each provider's key, and the file:line or environment
+          sharpcoreagent credentials --check --provider grok
+                                                       narrow the report to one provider
 
         Config
           sharpcoreagent config                     every setting, its value and its source

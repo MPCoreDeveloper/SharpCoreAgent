@@ -181,14 +181,15 @@ where the paste goes.
 | Provider key | Models | Credential |
 |---|---|---|
 | `deepseek` | `deepseek-flash` (default), `deepseek-v4-pro`, `deepseek-chat`, `deepseek-reasoner` (no tools) | `DEEPSEEK_API_KEY` |
-| `grok` | `grok-4.7` (default), `grok-4`, `grok-3`, `grok-3-mini` | `XAI_API_KEY` or `GROK_API_KEY` |
+| `grok` | `grok-4.7` (default), `grok-4.6`, `grok-4.5`, `grok-4.3`, `grok-4.20-*`, `grok-build-0.1`, `grok-4`, `grok-3`, `grok-3-mini` | `XAI_API_KEY` or `GROK_API_KEY` |
 | `openai-compatible` | any model the endpoint serves (`--base-url` required) | `OPENAI_API_KEY`, `SHARPCOREAGENT_OPENAI_COMPATIBLE_API_KEY` or `SHARPCOREAGENT_API_KEY` |
 | `demo` | `demo-scripted` (deterministic, for tests and demos) | none |
 
 `deepseek` is the default provider. `models` prints the catalogue of the build you have, including
-whether each model accepts tool calls and whether it reads images — `grok-4.7`, `grok-4`, `grok-3` and
-every `openai-compatible` model declare `images=yes`, which is what `view_image` checks before it opens a
-file.
+whether each model accepts tool calls and whether it reads images — `deepseek-flash`, the Grok text/chat
+models and every `openai-compatible` model declare `images=yes`, which is what `view_image` checks before it opens a
+file. `credentials --check` answers the narrower question of where the key came from: `file:<path>:<line>`,
+`environment` or `missing`, never the value.
 
 ## Commands and options
 
@@ -197,6 +198,7 @@ sharpcoreagent [options]                     a session in the current directory
 sharpcoreagent run "<prompt>" [options]      one turn, then exit
 sharpcoreagent chat [options]                interactive loop
 sharpcoreagent models [--provider <name>]    list the models this build knows
+sharpcoreagent credentials --check           which provider keys are configured, and where
 sharpcoreagent index [options]               build, inspect or repair the code index
 sharpcoreagent config [show|get|set|unset|path]   settings, and where each value comes from
 sharpcoreagent setup                        the preferences, asked for one at a time
@@ -260,6 +262,7 @@ keep working on the file that needs repairing.
 | `--session <path>` | run, chat | `<workspace>/.sharpcoreagent/sessions/<timestamp>.json` |
 | `--no-session` | run, chat | off — write no transcript |
 | `--json` | run, index, ui | off — one JSON object per event, per index report, or the panel's endpoint |
+| `--check` | credentials | off — report each provider key's file:line or environment source; never its value |
 | `--serve` | ui | the panel: `ui` has no other action, so `ui` alone exits `2` |
 | `--port <n>` | ui | `0` — `0`–`65535`; `0` picks a free port, and one that cannot be bound exits `2` with the port named |
 | `--refresh` | ui | off — walk the index before each answer, inside `--index-budget` |

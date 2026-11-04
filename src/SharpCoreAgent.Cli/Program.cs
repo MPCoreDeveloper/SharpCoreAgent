@@ -77,6 +77,11 @@ internal static class Program
                 // reach the catch below: it used to be dispatched above, where a bad path crashed the
                 // process instead of exiting 3.
                 CliCommand.Models => ModelsCommand.Execute(options),
+
+                CliCommand.Credentials => CredentialsCommand.Execute(
+                    options,
+                    Environment.GetEnvironmentVariable,
+                    Console.Out),
                 CliCommand.Index => await IndexCommand.ExecuteAsync(options, scope.ExitToken).ConfigureAwait(false),
 
                 // The panel. Ctrl+C cancels the token, the listener stops in its own finally, and the command answers 0:

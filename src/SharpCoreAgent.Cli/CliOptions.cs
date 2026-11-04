@@ -26,6 +26,9 @@ internal enum CliCommand
     /// <summary>List the catalogue.</summary>
     Models,
 
+    /// <summary>Report which provider credentials are configured and where each was found.</summary>
+    Credentials,
+
     /// <summary>Build, inspect or repair the code index.</summary>
     Index,
 
@@ -360,6 +363,9 @@ internal sealed record CliOptions
 
     /// <summary>Gets a value indicating whether events are emitted as JSON lines.</summary>
     public bool Json { get; init; }
+
+    /// <summary>Gets a value indicating whether <c>credentials</c> was asked to check the providers.</summary>
+    public bool CredentialsCheck { get; init; }
 
     /// <summary>Gets how the terminal decides whether it may use colour. Default <see cref="ColorChoice.Auto"/>.</summary>
     public ColorChoice Color { get; init; } = ColorChoice.Auto;
@@ -850,6 +856,11 @@ internal sealed record CliOptions
         List<string> positionals,
         Func<bool> interactive)
     {
+        if (options.CredentialsCheck && command != CliCommand.Credentials)
+        {
+            throw new CliUsageException("--check is only valid with the credentials command.");
+        }
+
         // `--no-refresh` belongs to the command that keeps an index open between requests. Everywhere else a
         // refresh is already bounded by --index-budget, and a flag that was silently ignored would be a promise
         // nobody kept. Help and the version are exempt because they answer a question about the build.
@@ -922,6 +933,40 @@ internal sealed record CliOptions
                 }
 
                 return options with { Command = CliCommand.Chat };
+
+            case CliCommand.Credentials:
+                RejectIndexFlags(options);
+                RejectAttachmentRoots(options);
+                RejectWebFlags(options);
+                RejectMcpFlags(options);
+                RejectClientFlag(options);
+                RejectWriteFlag(options);
+                if (positionals.Count > 0)
+                {
+                    throw new CliUsageException(
+                        $"credentials does not take '{positionals[0]}'.",
+                        "Use 'sharpcoreagent credentials --check'.");
+                }
+
+                if (options.Json)
+                {
+                    throw new CliUsageException("--json is not supported by credentials.");
+                }
+
+                if (options.CommandLineSettings.Contains("model")
+                    || options.CommandLineSettings.Contains("planner")
+                    || options.CommandLineSettings.Contains("executor")
+                    || options.CommandLineSettings.Contains("reviewer")
+                    || options.CommandLineSettings.Contains("base-url")
+                    || options.Fallback is not null
+                    || options.SessionPath is not null)
+                {
+                    throw new CliUsageException(
+                        "credentials reads the provider keys; model and transcript flags do not apply.",
+                        "Use 'sharpcoreagent credentials --check' with --credential-file or --provider.");
+                }
+
+                return options with { Command = CliCommand.Credentials };
 
             case CliCommand.Index:
                 RejectAttachmentRoots(options);
@@ -2065,6 +2110,9 @@ internal sealed record CliOptions
             case "--json":
                 return options with { Json = true };
 
+            case "--check":
+                return options with { CredentialsCheck = true };
+
             case "--color":
                 return options with { Color = ParseColor(TakeValue(args, ref index, name)) };
 
@@ -2190,6 +2238,11 @@ internal sealed record CliOptions
             return CliCommand.Ide;
         }
 
+        if (Is(argument, "credentials"))
+        {
+            return CliCommand.Credentials;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -2202,7 +2255,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models, index, setup, config, mcp, ui and ide.");
+            "Commands are run, chat, models, credentials, index, setup, config, mcp, ui and ide.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)

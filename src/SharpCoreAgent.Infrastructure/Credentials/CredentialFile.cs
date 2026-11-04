@@ -115,7 +115,22 @@ public static class CredentialFile
     public static IReadOnlyDictionary<string, string> Read(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        return Parse(ReadLines(path), path);
+        return ToDictionary(ReadEntries(path));
+    }
+
+    /// <summary>Reads a credential file and keeps the line each assignment came from.</summary>
+    /// <param name="path">The file to read.</param>
+    /// <returns>The entries, in file order, with their source line numbers.</returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is blank.</exception>
+    /// <exception cref="CredentialFileException">The file is missing, unreadable or malformed.</exception>
+    /// <remarks>
+    /// The line number is for diagnostics such as <c>credentials --check</c>. The value stays in the entry so the
+    /// caller can use it, but a diagnostic must print only the name, path and line.
+    /// </remarks>
+    public static IReadOnlyList<CredentialEntry> ReadEntries(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return ParseEntries(ReadLines(path), path);
     }
 
     /// <summary>Parses the lines of a credential file.</summary>
@@ -123,12 +138,21 @@ public static class CredentialFile
     /// <param name="source">The file's path, used in error messages only.</param>
     /// <returns>The name/value pairs the lines declare, keyed ordinally.</returns>
     /// <exception cref="CredentialFileException">A line has no <c>=</c>, no name, or repeats one.</exception>
-    public static IReadOnlyDictionary<string, string> Parse(IEnumerable<string> lines, string source)
+    public static IReadOnlyDictionary<string, string> Parse(IEnumerable<string> lines, string source) =>
+        ToDictionary(ParseEntries(lines, source));
+
+    /// <summary>Parses the lines of a credential file and keeps each assignment's line number.</summary>
+    /// <param name="lines">The file's lines, without their line separators.</param>
+    /// <param name="source">The file's path, used in error messages only.</param>
+    /// <returns>The entries, in file order.</returns>
+    /// <exception cref="CredentialFileException">A line has no <c>=</c>, no name, or repeats one.</exception>
+    public static IReadOnlyList<CredentialEntry> ParseEntries(IEnumerable<string> lines, string source)
     {
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
 
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        var values = new List<CredentialEntry>();
+        var names = new HashSet<string>(StringComparer.Ordinal);
         var number = 0;
 
         foreach (var raw in lines)
@@ -161,10 +185,23 @@ public static class CredentialFile
             }
 
             var value = Unquote(line[(separator + 1)..].Trim());
-            if (!values.TryAdd(name, value))
+            if (!names.Add(name))
             {
                 throw new CredentialFileException($"{source}: line {number} repeats '{name}'.");
             }
+
+            values.Add(new CredentialEntry(name, value, number));
+        }
+
+        return values;
+    }
+
+    private static Dictionary<string, string> ToDictionary(IReadOnlyList<CredentialEntry> entries)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            values.Add(entry.Name, entry.Value);
         }
 
         return values;
@@ -248,6 +285,7 @@ public static class CredentialFile
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException)
         {
+
             throw new CredentialFileException($"The credential file '{path}' could not be written: {ex.Message}", ex);
         }
         finally
@@ -284,4 +322,18 @@ public static class CredentialFile
             // A leftover temporary file is not worth failing a successful write over.
         }
     }
+}
+
+/// <summary>One assignment read from a credential file.</summary>
+/// <param name="Name">The variable name.</param>
+/// <param name="Value">The secret value.</param>
+/// <param name="Line">The one-based line that declared it.</param>
+/// <remarks>
+/// A diagnostic may print <see cref="Name"/> and <see cref="Line"/>, never <see cref="Value"/>.
+/// </remarks>
+public sealed record CredentialEntry(string Name, string Value, int Line)
+{
+    /// <inheritdoc />
+    /// <remarks>Deliberately omits the value: a diagnostic or log line must not carry a secret.</remarks>
+    public override string ToString() => $"{Name} (line {Line})";
 }
