@@ -67,7 +67,7 @@ The four gaps a newcomer hits, in the order they hit them.
 | 20 | [`029-modularity-partition`](029-modularity-partition/spec.md) | the clusterer stops calling the store's `LouvainAlgorithm` and partitions with modularity it owns — `louvain` falls from 1 m 8 s to 0.1 s, `communities` from 1 m 10 s to 2.6 s, a rebuild from 1 m 56 s to 55.6 s, and the partition rises from 0.490230 to 0.655454 by the definition (landed 2026-11-03 as `e339564`: `ModularityPartition`, `Rank` in place of `RankAsync`, 6 tests, three probes deleted) | 19, and `002` (landed) |
 | 21 | [`030-index-compaction`](030-index-compaction/spec.md) | the index file stops being 10.8× the rows it holds — the store's full vacuum gives back 714.6 MiB of 787.9 MiB in 0.6 s with every row intact, a finished rebuild now does it, and `index --compact` does it on demand (landed 2026-11-03 as `caa392b`: `IndexCompaction`, `CompactAsync`, the rebuild hook, the `--compact` block and its `--json`, 8 tests, four probes deleted) | 20, and `002` (landed) |
 | 22 | [`031-cheap-no-op-refresh`](031-cheap-no-op-refresh/spec.md) | the pass that changed nothing stops paying for it — a refresh on an untouched workspace falls from **5.5 s to 507–662 ms** and commits nothing, because its two scans were prefetching the `meta` batch it did not need to write (landed 2026-11-03 as `ebd2587`: `IndexIdSequence.For`, `Describes` in `WriteMeta`, the guarded recount in `PruneAsync`, `GetStatus(countOrphans:)`, 2 tests, three probe rounds deleted) | 21, and `002` (landed) |
-| 23 | [`032-write-only-what-moved`](032-write-only-what-moved/spec.md) | the community pass stops rewriting rows that already say what it computed — one changed file falls from **12.2 s and 3 commits to 9.2 s and 2**, with `assign` **2.4 s → 0.0 s**, because the pass rewrote all 7 305 declarations it had never read (implemented 2026-11-03: `CommunityAssigner` reads both columns it owns, `Write` batches only the rows that moved, `SameDegree`, `IndexSql.AsDouble`, 2 tests, one probe deleted) | 22, and `002` (landed) |
+| 23 | [`032-write-only-what-moved`](032-write-only-what-moved/spec.md) | the community pass stops rewriting rows that already say what it computed — one changed file falls from **12.2 s and 3 commits to 9.2 s and 2**, with `assign` **2.4 s → 0.0 s**, because the pass rewrote all 7 305 declarations it had never read (landed 2026-11-03 as `5ea10ee`: `CommunityAssigner` reads both columns it owns, `Write` batches only the rows that moved, `SameDegree`, `IndexSql.AsDouble`, 2 tests, one probe deleted) | 22, and `002` (landed) |
 
 `web_search` is decided against rather than deferred: a native search tool is a ranking, a scraping and a
 rate-limit policy this repository does not own, and `--mcp` already reaches an official search server —
@@ -962,11 +962,11 @@ changed file with **12.8 s** in `commit`, spread over the row, edge, community a
 **10.1 s** when it removes a file. With them on `002` T034: SC-002's 5 000-file tree, SC-006's **12.3×** (73.6 MiB of
 file against 5.98 MB of tracked source, which is what round 21's vacuum left), and SC-003's p95, never measured.
 
-## Round 23 — `032-write-only-what-moved` (implemented 2026-11-03, commit pending)
+## Round 23 — `032-write-only-what-moved` (landed 2026-11-03 as `5ea10ee`)
 
-**Status**: implemented on the working tree of 2026-11-03, awaiting the one commit that lands it. Round 23 takes the
-writing run round 22 left standing and gives back the one commit in it that nothing needed: the pass that writes the
-community columns rewrote every declaration on every writing run. The argument is
+**Status**: landed on 2026-11-03 as `5ea10ee`. Round 23 takes the writing run round 22 left standing and gives back the
+one commit in it that nothing needed: the pass that writes the community columns rewrote every declaration on every
+writing run. The argument is
 [`032-write-only-what-moved/spec.md`](032-write-only-what-moved/spec.md); the six decisions are in its `plan.md`.
 
 **Ships**: a writing run over one changed file at **9.2 s and 2 commits**, against **12.2 s and 3**, with `assign`
