@@ -241,6 +241,24 @@ internal sealed record CliOptions
     public bool Web { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether this invocation may inspect Git evidence. Default on.
+    /// </summary>
+    /// <remarks>
+    /// Registers the read-only <c>git_status</c> and <c>git_diff</c> tools. <c>--no-git</c> is the process-local opt-out;
+    /// the shell is still the only tool that can run an arbitrary command.
+    /// </remarks>
+    public bool Git { get; init; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether this invocation may ask the C# compiler about the workspace. Default on.
+    /// </summary>
+    /// <remarks>
+    /// <c>--no-csharp</c> is the opt-out. C# intelligence is part of the default product rather than a per-workspace
+    /// experiment; the switch exists so a host can avoid loading Roslyn when it knows it will not inspect C#.
+    /// </remarks>
+    public bool CSharp { get; init; } = true;
+
+    /// <summary>
     /// Gets a value indicating whether this invocation may ask the F# type checker about the workspace.
     /// </summary>
     /// <remarks>
@@ -424,6 +442,8 @@ internal sealed record CliOptions
         WebAccessEnabled = Web,
         WebAllowedHosts = WebAllowedHosts,
         FSharpToolsEnabled = FSharp,
+        CSharpToolsEnabled = CSharp,
+        GitToolsEnabled = Git,
         McpServers = McpServers,
         Approval = Approval,
         MaxIterations = MaxIterations,
@@ -1942,6 +1962,12 @@ internal sealed record CliOptions
 
             case "--fsharp":
                 return options with { FSharp = true };
+
+            case "--no-csharp":
+                return options with { CSharp = false };
+
+            case "--no-git":
+                return options with { Git = false };
 
             case "--web-allow":
                 return options with

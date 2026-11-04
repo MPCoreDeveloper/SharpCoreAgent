@@ -76,6 +76,47 @@ public sealed class SearchTextToolTests
     }
 
     [Fact]
+    public async Task HonoursGitIgnoreIncludingNegationAndNestedRules()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write(".gitignore", "*.log\nignored/\n!keep.log\n");
+        sandbox.Write("app.log", "needle");
+        sandbox.Write("keep.log", "needle");
+        sandbox.Write("ignored/hidden.txt", "needle");
+        sandbox.Write("src/.gitignore", "local.txt\n");
+        sandbox.Write("src/local.txt", "needle");
+        sandbox.Write("src/app.cs", "needle");
+
+        var result = await new SearchTextTool().ExecuteAsync(
+            ToolTestWorkspace.Call("search_text", """{"pattern":"needle"}"""),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.Contains("keep.log:1: needle", result.Content, StringComparison.Ordinal);
+        Assert.Contains("src/app.cs:1: needle", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("app.log", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ignored", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("local.txt", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASubdirectorySearchStillUsesTheRootsGitIgnore()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write(".gitignore", "*.log\n");
+        sandbox.Write("src/app.log", "needle");
+        sandbox.Write("src/app.cs", "needle");
+
+        var result = await new SearchTextTool().ExecuteAsync(
+            ToolTestWorkspace.Call("search_text", """{"pattern":"needle","path":"src"}"""),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.Contains("src/app.cs:1: needle", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("app.log", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StopsAtMaxMatchesAndFlagsTruncation()
     {
         using var sandbox = ToolTestWorkspace.Create();

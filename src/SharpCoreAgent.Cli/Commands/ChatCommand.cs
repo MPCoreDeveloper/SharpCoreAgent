@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
+using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Sessions;
 using SharpCoreAgent.Infrastructure.Configuration;
@@ -292,6 +293,7 @@ internal static class ChatCommand
         AgentReport? last = null;
         var warned = false;
         var paused = false;
+        var checkpoints = provider.GetRequiredService<ITurnCheckpointJournal>();
         while (true)
         {
             var line = await ReadLineAsync(session, scope, theme, paused).ConfigureAwait(false);
@@ -329,6 +331,14 @@ internal static class ChatCommand
                     return ExitCodes.SessionIo;
                 }
 
+                continue;
+            }
+
+            // Undo is the other command that changes state outside the transcript, and it needs the journal rather
+            // than the command parser, so it is handled here beside /review.
+            if (line[0] == '/' && Is(CommandOf(line), "/undo"))
+            {
+                Undo(checkpoints, session, theme);
                 continue;
             }
 
@@ -1236,6 +1246,77 @@ internal static class ChatCommand
         foreach (var command in commands)
         {
             Console.Out.WriteLine($"{theme.Dim("command")} {command}");
+        }
+    }
+
+    /// <summary>
+    /// Runs <c>/undo</c>: restore the agent's file changes from the most recent turn.
+    /// </summary>
+    /// <param name="checkpoints">The journal that owns the snapshots.</param>
+    /// <param name="session">The conversation; a successful or partial undo adds a note the next request carries.</param>
+    /// <param name="theme">The palette the result is rendered with.</param>
+    /// <remarks>
+    /// A turn whose file changed after it ended is left untouched rather than overwritten. The checkpoint stays in the
+    /// journal when any file fails, so the developer can resolve the reason and run <c>/undo</c> again; files that were
+    /// already restored are remembered and skipped.
+    /// </remarks>
+    private static void Undo(
+        ITurnCheckpointJournal checkpoints,
+        AgentSession session,
+        AnsiTheme theme)
+    {
+        var undo = checkpoints.UndoLast();
+        if (!undo.HadCheckpoint)
+        {
+            Console.Out.WriteLine(theme.Dim("undo: nothing to undo; no completed turn in this process changed a file"));
+            return;
+        }
+
+        var changed = undo.Restored.Count + undo.Removed.Count;
+        var summary = string.Create(
+            CultureInfo.InvariantCulture,
+            $"undo: restored {undo.Restored.Count} file(s), removed {undo.Removed.Count} created file(s)");
+        Console.Out.WriteLine(undo.Failures.Count == 0
+            ? summary
+            : string.Concat(summary, theme.Dim($" · {undo.Failures.Count} file(s) left alone; the checkpoint is kept")));
+
+        var shown = 0;
+        foreach (var path in undo.Restored)
+        {
+            if (shown++ == 20)
+            {
+                Console.Out.WriteLine(theme.Dim("  … more files restored"));
+                break;
+            }
+
+            Console.Out.WriteLine($"  {theme.Dim("restored")} {theme.Path(path)}");
+        }
+
+        foreach (var path in undo.Removed)
+        {
+            if (shown++ == 20)
+            {
+                Console.Out.WriteLine(theme.Dim("  … more files removed"));
+                break;
+            }
+
+            Console.Out.WriteLine($"  {theme.Dim("removed ")} {theme.Path(path)}");
+        }
+
+        foreach (var failure in undo.Failures.Take(20))
+        {
+            Console.Error.WriteLine($"  {theme.Warning("!")} {theme.Path(failure.Path)}: {failure.Reason}");
+        }
+
+        if (undo.Failures.Count > 20)
+        {
+            Console.Error.WriteLine(theme.Dim($"  … {undo.Failures.Count - 20} more failure(s)"));
+        }
+
+        if (changed > 0)
+        {
+            session.Add(ChatMessage.User(
+                "Developer note: /undo restored the file changes from the previous turn. Do not assume those edits still exist; re-read a file before changing it. Changes made by shell or MCP tools are not covered."));
         }
     }
 

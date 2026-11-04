@@ -45,6 +45,7 @@ public sealed class TaskTool : ITool, IToolPreview
     private readonly IChatModelResolver _models;
     private readonly Func<IToolRegistry> _registry;
     private readonly AgentOptions _options;
+    private readonly ITurnCheckpointJournal? _checkpoints;
 
     /// <summary>
     /// Creates the delegation tool.
@@ -57,9 +58,14 @@ public sealed class TaskTool : ITool, IToolPreview
     /// every host fails at startup.
     /// </param>
     /// <param name="options">The budgets the child inherits, narrowed to the sub-agent's iteration ceiling.</param>
+    /// <param name="checkpoints">Optional turn journal the child shares, so a delegated edit joins the parent's undo step.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> is out of range.</exception>
-    public TaskTool(IChatModelResolver models, Func<IToolRegistry> registry, AgentOptions options)
+    public TaskTool(
+        IChatModelResolver models,
+        Func<IToolRegistry> registry,
+        AgentOptions options,
+        ITurnCheckpointJournal? checkpoints = null)
     {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentNullException.ThrowIfNull(registry);
@@ -68,6 +74,7 @@ public sealed class TaskTool : ITool, IToolPreview
         _models = models;
         _registry = registry;
         _options = options.Validate();
+        _checkpoints = checkpoints;
     }
 
     /// <inheritdoc />
@@ -126,7 +133,8 @@ public sealed class TaskTool : ITool, IToolPreview
             _models,
             tools,
             NoPromptApprover.Instance,
-            _options with { MaxIterations = Math.Clamp(iterations, 1, MaxSubAgentIterations) });
+            _options with { MaxIterations = Math.Clamp(iterations, 1, MaxSubAgentIterations) },
+            checkpoints: _checkpoints);
 
         await NarrateAsync(context.Output, TaskFormat.Started(description, iterations), cancellationToken)
             .ConfigureAwait(false);

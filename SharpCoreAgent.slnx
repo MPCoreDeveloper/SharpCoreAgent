@@ -6,6 +6,7 @@
     <Project Path="src/SharpCoreAgent.Infrastructure/SharpCoreAgent.Infrastructure.csproj" />
     <Project Path="src/SharpCoreAgent.Indexing/SharpCoreAgent.Indexing.csproj" />
     <Project Path="src/SharpCoreAgent.Languages.FSharp/SharpCoreAgent.Languages.FSharp.csproj" />
+    <Project Path="src/SharpCoreAgent.Languages.CSharp/SharpCoreAgent.Languages.CSharp.csproj" />
     <Project Path="src/SharpCoreAgent.DependencyInjection/SharpCoreAgent.DependencyInjection.csproj" />
     <Project Path="src/SharpCoreAgent.Cli/SharpCoreAgent.Cli.csproj" />
   </Folder>
@@ -13,6 +14,10 @@
   <Folder Name="/tests/">
     <Project Path="tests/SharpCoreAgent.Tests/SharpCoreAgent.Tests.csproj" />
     <Project Path="tests/SharpCoreAgent.TestMcpServer/SharpCoreAgent.TestMcpServer.csproj" />
+  </Folder>
+
+  <Folder Name="/eng/">
+    <Project Path="eng/SharpCoreAgent.Evaluation/SharpCoreAgent.Evaluation.csproj" />
   </Folder>
 
 </Solution>

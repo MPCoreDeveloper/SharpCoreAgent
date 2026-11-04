@@ -269,6 +269,27 @@ public sealed class ToolTests
     }
 
     [Fact]
+    public async Task ListDirectory_HonoursGitIgnore()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write(".gitignore", "*.tmp\nbuild/\n!keep.tmp\n");
+        sandbox.Write("drop.tmp", "x");
+        sandbox.Write("keep.tmp", "x");
+        sandbox.Write("build/out.txt", "x");
+        sandbox.Write("src/main.cs", "x");
+
+        var result = await new ListDirectoryTool().ExecuteAsync(
+            ToolTestWorkspace.Call("list_directory", """{"recursive":true}"""),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.Contains("f keep.tmp", result.Content, StringComparison.Ordinal);
+        Assert.Contains("f src/main.cs", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("drop.tmp", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("build", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReadFile_ReadsFromAnAttachmentAndShowsThePathInsideIt()
     {
         using var sandbox = ToolTestWorkspace.Create();

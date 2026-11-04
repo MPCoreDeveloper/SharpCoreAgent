@@ -29,7 +29,7 @@ public sealed class DeleteFileTool : ITool
     public ToolSafety Safety => ToolSafety.Destructive;
 
     /// <inheritdoc />
-    public ValueTask<ToolResult> ExecuteAsync(
+    public async ValueTask<ToolResult> ExecuteAsync(
         ToolCall toolCall,
         ToolInvocationContext context,
         CancellationToken cancellationToken)
@@ -42,24 +42,30 @@ public sealed class DeleteFileTool : ITool
 
         if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
         {
-            return ValueTask.FromResult(ToolResult.Refused(
+            return ToolResult.Refused(
                 toolCall.Id,
                 Name,
-                PathSafety.ExplainWriteRefusal(context.Workspace, path, error!)));
+                PathSafety.ExplainWriteRefusal(context.Workspace, path, error!));
         }
 
         var relative = context.Workspace.ToRelative(fullPath);
         if (Directory.Exists(fullPath))
         {
-            return ValueTask.FromResult(ToolResult.Failure(
+            return ToolResult.Failure(
                 toolCall.Id,
                 Name,
-                $"'{relative}' is a directory; delete_file only removes files."));
+                $"'{relative}' is a directory; delete_file only removes files.");
         }
 
         if (!File.Exists(fullPath))
         {
-            return ValueTask.FromResult(ToolResult.Failure(toolCall.Id, Name, $"no file at '{relative}'"));
+            return ToolResult.Failure(toolCall.Id, Name, $"no file at '{relative}'");
+        }
+
+        if (context.Checkpoint is { } checkpoint &&
+            await checkpoint.CaptureAsync(relative, fullPath, cancellationToken).ConfigureAwait(false) is { } captureError)
+        {
+            return ToolResult.Failure(toolCall.Id, Name, captureError);
         }
 
         try
@@ -68,16 +74,16 @@ public sealed class DeleteFileTool : ITool
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return ValueTask.FromResult(ToolResult.Failure(
+            return ToolResult.Failure(
                 toolCall.Id,
                 Name,
-                $"could not delete '{relative}': {ex.Message}"));
+                $"could not delete '{relative}': {ex.Message}");
         }
 
-        return ValueTask.FromResult(ToolResult.Success(
+        return ToolResult.Success(
             toolCall.Id,
             Name,
             string.Create(CultureInfo.InvariantCulture, $"deleted {relative}"),
-            new ToolEffect(ToolEffectKind.Deleted, relative)));
+            new ToolEffect(ToolEffectKind.Deleted, relative));
     }
 }

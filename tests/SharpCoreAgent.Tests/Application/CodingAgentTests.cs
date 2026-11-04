@@ -7,6 +7,7 @@ using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Chat;
+using SharpCoreAgent.Infrastructure.Checkpoints;
 using SharpCoreAgent.Infrastructure.Tools;
 using Xunit;
 
@@ -104,6 +105,31 @@ public sealed class CodingAgentTests
         Assert.Equal(AgentOutcome.Failed, report.Outcome);
         Assert.Contains("filtered", report.Detail!, StringComparison.Ordinal);
         Assert.Equal("redacted", report.FinalText);
+    }
+
+    [Fact]
+    public async Task ACheckpointUndoesTheTurnThatWroteAFile()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "notes.txt");
+        await File.WriteAllTextAsync(path, "original", TestContext.Current.CancellationToken);
+        var journal = new TurnCheckpointStore();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file", """{"path":"notes.txt","content":"changed"}""")],
+            [Completed("done")]);
+
+        var report = await AgentWithOptions(new AgentOptions(), model, [new WriteFileTool()], journal)
+            .RunTurnAsync(Session(directory.Path), "write it", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Equal("changed", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+
+        var undo = journal.UndoLast();
+
+        Assert.True(undo.Succeeded);
+        Assert.Equal(["notes.txt"], undo.Restored);
+        Assert.Equal("original", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -574,6 +600,62 @@ public sealed class CodingAgentTests
     }
 
     [Fact]
+    public async Task ANonDotnetProfileIsGatedByItsOwnVerifier()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("write_file")], [Completed("all done")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool("app.py"), PythonVerifyingTool(passed: true)])
+            .RunTurnAsync(session, "add the feature", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("Python", report.Detail!, StringComparison.Ordinal);
+        Assert.Contains("python_verify", report.Detail!, StringComparison.Ordinal);
+        Assert.Contains(
+            session.Messages,
+            message => message.Role == ChatRole.User
+                && message.Content.Contains("python_verify", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ANonDotnetProfileIsClosedByItsOwnVerifier()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file")],
+            [ToolCallTurn("python_verify")],
+            [Completed("checked")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool("app.py"), PythonVerifyingTool(passed: true)])
+            .RunTurnAsync(session, "add the feature", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+    }
+
+    [Fact]
+    public async Task AProfileEditWithoutItsVerifierIsNotGated()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("write_file")], [Completed("noted")]);
+        var session = Session(directory.Path);
+
+        var report = await Agent(model, [EditingTool()])
+            .RunTurnAsync(session, "edit the source", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+    }
+
+    [Fact]
     public async Task AVerificationThatRanBeforeTheEditDoesNotCloseTheGate()
     {
         using var directory = TempDirectory.Create();
@@ -943,12 +1025,14 @@ public sealed class CodingAgentTests
     private static CodingAgent AgentWithOptions(
         AgentOptions options,
         IStreamingChatModel model,
-        IEnumerable<ITool> tools) =>
+        IEnumerable<ITool> tools,
+        ITurnCheckpointJournal? checkpoints = null) =>
         new(
             new StubResolver(_ => model),
             new ToolRegistry(tools),
             new StubApprover(ApprovalOutcome.Approved),
-            options);
+            options,
+            checkpoints: checkpoints);
 
     private static AgentSession Session(string root, ApprovalMode approval = ApprovalMode.AllowAll) =>
         new(Workspace.Create(root), Descriptor, approval, "you are a test");
@@ -978,9 +1062,23 @@ public sealed class CodingAgentTests
 
     /// <summary>Gets a verifier that passes or fails without starting a compiler.</summary>
     private static ITool VerifyingTool(bool passed) =>
-        new StubTool(ToolNames.DotnetVerify, ToolSafety.Destructive, call => passed
-            ? ToolResult.Success(call.Id, call.Name, "result       passed")
-            : ToolResult.Failure(call.Id, call.Name, "result       failed"));
+        new StubTool(
+            ToolNames.DotnetVerify,
+            ToolSafety.Destructive,
+            call => passed
+                ? ToolResult.Success(call.Id, call.Name, "result       passed")
+                : ToolResult.Failure(call.Id, call.Name, "result       failed"),
+            DotnetVerifyTool.VerificationProfiles);
+
+    /// <summary>Gets a non-.NET verifier that declares its own profile, as a language adapter or host tool would.</summary>
+    private static ITool PythonVerifyingTool(bool passed) =>
+        new StubTool(
+            "python_verify",
+            ToolSafety.Destructive,
+            call => passed
+                ? ToolResult.Success(call.Id, call.Name, "python: ok")
+                : ToolResult.Failure(call.Id, call.Name, "python: failed"),
+            [new VerificationProfile("python", "Python", [".py"])]);
 
     /// <summary>
     /// Gets the real <see cref="TaskTool"/>, whose child runs on the same scripted provider with one stubbed edit, so the
@@ -1153,11 +1251,17 @@ public sealed class CodingAgentTests
         }
     }
 
-    private sealed class StubTool(string name, ToolSafety safety, Func<ToolCall, ToolResult> run) : ITool
+    private sealed class StubTool(
+        string name,
+        ToolSafety safety,
+        Func<ToolCall, ToolResult> run,
+        IReadOnlyList<VerificationProfile>? profiles = null) : ITool, IVerificationTool
     {
         public ToolDefinition Definition { get; } = new(name, "a test tool", """{"type":"object"}""");
 
         public ToolSafety Safety { get; } = safety;
+
+        public IReadOnlyList<VerificationProfile> Profiles { get; } = profiles ?? [];
 
         public ValueTask<ToolResult> ExecuteAsync(
             ToolCall toolCall,

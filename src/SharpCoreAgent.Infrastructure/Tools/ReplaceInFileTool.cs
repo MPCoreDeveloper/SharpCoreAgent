@@ -67,6 +67,12 @@ public sealed class ReplaceInFileTool : ITool, IToolPreview
                 : ToolResult.Failure(toolCall.Id, Name, error!);
         }
 
+        if (context.Checkpoint is { } checkpoint &&
+            await checkpoint.CaptureAsync(edit.RelativePath, edit.FullPath, cancellationToken).ConfigureAwait(false) is { } captureError)
+        {
+            return ToolResult.Failure(toolCall.Id, Name, captureError);
+        }
+
         if (!await WriteAsync(edit.FullPath, edit.Edited, cancellationToken).ConfigureAwait(false))
         {
             return ToolResult.Failure(

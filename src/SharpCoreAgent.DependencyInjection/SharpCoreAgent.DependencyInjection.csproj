@@ -17,6 +17,7 @@
       knowing nothing about tools.
     -->
     <ProjectReference Include="..\SharpCoreAgent.Languages.FSharp\SharpCoreAgent.Languages.FSharp.csproj" />
+    <ProjectReference Include="..\SharpCoreAgent.Languages.CSharp\SharpCoreAgent.Languages.CSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -27,7 +27,7 @@ public sealed class SearchTextTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Search the workspace, or an absolute path inside a read-only attachment that list_roots reports, for literal text. Returns path:line: text for each match. Skips .git, node_modules, bin, obj, .vs, .sharpcoreagent and binary or oversized files.",
+        "Search the workspace, or an absolute path inside a read-only attachment that list_roots reports, for literal text. Returns path:line: text for each match. Skips .git, node_modules, bin, obj, .vs, .sharpcoreagent, paths ignored by .gitignore, and binary or oversized files.",
         Schema);
 
     /// <inheritdoc />
@@ -61,8 +61,10 @@ public sealed class SearchTextTool : ITool
         var scope = answered.ToRelative(fullPath);
         var matches = new List<string>();
         var truncated = false;
+        var ignored = GitIgnoreMatcher.For(answered.Root);
+        ignored.LoadAncestors(fullPath);
 
-        foreach (var file in Files(fullPath, cancellationToken))
+        foreach (var file in Files(fullPath, ignored, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -105,14 +107,18 @@ public sealed class SearchTextTool : ITool
     /// Names the files one invocation searches: the whole tree under a directory, or the file itself.
     /// </summary>
     /// <param name="fullPath">The resolved directory or file.</param>
+    /// <param name="ignored">The <c>.gitignore</c> rules for the tree.</param>
     /// <param name="cancellationToken">Cancels the walk.</param>
     /// <returns>The files to try, in a stable order.</returns>
     /// <remarks>
     /// <c>search_text</c> accepts a file as well as a directory because the argument is a resolved path and
     /// refusing one of the two shapes it can name would be a rule the model has to remember for no gain.
     /// </remarks>
-    private static IEnumerable<string> Files(string fullPath, CancellationToken cancellationToken) =>
-        File.Exists(fullPath) ? [fullPath] : EnumerateFiles(fullPath, cancellationToken);
+    private static IEnumerable<string> Files(
+        string fullPath,
+        GitIgnoreMatcher ignored,
+        CancellationToken cancellationToken) =>
+        File.Exists(fullPath) ? [fullPath] : EnumerateFiles(fullPath, ignored, cancellationToken);
 
     /// <summary>
     /// Searches one file, appending matches and reporting whether the budget ran out.
@@ -174,7 +180,10 @@ public sealed class SearchTextTool : ITool
         return false;
     }
 
-    private static IEnumerable<string> EnumerateFiles(string root, CancellationToken cancellationToken)
+    private static IEnumerable<string> EnumerateFiles(
+        string root,
+        GitIgnoreMatcher ignored,
+        CancellationToken cancellationToken)
     {
         var pending = new Stack<string>();
         pending.Push(root);
@@ -183,6 +192,7 @@ public sealed class SearchTextTool : ITool
         {
             cancellationToken.ThrowIfCancellationRequested();
             var directory = pending.Pop();
+            ignored.LoadFrom(directory);
 
             FileSystemInfo[] entries;
             try
@@ -201,13 +211,16 @@ public sealed class SearchTextTool : ITool
             {
                 if (entries[index] is DirectoryInfo child &&
                     !IgnoredPaths.IsIgnored(child.Name) &&
+                    !ignored.IsIgnored(child.FullName, isDirectory: true) &&
                     child.LinkTarget is null)
                 {
                     pending.Push(child.FullName);
                 }
             }
 
-            foreach (var entry in entries.Where(entry => entry is FileInfo))
+            foreach (var entry in entries
+                .OfType<FileInfo>()
+                .Where(entry => !ignored.IsIgnored(entry.FullName, isDirectory: false)))
             {
                 yield return entry.FullName;
             }

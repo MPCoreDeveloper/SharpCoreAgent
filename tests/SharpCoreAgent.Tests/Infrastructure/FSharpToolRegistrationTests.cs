@@ -62,8 +62,7 @@ public sealed class FSharpToolRegistrationTests
         Assert.IsType<LanguageRouter>(router);
         Assert.Same(router, provider.GetRequiredService<ISymbolUses>());
         Assert.Same(router, provider.GetRequiredService<ISignatureHelp>());
-        Assert.IsType<FsCodeIntelligence>(provider.GetRequiredService<ILanguageAdapter>());
-        Assert.Single(provider.GetServices<ILanguageAdapter>());
+        Assert.IsType<FsCodeIntelligence>(Assert.Single(provider.GetServices<ILanguageAdapter>()));
     }
 
     [Fact]
@@ -81,5 +80,5 @@ public sealed class FSharpToolRegistrationTests
     }
 
     private static ServiceProvider Build(SharpCoreAgentOptions options) =>
-        new ServiceCollection().AddSharpCoreAgent(options).BuildServiceProvider();
+        new ServiceCollection().AddSharpCoreAgent(options with { CSharpToolsEnabled = false }).BuildServiceProvider();
 }

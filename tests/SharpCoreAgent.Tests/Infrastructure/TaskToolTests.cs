@@ -6,6 +6,7 @@ using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
+using SharpCoreAgent.Infrastructure.Checkpoints;
 using SharpCoreAgent.Infrastructure.Tools;
 using Xunit;
 
@@ -332,18 +333,66 @@ public sealed class TaskToolTests
         Assert.False(File.Exists(Path.Combine(directory.Path, "notes.txt")));
     }
 
+    [Fact]
+    public async Task AChildEditBelongsToTheParentsUndoStep()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "notes.txt");
+        await File.WriteAllTextAsync(path, "original", TestContext.Current.CancellationToken);
+        var journal = new TurnCheckpointStore();
+        var childModel = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(WriteFileTool.Name, """{"path":"notes.txt","content":"child"}""")],
+            [Completed("child done")]);
+        var parentModel = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn(TaskTool.Name, """{"prompt":"write notes.txt","description":"write"}""")],
+            [Completed("parent done")]);
+        var task = Tool(childModel, new AgentOptions(), journal, new WriteFileTool());
+        var agent = Agent(parentModel, journal, task);
+
+        var report = await agent.RunTurnAsync(
+            Session(directory),
+            "delegate the write",
+            observer: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.Equal("child", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+
+        var undo = journal.UndoLast();
+        Assert.True(undo.Succeeded);
+        Assert.Equal(["notes.txt"], undo.Restored);
+        Assert.Equal("original", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+        Assert.False(journal.UndoLast().HadCheckpoint);
+    }
+
     private static TaskTool Tool(IStreamingChatModel model, params ITool[] tools) =>
-        Tool(model, new AgentOptions(), tools);
+        Tool(model, new AgentOptions(), null, tools);
 
     private static TaskTool Tool(IStreamingChatModel model, AgentOptions options, params ITool[] tools) =>
-        new(new StubResolver(_ => model), () => new ToolRegistry(tools), options);
+        Tool(model, options, null, tools);
+
+    private static TaskTool Tool(
+        IStreamingChatModel model,
+        AgentOptions options,
+        ITurnCheckpointJournal? checkpoints,
+        params ITool[] tools) =>
+        new(new StubResolver(_ => model), () => new ToolRegistry(tools), options, checkpoints);
 
     private static CodingAgent Agent(IStreamingChatModel model, params ITool[] tools) =>
+        Agent(model, null, tools);
+
+    private static CodingAgent Agent(
+        IStreamingChatModel model,
+        ITurnCheckpointJournal? checkpoints,
+        params ITool[] tools) =>
         new(
             new StubResolver(_ => model),
             new ToolRegistry(tools),
             new StubApprover(ApprovalOutcome.Approved),
-            new AgentOptions());
+            new AgentOptions(),
+            checkpoints: checkpoints);
 
     private static AgentSession Session(TempDirectory directory) =>
         new(Workspace.Create(directory.Path), Descriptor, ApprovalMode.AllowAll, "you are a test");

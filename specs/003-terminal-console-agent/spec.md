@@ -120,7 +120,9 @@ Acceptance:
 
 - MCP servers (deliberately deferred in `002/research.md` D14).
 - Multi-hunk `apply_diff` against a patch file; `replace_in_file` is one exact fragment per call.
-- Git checkpoints and `/undo`; the transcript is the record, not a rollback mechanism.
+- `/undo` for file-tool changes is supplied by `036-turn-checkpoints` as a process-local journal. Git-based
+  checkpoints and `--resume` remain out of scope here; the transcript is still the durable record, not a rollback
+  mechanism.
 - `--resume` as a first-class flag: `--session <path>` already resumes, and it is documented.
 - Per-token cost in currency; `/usage` reports the token counts the provider actually sent.
 - Provider fallback on 401/5xx; a failed turn still reports the provider's message.

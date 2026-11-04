@@ -1078,9 +1078,18 @@ SharpCoreAgent.Domain.Conversation.ImageContent.MediaType.init -> void
 SharpCoreAgent.Domain.Conversation.ImageContent.ToDataUri() -> string!
 SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsImages.get -> bool
 SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsImages.init -> void
+SharpCoreAgent.Domain.Tools.ITurnCheckpoint
+SharpCoreAgent.Domain.Tools.ITurnCheckpoint.CaptureAsync(string! relativePath, string! fullPath, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Checkpoint.get -> SharpCoreAgent.Domain.Tools.ITurnCheckpoint?
+SharpCoreAgent.Domain.Tools.ToolInvocationContext.Checkpoint.init -> void
 SharpCoreAgent.Domain.Tools.ToolResult.Images.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ImageContent!>!
 SharpCoreAgent.Domain.Tools.ToolResult.Images.init -> void
 static SharpCoreAgent.Domain.Conversation.ChatMessage.User(string! content, System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Conversation.ImageContent!>? images) -> SharpCoreAgent.Domain.Conversation.ChatMessage!
 static SharpCoreAgent.Domain.Conversation.ImageContent.operator !=(SharpCoreAgent.Domain.Conversation.ImageContent? left, SharpCoreAgent.Domain.Conversation.ImageContent? right) -> bool
 static SharpCoreAgent.Domain.Conversation.ImageContent.operator ==(SharpCoreAgent.Domain.Conversation.ImageContent? left, SharpCoreAgent.Domain.Conversation.ImageContent? right) -> bool
 static SharpCoreAgent.Domain.Tools.ToolResult.Image(string! callId, string! toolName, string! content, SharpCoreAgent.Domain.Conversation.ImageContent! image) -> SharpCoreAgent.Domain.Tools.ToolResult!
+SharpCoreAgent.Domain.GitIgnoreMatcher
+SharpCoreAgent.Domain.GitIgnoreMatcher.IsIgnored(string! fullPath, bool isDirectory) -> bool
+SharpCoreAgent.Domain.GitIgnoreMatcher.LoadAncestors(string! path) -> void
+SharpCoreAgent.Domain.GitIgnoreMatcher.LoadFrom(string! directory) -> void
+static SharpCoreAgent.Domain.GitIgnoreMatcher.For(string! root) -> SharpCoreAgent.Domain.GitIgnoreMatcher!

@@ -56,6 +56,13 @@ public sealed record ToolInvocationContext(Workspace Workspace)
     /// </remarks>
     public IReadOnlySet<ImageContent>? ImagesAlreadyShown { get; init; }
 
+    /// <summary>Gets the current turn's checkpoint, or null when the host did not enable one.</summary>
+    /// <remarks>
+    /// A file-mutating tool captures the file before changing it. Null is the safe default for a context built by hand:
+    /// the tool works exactly as it did before checkpoints existed, and no promise of undo is implied.
+    /// </remarks>
+    public ITurnCheckpoint? Checkpoint { get; init; }
+
     /// <summary>
     /// Gets the approval mode in force for the conversation. Default <see cref="ApprovalMode.ReadOnly"/>.
     /// </summary>

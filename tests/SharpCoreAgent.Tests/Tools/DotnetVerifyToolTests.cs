@@ -68,6 +68,20 @@ public sealed class DotnetVerifyToolTests
     }
 
     [Fact]
+    public void TheToolDeclaresTheDotnetProfileTheGateUses()
+    {
+        var tool = new DotnetVerifyTool();
+        var profile = Assert.Single(tool.Profiles);
+
+        Assert.Equal(DotnetVerifyTool.ProfileName, profile.Name);
+        Assert.Equal(".NET", profile.DisplayName);
+        Assert.Contains(".cs", profile.Extensions);
+        Assert.Contains(".csproj", profile.Extensions);
+        Assert.True(profile.Matches("src/App/Program.cs"));
+        Assert.True(profile.Matches("src/App/Program.CS"));
+    }
+
+    [Fact]
     public async Task AnUnknownKindIsAFailureThatNamesTheTwoValues()
     {
         using var sandbox = ToolTestWorkspace.Create();

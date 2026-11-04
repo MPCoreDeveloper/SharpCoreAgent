@@ -1,0 +1,7 @@
+<Project>
+  <!-- The engineering host shares the product's runtime, nullable and analyzer rules without becoming a shipping tool. -->
+  <Import Project="..\src\Directory.Build.props" />
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

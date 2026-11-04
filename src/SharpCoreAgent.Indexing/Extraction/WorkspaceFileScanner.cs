@@ -37,8 +37,13 @@ internal sealed class WorkspaceFileScanner
     internal const int SniffBytes = 8 * 1024;
 
     private readonly Workspace _workspace;
+    private readonly GitIgnoreMatcher _ignored;
 
-    private WorkspaceFileScanner(Workspace workspace) => _workspace = workspace;
+    private WorkspaceFileScanner(Workspace workspace)
+    {
+        _workspace = workspace;
+        _ignored = GitIgnoreMatcher.For(workspace.Root);
+    }
 
     /// <summary>
     /// Creates a scanner for one workspace.
@@ -74,6 +79,7 @@ internal sealed class WorkspaceFileScanner
             cancellationToken.ThrowIfCancellationRequested();
 
             var directory = pending.Pop();
+            _ignored.LoadFrom(directory);
             PushChildDirectories(directory, pending, visitedDirectories);
             CollectFiles(directory, found, visitedFiles, cancellationToken);
         }
@@ -93,6 +99,11 @@ internal sealed class WorkspaceFileScanner
         foreach (var child in EnumerateDirectories(directory))
         {
             if (IsIgnored(Path.GetFileName(child)))
+            {
+                continue;
+            }
+
+            if (_ignored.IsIgnored(child, isDirectory: true))
             {
                 continue;
             }
@@ -128,6 +139,11 @@ internal sealed class WorkspaceFileScanner
             cancellationToken.ThrowIfCancellationRequested();
 
             _ = TryResolveLink(file, asDirectory: false, out var real);
+
+            if (_ignored.IsIgnored(file, isDirectory: false))
+            {
+                continue;
+            }
 
             if (!_workspace.IsInside(real) || !visited.Add(real))
             {

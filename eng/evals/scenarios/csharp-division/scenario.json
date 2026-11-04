@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "csharp-division",
+  "language": "csharp/dotnet",
+  "prompt": "Calculator.Divide returns the wrong result. Read the implementation, fix it, and verify the project.",
+  "turns": [
+    { "calls": [{ "name": "read_file", "arguments": { "path": "src/Calculator.cs" } }] },
+    { "calls": [{ "name": "replace_in_file", "arguments": { "path": "src/Calculator.cs", "find": "=> left * right;", "replace": "=> left / right;" } }] },
+    { "calls": [{ "name": "dotnet_verify", "arguments": { "kind": "build", "project": "src/Calculator.csproj", "timeout_seconds": 120 } }] },
+    { "text": "Changed src/Calculator.cs to divide the operands and verified src/Calculator.csproj with dotnet build." }
+  ],
+  "allowedChanges": ["src/Calculator.cs"],
+  "verification": { "tool": "dotnet_verify" },
+  "grade": {
+    "runtimeProbe": "dotnet --version",
+    "command": "dotnet run --project src/Calculator.csproj --no-build",
+    "expectedOutput": ["3"],
+    "expectedFiles": [{ "path": "src/Calculator.cs", "contains": ["left / right"] }]
+  }
+}

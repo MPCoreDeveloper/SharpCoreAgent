@@ -78,6 +78,17 @@
     <PackageVersion Include="FSharp.Compiler.Service" Version="43.12.403" />
 
     <!--
+      Roslyn, linked in by SharpCoreAgent.Languages.CSharp (spec 034).
+
+      The BCL can read C# text but cannot parse or bind it. Roslyn's CSharp.Workspaces package supplies the parser,
+      compilations, semantic model and solution-wide symbol finder behind the Domain's existing language ports. It is
+      not the MSBuildWorkspace package: project XML and restored assets are read directly, and asking a question starts
+      no build host, MSBuild node or language server. The version is the current stable family shared by C# and
+      Workspaces; splitting their versions is a MissingMethodException waiting for the one code path tests miss.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+
+    <!--
       The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
       PrivateAssets="all" keeps it out of every package and out of a consumer's build.
     -->

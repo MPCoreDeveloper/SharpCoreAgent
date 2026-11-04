@@ -1,4 +1,5 @@
 using System.Globalization;
+using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Tools;
 
@@ -23,7 +24,7 @@ public sealed class ListDirectoryTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "List files and directories under a path in the workspace, or under an absolute path inside a read-only attachment that list_roots reports. Directories end with '/'. Use it to find out what exists before reading or writing.",
+        "List files and directories under a path in the workspace, or under an absolute path inside a read-only attachment that list_roots reports. Directories end with '/'. Paths ignored by .gitignore and the built-in generated directories are omitted. Use it to find out what exists before reading or writing.",
         Schema);
 
     /// <inheritdoc />
@@ -62,8 +63,10 @@ public sealed class ListDirectoryTool : ITool
 
         var lines = new List<string>();
         var truncated = false;
+        var ignored = GitIgnoreMatcher.For(answered.Root);
+        ignored.LoadAncestors(fullPath);
 
-        foreach (var entry in Enumerate(fullPath, recursive, cancellationToken))
+        foreach (var entry in Enumerate(fullPath, recursive, ignored, cancellationToken))
         {
             if (lines.Count == TextLimits.MaxDirectoryEntries)
             {
@@ -94,6 +97,7 @@ public sealed class ListDirectoryTool : ITool
     private static IEnumerable<(string Path, string Name, bool IsDirectory)> Enumerate(
         string root,
         bool recursive,
+        GitIgnoreMatcher ignored,
         CancellationToken cancellationToken)
     {
         var pending = new Stack<string>();
@@ -103,6 +107,7 @@ public sealed class ListDirectoryTool : ITool
         {
             cancellationToken.ThrowIfCancellationRequested();
             var directory = pending.Pop();
+            ignored.LoadFrom(directory);
 
             var entries = new DirectoryInfo(directory)
                 .EnumerateFileSystemInfos()
@@ -112,7 +117,8 @@ public sealed class ListDirectoryTool : ITool
             foreach (var entry in entries)
             {
                 var isDirectory = entry is DirectoryInfo;
-                if (isDirectory && IgnoredPaths.IsIgnored(entry.Name))
+                if (ignored.IsIgnored(entry.FullName, isDirectory) ||
+                    (isDirectory && IgnoredPaths.IsIgnored(entry.Name)))
                 {
                     continue;
                 }

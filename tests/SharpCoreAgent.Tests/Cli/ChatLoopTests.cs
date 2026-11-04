@@ -33,6 +33,36 @@ public sealed class ChatLoopTests
     }
 
     [Fact]
+    public async Task UndoRestoresTheFileTheLastTurnWrote()
+    {
+        using var directory = TempDirectory.Create();
+        var path = Path.Combine(directory.Path, "notes.txt");
+        await File.WriteAllTextAsync(path, "original", TestContext.Current.CancellationToken);
+        var previous = Terminal.Interactive;
+        Terminal.Interactive = () => true;
+
+        try
+        {
+            using var console = new ConsoleScope("write notes.txt\n/undo\n/exit\n");
+            var exitCode = await ProgramEntry.RunAsync(
+                [
+                    "--provider", "demo", "--workspace", directory.Path, "--no-session",
+                    "--approval", "allow", "--no-csharp", "--no-git",
+                ]).WaitAsync(Ceiling, TestContext.Current.CancellationToken);
+
+            var output = console.Out.ToString();
+            Assert.Equal(0, exitCode);
+            Assert.Contains("undo: restored 1 file(s), removed 0 created file(s)", output, StringComparison.Ordinal);
+            Assert.Contains("/undo", HelpText.ChatCommands, StringComparison.Ordinal);
+            Assert.Equal("original", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Terminal.Interactive = previous;
+        }
+    }
+
+    [Fact]
     public async Task ThePromptComesBackAfterATurnThatRanATool()
     {
         var (exitCode, output, diagnostics) = await ConverseAsync("list the files\n/exit\n");
@@ -122,7 +152,7 @@ public sealed class ChatLoopTests
         // the system prompt, because the demo adapter counts characters and bills the prompt with every request: it
         // moved up by 300 with `011`'s delegation rule, and again to 2 000 with the `view_image` rule, which is a
         // paragraph rather than a line. What the band has to stay is 80% of the ceiling or more, and under it.
-        var (exitCode, _, diagnostics) = await ConverseAsync("hello\nhello again\n/exit\n", budget: 2_000);
+        var (exitCode, _, diagnostics) = await ConverseAsync("hello\nhello again\n/exit\n", budget: 2_000, csharp: false, git: false);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("% of the session budget is spent", diagnostics, StringComparison.Ordinal);
@@ -135,7 +165,7 @@ public sealed class ChatLoopTests
         // The answer that arrived is never thrown away for being one token over, so the warning is the only place
         // that can tell the developer their next request will be refused — and saying "88%" of an overdrawn budget
         // would read as a rounding note.
-        var (exitCode, _, diagnostics) = await ConverseAsync("list the files\n/exit\n", budget: 1_000);
+        var (exitCode, _, diagnostics) = await ConverseAsync("list the files\n/exit\n", budget: 1_000, csharp: false, git: false);
 
         Assert.Equal(0, exitCode);
 
@@ -166,7 +196,7 @@ public sealed class ChatLoopTests
         // The demo provider bills about 600 tokens for a temp workspace, so a 1 000 token ceiling is spent by the
         // second answer: the third request is where a session used to end. Answering the offer with "y" has to raise
         // the ceiling and replay the request, and the conversation has to survive it.
-        var (exitCode, output, diagnostics) = await ConverseAsync("hello\nhello again\ny\ny\n/exit\n", budget: 1_000);
+        var (exitCode, output, diagnostics) = await ConverseAsync("hello\nhello again\ny\ny\n/exit\n", budget: 1_000, csharp: false, git: false);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("[Y/n]", diagnostics, StringComparison.Ordinal);
@@ -190,7 +220,9 @@ public sealed class ChatLoopTests
         // The second "n" is for the resumed request, which is refused again because no ceiling was raised.
         var (exitCode, _, diagnostics) = await ConverseAsync(
             $"list the files\nlist the files\nn\n{resume}\nn\n/exit\n",
-            budget: 1_000);
+            budget: 1_000,
+            csharp: false,
+            git: false);
 
         // Leaving with the request still paused is not a finished conversation, and a script has to be able to
         // tell the difference between that and a clean exit.
@@ -259,12 +291,16 @@ public sealed class ChatLoopTests
     /// <param name="saveSession">Whether the transcript is written after every turn, as it is by default.</param>
     /// <param name="verbose">Whether to ask for the per-turn marker.</param>
     /// <param name="budget">The session's token ceiling; zero leaves the default in place.</param>
+    /// <param name="csharp">Whether the default C# adapter is registered; budget cases opt out to keep their ceilings fixed.</param>
+    /// <param name="git">Whether the default Git tools are registered; budget cases opt out to keep their ceilings fixed.</param>
     /// <returns>The exit code, the answer stream and the diagnostics stream.</returns>
     private static async Task<(int ExitCode, string Output, string Diagnostics)> ConverseAsync(
         string script,
         bool saveSession = false,
         bool verbose = false,
-        long budget = 0)
+        long budget = 0,
+        bool csharp = true,
+        bool git = true)
     {
         using var directory = TempDirectory.Create();
         var previous = Terminal.Interactive;
@@ -283,6 +319,16 @@ public sealed class ChatLoopTests
             if (verbose)
             {
                 args.Add("--verbose");
+            }
+
+            if (!csharp)
+            {
+                args.Add("--no-csharp");
+            }
+
+            if (!git)
+            {
+                args.Add("--no-git");
             }
 
             if (budget > 0)

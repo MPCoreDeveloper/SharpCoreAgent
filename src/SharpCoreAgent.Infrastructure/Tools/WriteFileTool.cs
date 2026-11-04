@@ -70,6 +70,12 @@ public sealed class WriteFileTool : ITool
         }
 
         var directory = Path.GetDirectoryName(fullPath);
+        if (context.Checkpoint is { } checkpoint &&
+            await checkpoint.CaptureAsync(relative, fullPath, cancellationToken).ConfigureAwait(false) is { } captureError)
+        {
+            return ToolResult.Failure(toolCall.Id, Name, captureError);
+        }
+
         var temporary = Path.Combine(
             string.IsNullOrEmpty(directory) ? context.Workspace.Root : directory,
             string.Create(CultureInfo.InvariantCulture, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp"));

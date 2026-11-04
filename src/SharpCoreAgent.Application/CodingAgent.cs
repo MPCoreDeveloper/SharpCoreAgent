@@ -26,9 +26,11 @@ public sealed class CodingAgent
 {
     private readonly IChatModelResolver _models;
     private readonly IToolRegistry _tools;
+    private readonly IReadOnlyList<VerificationBinding> _verifications;
     private readonly IToolApprover _approver;
     private readonly AgentOptions _options;
     private readonly ILogger<CodingAgent> _logger;
+    private readonly ITurnCheckpointJournal? _checkpoints;
 
     /// <summary>
     /// Creates an agent.
@@ -38,13 +40,15 @@ public sealed class CodingAgent
     /// <param name="approver">Decides whether a destructive tool may run.</param>
     /// <param name="options">The budgets for the turn.</param>
     /// <param name="logger">Optional diagnostics sink; the loop logs decisions, never transcript text.</param>
+    /// <param name="checkpoints">Optional turn journal; when present, file tools can capture what they are about to change.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> is out of range.</exception>
     public CodingAgent(
         IChatModelResolver models,
         IToolRegistry tools,
         IToolApprover approver,
         AgentOptions options,
-        ILogger<CodingAgent>? logger = null)
+        ILogger<CodingAgent>? logger = null,
+        ITurnCheckpointJournal? checkpoints = null)
     {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentNullException.ThrowIfNull(tools);
@@ -53,9 +57,11 @@ public sealed class CodingAgent
 
         _models = models;
         _tools = tools;
+        _verifications = VerifyGate.Bind(tools);
         _approver = approver;
         _options = options.Validate();
         _logger = logger ?? NullLogger<CodingAgent>.Instance;
+        _checkpoints = checkpoints;
     }
 
     /// <summary>Gets the validated options this agent runs with.</summary>
@@ -92,7 +98,12 @@ public sealed class CodingAgent
 
         var sink = observer ?? NullAgentObserver.Instance;
         var model = session.ActiveModel;
-        var state = new TurnState(model, AlreadyShown(session));
+
+        // Every turn gets a checkpoint, even a read-only one: a checkpoint with no captured file is discarded at the
+        // end, while a review that only reads leaves the previous edit's undo step in place. A host without a journal
+        // gets null, and the file tools behave exactly as they did before checkpoints existed.
+        using var checkpoint = _checkpoints?.BeginTurn();
+        var state = new TurnState(model, AlreadyShown(session), checkpoint, _verifications);
 
         // A model that cannot call tools would answer in prose and silently ignore every tool, so the
         // turn is refused before a request is spent and before the transcript is polluted.
@@ -271,25 +282,26 @@ public sealed class CodingAgent
 
         if (!response.Message.HasToolCalls)
         {
-            // A turn that edited .NET source cannot end on the model's word: the harness has to have run, and
-            // passed, since the last such edit. Plan mode writes nothing and a host without the verifier is
-            // not gated at all, so both of those keep the behaviour they had before this rule existed.
-            if (VerifyGate.IsRequired(session, _tools, state.LastDotnetEdit, state.LastVerification))
+            // A turn that edited profiled source cannot end on the model's word: the verifier for every profile it
+            // touched has to have run, and passed, since the last such edit. Plan mode writes nothing and a registry
+            // without that profile's verifier is not gated at all, so both keep the behaviour they had before this rule.
+            var gaps = state.UnverifiedGaps;
+            if (VerifyGate.IsRequired(session, gaps))
             {
                 if (state.VerificationNudges < MaxVerificationNudges)
                 {
                     state.VerificationNudges++;
-                    session.Add(ChatMessage.User(PromptLibrary.VerifyNudge));
+                    session.Add(ChatMessage.User(PromptLibrary.VerifyNudgeFor(gaps)));
                     Log.VerificationRequired(_logger, state.Model.QualifiedName, state.VerificationNudges, null);
                     return null;
                 }
 
                 // Out of nudges. The answer is accepted, and the report says what it is worth rather than
-                // pretending the build ran: a turn that can never end is worse than one that ends honestly.
+                // pretending the verifier ran: a turn that can never end is worse than one that ends honestly.
                 Log.TurnCompletedUnverified(_logger, state.Model.QualifiedName, state.Iterations, null);
                 return state.Report(
                     AgentOutcome.Completed,
-                    VerifyGate.UnverifiedDetail,
+                    VerifyGate.Detail(gaps),
                     response.Message.Content,
                     unverified: true);
             }
@@ -394,15 +406,24 @@ public sealed class CodingAgent
     /// </summary>
     /// <param name="model">The model the turn runs on.</param>
     /// <param name="shown">The pictures the conversation already carries, which the turn adds to as its tools attach more.</param>
-    private sealed class TurnState(ModelDescriptor model, HashSet<ImageContent> shown)
+    /// <param name="checkpoint">The turn's file checkpoint, or null when the host did not enable one.</param>
+    /// <param name="verifications">The verifier tools and the language profiles each declares.</param>
+    private sealed class TurnState(
+        ModelDescriptor model,
+        HashSet<ImageContent> shown,
+        ITurnCheckpoint? checkpoint,
+        IReadOnlyList<VerificationBinding> verifications)
     {
         private readonly List<ToolResult> _results = [];
         private readonly List<FallbackUsed> _fallbacks = [];
-        private int _lastDotnetEdit = -1;
-        private int _lastVerification = -1;
+        private readonly Dictionary<string, int> _lastEdit = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _lastVerification = new(StringComparer.Ordinal);
         private long _imageBytes;
         /// <summary>Gets the model the turn runs on.</summary>
         public ModelDescriptor Model { get; } = model;
+
+        /// <summary>Gets the file checkpoint every mutating tool receives, or null when checkpoints are off.</summary>
+        public ITurnCheckpoint? Checkpoint { get; } = checkpoint;
 
         /// <summary>Gets or sets the model that served the last attempt.</summary>
         /// <remarks>
@@ -420,11 +441,31 @@ public sealed class CodingAgent
         /// <summary>Gets how many tool results the turn has collected.</summary>
         public int ResultCount => _results.Count;
 
-        /// <summary>Gets the index of the last result that changed .NET source, or -1 when nothing did.</summary>
-        public int LastDotnetEdit => _lastDotnetEdit;
+        /// <summary>Gets the profiles whose last edit has no later passing verifier result.</summary>
+        public IReadOnlyList<VerificationGap> UnverifiedGaps
+        {
+            get
+            {
+                var gaps = new List<VerificationGap>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var binding in verifications)
+                {
+                    var name = binding.Profile.Name;
+                    if (!seen.Add(name))
+                    {
+                        continue;
+                    }
 
-        /// <summary>Gets the index of the last passing verification, or -1 when none ran.</summary>
-        public int LastVerification => _lastVerification;
+                    if (_lastEdit.TryGetValue(name, out var edit)
+                        && (!_lastVerification.TryGetValue(name, out var verified) || verified < edit))
+                    {
+                        gaps.Add(new VerificationGap(binding.Profile, binding.ToolName));
+                    }
+                }
+
+                return gaps;
+            }
+        }
 
         /// <summary>Gets or sets how often the loop has asked the model to verify this turn.</summary>
         public int VerificationNudges { get; set; }
@@ -468,14 +509,20 @@ public sealed class CodingAgent
                 shown.Add(image);
             }
 
-            if (VerifyGate.Verifies(result))
+            foreach (var binding in verifications)
             {
-                _lastVerification = index;
-            }
+                var name = binding.Profile.Name;
+                if (!result.IsError
+                    && !result.IsRefused
+                    && string.Equals(result.ToolName, binding.ToolName, StringComparison.Ordinal))
+                {
+                    _lastVerification[name] = index;
+                }
 
-            if (VerifyGate.EditsDotnetSource(result))
-            {
-                _lastDotnetEdit = index;
+                if (result.Effects.Any(effect => VerifyGate.Edits(binding.Profile, effect)))
+                {
+                    _lastEdit[name] = index;
+                }
             }
         }
 
@@ -499,7 +546,7 @@ public sealed class CodingAgent
         /// <param name="outcome">How the turn ended.</param>
         /// <param name="detail">Why, when the outcome needs explaining.</param>
         /// <param name="finalText">The answer, when there is one.</param>
-        /// <param name="unverified">Whether a .NET edit went without a passing verification.</param>
+        /// <param name="unverified">Whether a profile-owned edit went without a passing verification.</param>
         /// <returns>The report.</returns>
         public AgentReport Report(
             AgentOutcome outcome,
@@ -606,6 +653,7 @@ public sealed class CodingAgent
                     sink,
                     state.ImageBytesRemaining(_options.MaxTurnImageBytes),
                     state.ImagesAlreadyShown,
+                    state.Checkpoint,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -691,6 +739,7 @@ public sealed class CodingAgent
     /// <param name="sink">Receives the tool's live output while it runs.</param>
     /// <param name="imageBytesRemaining">What the turn may still attach, or null when its ceiling is off.</param>
     /// <param name="imagesAlreadyShown">The pictures the conversation already carries.</param>
+    /// <param name="checkpoint">The turn's file checkpoint, or null when the host did not enable one.</param>
     /// <param name="cancellationToken">Cancels the invocation.</param>
     /// <returns>The result, with a readable failure instead of an exception where the tool allows one.</returns>
     private static async Task<ToolResult> ExecuteAsync(
@@ -700,6 +749,7 @@ public sealed class CodingAgent
         IAgentObserver sink,
         long? imageBytesRemaining,
         IReadOnlySet<ImageContent> imagesAlreadyShown,
+        ITurnCheckpoint? checkpoint,
         CancellationToken cancellationToken)
     {
         // Live output is a courtesy, never a precondition: the tool runs identically whether or not the
@@ -717,6 +767,7 @@ public sealed class CodingAgent
             Approval = session.Approval,
             ImageBytesRemaining = imageBytesRemaining,
             ImagesAlreadyShown = imagesAlreadyShown,
+            Checkpoint = checkpoint,
         };
         try
         {

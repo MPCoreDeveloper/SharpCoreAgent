@@ -1,3 +1,5 @@
+using SharpCoreAgent.Domain.Tools;
+
 namespace SharpCoreAgent.Application;
 
 /// <summary>
@@ -157,7 +159,39 @@ public static class PromptLibrary
         """;
 
     /// <summary>
-    /// Gets the rule that governs asking the language service about a file.
+    /// Gets the rule that governs reading Git evidence.
+    /// </summary>
+    /// <remarks>
+    /// Shipped when the Git tools are registered. Both are read-only and therefore available in Plan and Review, which
+    /// is the whole reason they exist: the shell is hidden there, and a reviewer without a diff can only trust prose.
+    /// </remarks>
+    public const string GitRule =
+        """
+        Using Git evidence:
+        - git_status shows staged, unstaged, untracked, renamed and conflicted paths. The first column is the index and the second is the working tree.
+        - git_diff shows a unified diff. scope=working is unstaged, scope=staged is the index against HEAD, and scope=head is every tracked change against HEAD. Use path when the change is local to one file or folder.
+        - An untracked file is not in git_diff; git_status names it and read_file shows it. Both Git tools are read-only, so use them instead of run_shell in Plan and Review.
+        """;
+
+    /// <summary>
+    /// Gets the rule that governs asking the C# compiler about a file.
+    /// </summary>
+    /// <remarks>
+    /// Shipped only when the C# adapter is registered. It says the position convention, that a clean file is not a
+    /// passing build, and what the stable failure codes mean, because those are the facts a model cannot infer from a
+    /// tool schema.
+    /// </remarks>
+    public const string CSharpRule =
+        """
+        Using the C# compiler:
+        - Three tools ask Roslyn about C# source directly, without a build: file_diagnostics lists what the compiler says about one file, uses_at follows the symbol the compiler bound at a position, and signature_at shows the overloads and active argument at a call.
+        - Positions are a 1-based line and a 0-based column inside the name. Copy the position a diagnostic printed instead of counting characters.
+        - Prefer file_diagnostics while you iterate; it reuses an in-memory project until a source, project or restore file changes. A clean file still has to be proved by dotnet_verify before you answer.
+        - CSH002 means the project graph could not be read exactly (usually restore or an unsupported MSBuild construct), so run dotnet_verify with kind build once and ask again. CSH001 means there is no .csproj, and LANG001 means this build has no adapter for that file.
+        """;
+
+    /// <summary>
+    /// Gets the rule that governs asking the F# type checker about a file.
     /// </summary>
     /// <remarks>
     /// Shipped only when <c>--fsharp</c> registered the three tools, for the same reason <see cref="IndexRule"/> is: a
@@ -187,6 +221,35 @@ public static class PromptLibrary
         """
         You changed .NET source, and dotnet_verify has not passed since that change. Call dotnet_verify with kind build (or kind test) now, read the report, and fix anything it names before you answer. If the build cannot pass in this turn, say what it reported instead of saying the change works.
         """;
+
+    /// <summary>
+    /// Gets the sentence the turn loop appends for the profiles whose edits have no later verification.
+    /// </summary>
+    /// <param name="gaps">The profiles and the verifier tools that own them.</param>
+    /// <returns>The .NET sentence unchanged, or the same instruction naming another language's verifier.</returns>
+    /// <remarks>
+    /// A host that registers a verifier tool with a Python or JavaScript profile gets an instruction that names that
+    /// tool. The .NET path returns <see cref="VerifyNudge"/> exactly, so the shipped prompt and its tests do not move
+    /// when a host adds a profile for another language.
+    /// </remarks>
+    public static string VerifyNudgeFor(IReadOnlyList<VerificationGap> gaps)
+    {
+        if (gaps.Count == 1
+            && string.Equals(gaps[0].Profile.Name, "dotnet", StringComparison.Ordinal)
+            && string.Equals(gaps[0].ToolName, ToolNames.DotnetVerify, StringComparison.Ordinal))
+        {
+            return VerifyNudge;
+        }
+
+        var languages = string.Join(
+            " and ",
+            gaps.Select(gap => gap.Profile.DisplayName).Distinct(StringComparer.Ordinal));
+        var tools = string.Join(
+            " or ",
+            gaps.Select(gap => gap.ToolName).Distinct(StringComparer.Ordinal));
+        var verb = tools.Contains(" or ", StringComparison.Ordinal) ? "have" : "has";
+        return $"You changed {languages} source, and {tools} {verb} not passed since that change. Call {tools} with the verification arguments its profile names now, read the report, and fix anything it names before you answer. If the check cannot pass in this turn, say what it reported instead of saying the change works.";
+    }
 
     /// <summary>
     /// Gets the message the loop adds when a tool answered with exactly one image.
@@ -226,9 +289,10 @@ public static class PromptLibrary
     /// <param name="webAvailable">Whether the host registered <c>fetch_url</c> for this process.</param>
     /// <param name="mcpAvailable">Whether the host started at least one MCP server for this invocation.</param>
     /// <param name="fsharpAvailable">Whether the host registered the three F# code-intelligence tools.</param>
+    /// <param name="csharpAvailable">Whether the host registered the three C# code-intelligence tools.</param>
+    /// <param name="gitAvailable">Whether the host registered the two read-only Git evidence tools.</param>
     /// <returns>
-    /// The shipped prompt, followed by <see cref="IndexRule"/>, <see cref="WebRule"/>, <see cref="McpRule"/> and
-    /// <see cref="FSharpRule"/> for the capabilities the host actually has.
+    /// The shipped prompt, followed by the capability rules the host actually has.
     /// </returns>
     /// <remarks>
     /// <c>dotnet_verify</c> has no switch here, unlike the index and the network: the composition root registers
@@ -241,7 +305,9 @@ public static class PromptLibrary
         bool indexAvailable,
         bool webAvailable = false,
         bool mcpAvailable = false,
-        bool fsharpAvailable = false)
+        bool fsharpAvailable = false,
+        bool csharpAvailable = false,
+        bool gitAvailable = false)
     {
         var prompt = SystemPrompt;
 
@@ -258,6 +324,16 @@ public static class PromptLibrary
         if (mcpAvailable)
         {
             prompt = string.Concat(prompt, "\n\n", McpRule);
+        }
+
+        if (gitAvailable)
+        {
+            prompt = string.Concat(prompt, "\n\n", GitRule);
+        }
+
+        if (csharpAvailable)
+        {
+            prompt = string.Concat(prompt, "\n\n", CSharpRule);
         }
 
         return fsharpAvailable ? string.Concat(prompt, "\n\n", FSharpRule) : prompt;

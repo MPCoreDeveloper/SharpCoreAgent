@@ -46,7 +46,9 @@ pass has a real list rather than a memory.
 - [X] T030 Add `/compact [n]` with a clamped window (1–200, default 8) and a report of how many were dropped.
 - [X] T031 Tests: fits, window, orphan guard, invalid window.
 - [ ] T032 Add `--resume [path]` that lists the workspace's transcripts when the path is omitted.
-- [ ] T033 Add git-based checkpoints per turn and `/undo` to restore the last one.
+- [X] T033 Add checkpoints per turn and `/undo` to restore the last one. Done in `036-turn-checkpoints` as a
+  process-local journal over `write_file`, `replace_in_file` and `delete_file`, with sub-agent merges and post-turn
+  drift checks; it is not Git-based.
 - [ ] T034 Compact automatically when a turn's prompt exceeds a configurable fraction of the model's context window.
 
 ## Phase 4 — Provider depth

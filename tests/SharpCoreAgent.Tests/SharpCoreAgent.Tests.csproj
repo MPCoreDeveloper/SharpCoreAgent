@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\src\SharpCoreAgent.Cli\SharpCoreAgent.Cli.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreAgent.Indexing\SharpCoreAgent.Indexing.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreAgent.Languages.FSharp\SharpCoreAgent.Languages.FSharp.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreAgent.Languages.CSharp\SharpCoreAgent.Languages.CSharp.csproj" />
+    <ProjectReference Include="..\..\eng\SharpCoreAgent.Evaluation\SharpCoreAgent.Evaluation.csproj" />
   </ItemGroup>
 
   <ItemGroup>

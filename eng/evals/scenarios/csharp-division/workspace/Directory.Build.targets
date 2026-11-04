@@ -1,0 +1,3 @@
+<Project>
+  <!-- The fixture owns its target framework and does not inherit repository build targets. -->
+</Project>

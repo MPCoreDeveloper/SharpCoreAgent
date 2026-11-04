@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "python-cart",
+  "language": "python",
+  "prompt": "The cart total incorrectly includes the number of items. Read the implementation, fix it, and run the visible tests.",
+  "turns": [
+    { "calls": [{ "name": "read_file", "arguments": { "path": "src/cart.py" } }] },
+    { "calls": [{ "name": "replace_in_file", "arguments": { "path": "src/cart.py", "find": "return sum(prices) + len(prices)", "replace": "return sum(prices)" } }] },
+    { "calls": [{ "name": "run_shell", "arguments": { "command": "python -m unittest discover -s tests -v", "timeout_seconds": 60 } }] },
+    { "text": "Changed src/cart.py so total only sums prices; the visible unittest suite passes." }
+  ],
+  "allowedChanges": ["src/cart.py"],
+  "verification": { "tool": "run_shell", "command": "python -m unittest discover -s tests -v" },
+  "grade": {
+    "runtimeProbe": "python --version",
+    "command": "python -m unittest discover -s grading -v",
+    "expectedOutput": ["OK"],
+    "expectedFiles": [{ "path": "src/cart.py", "contains": ["return sum(prices)"] }]
+  }
+}

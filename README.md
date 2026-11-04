@@ -243,7 +243,9 @@ keep working on the file that needs repairing.
 | `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
 | `--web` | run, chat | off — `fetch_url` may read http and https pages; the network is off otherwise |
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
-| `--fsharp` | run, chat | off — `file_diagnostics`, `uses_at` and `signature_at` may ask the F# type checker; off otherwise |
+| `--fsharp` | run, chat | off — add the F# adapter behind the default `file_diagnostics`, `uses_at` and `signature_at` tools |
+| `--no-csharp` | run, chat | C# on — remove the Roslyn adapter and its three code-intelligence tools for this invocation |
+| `--no-git` | run, chat | Git on — remove the read-only `git_status` and `git_diff` evidence tools |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
 | `--write` | mcp config, ide | off — merge the block into that file, or write the profile or the task, instead of printing it |
@@ -287,7 +289,7 @@ In `chat`, the loop understands `/model grok:grok-4` (switch provider and model 
 conversation), `/model ds`, `/model r1`, `/model grok` (aliases), `/roles` (what each job runs on),
 `/review [focus]` (one read-only turn on the reviewer's model, inside this transcript), `/approval`,
 `/mode plan|act`, `/compact [n]`, `/budget [n|+n|unlimited]`, `/continue`, `/usage`, `/cost`, `/files`,
-`/session`, `/roots`, `/help` and `/exit` (or `/quit`).
+`/undo`, `/session`, `/roots`, `/help` and `/exit` (or `/quit`).
 
 Three jobs, three models. `--planner`, `--executor` and `--reviewer` name the model a plan turn, an act
 turn and `/review` run on — planning on the model that reasons best, execution on the one that is fastest
@@ -361,7 +363,22 @@ session: a standing approval belongs to the conversation that earned it.
 ## Tools
 
 `list_directory`, `read_file`, `view_image`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
-`delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `task`.
+`delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `git_status`, `git_diff`, `task`,
+`file_diagnostics`, `uses_at`, `signature_at`.
+
+`git_status` and `git_diff` are the read-only evidence a Plan or Review turn can get without a shell. `git_status`
+reports porcelain index/worktree codes, untracked files, renames and conflicts; `git_diff` shows a unified diff for
+`working` (unstaged), `staged` (index against `HEAD`) or `head` (every tracked change against `HEAD`), optionally
+scoped to one workspace path. Neither accepts a command, an option, a revision expression or a path outside the
+workspace: the argv is fixed, the model's path travels after `--`, external diff drivers and textconv are disabled,
+and optional index locks are off so reading the status does not rewrite what it reports. Output is bounded at 64 KiB
+and 500 status entries. Untracked files are named by `git_status`; they are not part of a Git diff. `--no-git` removes
+both tools and their prompt rule for one invocation.
+
+`search_text`, `list_directory` and the index share one workspace-local `.gitignore` matcher: root and nested files,
+negation, anchored and directory-only rules, wildcards and `**`. An ignored directory is not walked, and the built-in
+exclusions (`.git`, `node_modules`, `bin`, `obj`, `.vs`, `.sharpcoreagent`) still apply when there is no `.gitignore`.
+`read_file` remains a direct read.
 
 `dotnet_verify` builds or tests the workspace and answers with a report rather than a log: exit code,
 `passed`/`failed`, warnings, the diagnostics themselves, test counts, duration and the summary MSBuild
@@ -379,6 +396,13 @@ every diagnostic, so the model fixes the compiler's complaint instead of repeati
 
 `run_shell` is still the tool for everything else — it is not the tool for proving a .NET edit, and the
 system prompt now says so.
+
+Verification is profile-driven. A tool that implements `IVerificationTool` declares the language profiles it owns, and
+the turn gate waits for that same tool after an edit to a matching path. `dotnet_verify` declares the built-in `.NET`
+profile (`.cs`, `.vb`, `.fs`, the project/build files and solutions); its wording and behavior are unchanged. A host or
+language adapter can register a tool such as `python_verify` with `.py` profiles, and the nudge/report will name it
+without a change to the loop. The built-in registry ships only the .NET verifier; Python and JavaScript verifier tools
+are the next language slice, not an implied command.
 
 `list_roots` reports the primary root and every read-only attached root, and it is the one tool result
 that prints an absolute path: naming the legal ones is its whole job.
@@ -451,12 +475,31 @@ no channel from a tool result back into session usage:
 task · find every caller of PriceCalculator · 6 model calls · 18,940 tokens
 ```
 
-`fetch_url` is the nineteenth tool, and one of three flags that add tools to the registry. `--web` adds this
+`/undo` restores the files the agent changed in the most recent turn. Before `write_file`, `replace_in_file` or
+`delete_file` changes a path, the turn's checkpoint records the exact bytes (or that the file did not exist); repeated
+edits of one file keep the state from before the turn, and a sub-agent's files merge into the turn that delegated the
+work. `/undo` restores modified files, recreates deleted ones and removes files the turn created, then adds a developer
+note to the transcript so the next request knows those edits are gone. Running it again walks back earlier turns.
+
+The restore refuses to overwrite a file that changed after the turn ended, and keeps the checkpoint so `/undo` can be
+retried once the conflict is resolved. Checkpoints are in memory for this process — a resumed session starts with
+nothing to undo — and each captured file is capped at 64 MiB. The journal covers only the three file tools: files
+changed by `run_shell`, an MCP tool or a command inside a sub-agent are not captured. `readonly` and review turns
+capture nothing, so they never hide the edit before them.
+
+```text
+undo: restored 1 file(s), removed 0 created file(s)
+  restored src/Cart.cs
+```
+
+`fetch_url` is an opt-in tool and one of three flags that add tools to the registry. `--web` adds this
 one for a single invocation, and without the flag it is absent from the registry, from the definitions the
-model sees and from the system prompt. `--fsharp` adds the three that ask a type checker, `--mcp` adds
-whatever each server offers, and no flag can remove a tool from the eighteen a build starts with. Of the
-three, `fetch_url` is the one the system prompt has to be told about, because its absence is a *network*
-decision rather than a capability one. It reads one absolute `http`/`https` URL, follows at most five
+model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-three
+tools a build starts with; `--no-csharp` removes the adapter and its three tools for one invocation, and `--no-git`
+removes `git_status` and `git_diff`. `--fsharp` adds a second adapter behind
+the same three tools, and `--mcp` adds whatever each server offers. Of the optional capabilities,
+`fetch_url` is the one the system prompt has to be told about, because its absence is a *network* decision
+rather than a language one. It reads one absolute `http`/`https` URL, follows at most five
 redirects, and answers with the final URL, the status, the content type, the byte count and whether the
 text was cut. It sends one `User-Agent` and nothing else — no cookie, no referer, no credential — and it
 refuses a host that resolves to a loopback, private, link-local or cloud-metadata address unless
@@ -479,12 +522,40 @@ redirected   from https://example.com/docs
 changelog: 4.2.0 — …
 ```
 
-`--fsharp` registers three tools that ask a type checker rather than read bytes: `file_diagnostics` (what
-the compiler says about one file), `uses_at` (every site the compiler bound to one declaration, given the
-line and column of one occurrence) and `signature_at` (what a callable takes, and which argument the
-position is inside). `FSharp.Compiler.Service` is linked into the process, so there is no build, no restore
-and no second process: `file_diagnostics` is the fast half of the verification loop, and `dotnet_verify` is
-still the authority that closes a turn.
+The three code-intelligence tools are registered by default with the C# adapter: `file_diagnostics` (what
+the compiler says about one file), `uses_at` (every source site the compiler bound to one declaration, given
+the line and column of one occurrence) and `signature_at` (what a callable takes, and which argument the
+position is inside). Roslyn is linked into the process. Project XML and restored package assets are read
+directly; no build host, restore, language server or second process is started. The first question loads an
+in-memory solution, later questions reuse it until a project, source, directory build file or restore input
+changes, and `dotnet_verify` remains the authority that closes a turn. `--no-csharp` removes the adapter and
+all three tools:
+
+```text
+App/Program.cs · 1 error, 0 warnings, 0 info
+  App/Program.cs:7:18 · error CS0103 · The name 'Subtotal' does not exist in the current context.
+
+Total at App/Program.cs:5:23 · 2 uses · 2 files
+  definition Cart/Cart.cs:7:27 · Total
+  use App/Program.cs:5:23 · Total
+
+App/Program.cs:5:37 · 2 signatures · active 1 of 2
+  1) Fixture.Cart.Total(decimal[] prices, decimal tax)
+     decimal[] prices
+     decimal tax ← active
+```
+
+`uses_at` is the answer a text search cannot give: Roslyn resolved the token, so a same-named member on
+another type, a string that spells the name and a comment are all excluded, and an in-workspace project
+reference is compiled from source so its declarations and uses are part of the same answer. `CSH001` means
+the workspace has no `.csproj`, `CSH002` means the project graph could not be read exactly (usually restore,
+or an MSBuild construct this bounded reader refuses rather than guesses), and `LANG001` means no adapter
+claims the file.
+
+`--fsharp` adds the F# adapter behind those same tools. `FSharp.Compiler.Service` is linked in, so there is
+still no build, restore or second process; the first question pays to load the project and every later one
+reuses it. `FSH002` says the project has not been restored and names `dotnet_verify` as the fix. The same
+`uses_at` answer for the F# fixture:
 
 ```text
 src/Program.fs · 1 error, 0 warnings, 0 info
@@ -500,11 +571,10 @@ src/Program.fs:8:20 · 1 signature · active 1 of 1
 ```
 
 `uses_at` is the answer a text search cannot give: the checker resolved the token, so a same-named member
-on another type, a string that spells the name and a comment are all excluded. Without the flag the three
-tools are absent from the registry, from the definitions the model sees and from the system prompt; with
-it, the first question about a project costs a few seconds while its references are loaded and every later
-one costs milliseconds. A file no registered language claims is refused with `LANG001` rather than guessed
-at, and `FSH002` says the project has not been restored yet — `dotnet_verify` kind=build is the fix.
+on another type, a string that spells the name and a comment are all excluded. The F# adapter is absent
+unless `--fsharp` is given; the C# adapter and the three tools it shares are present by default unless
+`--no-csharp` is given. A file neither adapter claims is refused with `LANG001` rather than guessed at.
+`FSH002` says an F# project has not been restored yet — `dotnet_verify` kind=build is the fix.
 
 `--mcp "<command>"` starts one MCP server per flag, speaks JSON-RPC to it over its stdin and stdout, and
 offers the tools it lists as ordinary tools the model already knows how to call. The command runs through
@@ -688,6 +758,9 @@ row by row; a build where nothing changed is 4 s. `run` and `chat` bring the ind
 the turn, bounded by `--index-budget`; when that budget runs out the last complete build stays readable
 and the next run continues where it stopped. `--no-index` turns the whole feature off for one process,
 and the seven workspace tools still answer.
+
+The scanner filters every path through the workspace's `.gitignore` as well as the built-in generated-directory
+list; an ignored path never becomes a row, and changing a root `.gitignore` changes the next refresh without a restart.
 
 `specs/002-code-evidence-index/quickstart.md` is the walkthrough, including the ways the index can
 fail: exit code `6` means it could not be created, written or read, and `state corrupt` means
@@ -999,6 +1072,33 @@ the second duplicates settings that would drift.
   A `.fs` edit is gated exactly like a `.cs` one — proven by deleting `".fs"` from
   `VerifyGate.DotnetExtensions` and watching the new test fail — and the whole suite is 1167 green with no
   diff on the index.
+- `specs/034-csharp-compiler-oracle` — complete: the C# adapter over Roslyn answers the same three language
+  ports as F#, with project XML and restored assets read directly rather than through an MSBuild host. In-workspace
+  project references are compiled from source, so `uses_at` finds a declaration and its use across projects while
+  excluding same-named members. `CSharpRule`, `--no-csharp`, default registration and the bounded project reader are
+  covered by adapter, tool, router, option and prompt tests; the complete suite is 1,565 green.
+- `specs/035-git-change-evidence` — `git_status` and `git_diff` give Plan and Review read-only evidence about the
+  working tree, index and `HEAD` without exposing a shell. The commands are fixed, paths stay inside the workspace,
+  external diff drivers/textconv and optional index locks are disabled, and failures are bounded text rather than
+  exceptions. `--no-git` removes both tools and their prompt rule; the rest of the tool surface is unchanged.
+- `specs/038-gitignore-scanning` — `search_text`, `list_directory` and the index now share one workspace-local
+  `.gitignore` matcher. Root and nested files, negation, anchored and directory-only rules, `*`, `?`, classes and `**`
+  apply; an ignored directory is never entered; the built-in generated-directory list remains first. The three scans now
+  agree on the visible path set, including searches that start below the root. Nine new tests cover the parser and all
+  three consumers; the complete suite is 1,616 green.
+- `specs/037-verification-profiles` — verification is now a profile declared by a registered tool rather than a .NET
+  extension list inside the gate. `dotnet_verify` owns the built-in `.NET` profile with its existing extensions, sentence
+  and nudge; a host can register `python_verify` or another tool with its own display name and extensions. The loop tracks
+  the last edit and last passing result per profile, so one language's verifier cannot close another's gap. Built-in
+  Python/JavaScript verifier tools remain a later language slice. Six new tests cover the built-in profile, the
+  profile seam's nudge/detail, the no-verifier case and a fake Python profile; the complete suite is 1,607 green.
+- `specs/036-turn-checkpoints` — automatic per-turn checkpoints and `/undo` in `chat`. The three file tools capture exact
+  pre-turn bytes, absence or link target before they mutate; a sub-agent's captures merge into its parent; a read-only
+  turn creates no undo step. `/undo` restores modified and deleted files and removes files the turn created, but refuses
+  a path changed after the turn ended so developer work is never overwritten. History is process-local, one file is
+  capped at 64 MiB, and shell/MCP changes are explicitly outside the contract. Sixteen new tests cover the journal,
+  the three tools, a real agent round trip, a parent/child `task` merge and the `chat` command; the complete suite is
+  1,601 green.
 - `specs/011-subagent-task` — complete, all four phases. `task` is round 5 of the parity roadmap: a sub-agent
   with its own transcript and the session's tools minus `task`, and the parent's approval mode only when that mode
   is `allow` — otherwise `readonly` — whose final message comes back as the tool result with the child's created,
@@ -1080,6 +1180,33 @@ the second duplicates settings that would drift.
   `config.toml` has tables this repository cannot read. Twenty-five new cases; the whole suite is 1,356 green in
   `Release` at 0 warnings.
 
+## Agent task evaluation
+
+`eng/SharpCoreAgent.Evaluation` runs a deterministic coding-task baseline through the production `CodingAgent` and tool
+registry. Only the model is replaced with recorded responses. Each scenario runs in a new temporary workspace; the harness
+then audits actual file changes, checks the agent's verification evidence, and runs independent grading checks that were
+not present during the turn.
+
+```powershell
+# Run the C#/.NET, Python and JavaScript scenarios; no provider key is used.
+dotnet run --project eng/SharpCoreAgent.Evaluation -c Release
+
+# Compare outcomes, errors, changes, iterations and recorded usage with the committed baseline.
+dotnet run --project eng/SharpCoreAgent.Evaluation -c Release -- --check
+
+# Run one scenario while diagnosing it.
+dotnet run --project eng/SharpCoreAgent.Evaluation -c Release -- --scenario csharp-division
+```
+
+Reports go to `artifacts/evals/latest.json`. Python or JavaScript is `skipped`, not passed, when its runtime is unavailable.
+The committed [`eng/evals/baseline.json`](eng/evals/baseline.json) currently has three passing tasks, four iterations and
+three tool calls each, and no unintended changes. Recorded token figures count stable messages and tool definitions, not
+dynamic tool output or live-provider billing tokens.
+
+This is a **recorded workflow baseline**, not a live-model coding score. It proves the loop and independent grader; it does
+not claim that a provider would solve the same tasks unaided. See [`specs/033-agent-evaluation`](specs/033-agent-evaluation/spec.md)
+for the contract, update procedure and limits.
+
 ## Spec-driven development
 
 This repository is built with [GitHub Spec Kit](https://github.com/github/spec-kit). The constitution
@@ -1089,12 +1216,12 @@ workflow is `/speckit-constitution` → `/speckit-specify` → `/speckit-plan` �
 `/speckit-implement` → `/speckit-converge`.
 
 ```
-src/        the six projects above
+src/        eight projects: Domain, Application, Infrastructure, Indexing, F# and C# language adapters, DI and CLI
 tests/      SharpCoreAgent.Tests — unit and integration tests, no network
 specs/      one directory per feature, written before the code
 .specify/   spec-kit templates, scripts and the constitution
 assets/     the logo
-eng/        the SonarCloud scan script CI runs
+eng/        SonarCloud scanning, plus the recorded evaluation runner and coding-task corpus
 .github/    the sonar workflow
 ```
 

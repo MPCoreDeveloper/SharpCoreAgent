@@ -1,0 +1,3 @@
+<Project>
+  <!-- A disposable fixture must not inherit the evaluator's package references or production analyzer settings. -->
+</Project>

@@ -50,7 +50,9 @@ internal static class HelpText
           --workspace <path>       all         current directory
           --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
           --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
-          --fsharp                 run, chat   off         file_diagnostics, uses_at and signature_at may ask the F# type checker; off otherwise
+          --fsharp                 run, chat   off         also let file_diagnostics, uses_at and signature_at ask the F# type checker
+          --no-csharp              run, chat   C# on       remove the C# compiler adapter and its three code-intelligence tools
+          --no-git                 run, chat   Git on      remove the read-only git_status and git_diff evidence tools
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
@@ -286,6 +288,7 @@ internal static class HelpText
           /usage                   tokens reported per model, and the total
           /cost                    what the reported tokens cost, from a dated table (peak rate where tiered)
           /files                   files and commands from the last turn
+          /undo                    restore the file changes the agent made in the last turn; repeat for earlier turns
           /session                 where the transcript is being written
           /roots                   the primary root and every read-only attachment, with its absolute path
           /config [verb]           show, path, set <name> <value>, or ask the questions and save

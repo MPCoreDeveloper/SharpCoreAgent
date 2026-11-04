@@ -44,6 +44,8 @@ Obligations:
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |
 | `run_shell` | Destructive | `CommandRun` | `command` (required), `timeout_seconds?` (default 120, max 600), `working_directory?` | `$ <command>` + exit code + captured output |
 | `dotnet_verify` | Destructive | `CommandRun` | `kind` (required: `build` or `test`), `project?`, `timeout_seconds?` (default 300, max 900) | Labelled header (exit code, passed/failed, warnings, errors, test counts, duration) + the SDK's log (012) |
+| `git_status` | ReadOnly | none | `path?`, `timeout_seconds?` (default 30, max 120) | Porcelain index/worktree status, one `XY path` per line, renames as `old -> new` (035) |
+| `git_diff` | ReadOnly | none | `scope?` (`working`/`staged`/`head`), `path?`, `timeout_seconds?` (default 30, max 120) | One unified diff, or `no changes` (035) |
 | `task` | Destructive | the child's `Created`/`Modified`/`Deleted`/`CommandRun` | `prompt` (required), `description?` (≤ 120, defaults to the prompt's first line), `max_iterations?` (1–24, default 12) | `task · <description> · <N> model calls · <T> tokens` + the child's final message, verbatim (011) |
 
 The catalogue above is round `001`'s six tools and the three that round `003` added around `run_shell`. Later
@@ -126,9 +128,11 @@ category and the `--web-allow` that would permit it.
 
 ## Search and ignore rules
 
-`search_text` and `list_directory` skip `.git`, `node_modules`, `bin`, `obj`, `.vs`, `.sharpcoreagent`,
-and any file above 1 MiB or detected as binary (NUL byte in the first 8 KiB). These names are a
-single constant so a test can assert the list.
+`search_text` and `list_directory` skip `.git`, `node_modules`, `bin`, `obj`, `.vs`, `.sharpcoreagent`, any path covered
+by a workspace-local `.gitignore`, and any file above 1 MiB or detected as binary (NUL byte in the first 8 KiB). The
+fixed names are one constant so a test can assert the list; the `.gitignore` matcher is shared with
+`WorkspaceFileScanner` so search, listing and the index agree. The full rule table is
+[`specs/038-gitignore-scanning/contracts/gitignore-scanning.md`](../../038-gitignore-scanning/contracts/gitignore-scanning.md).
 
 ## Server-provided tools (009)
 
@@ -156,13 +160,15 @@ whose schema this build does not write, and the only ones whose names are genera
 - **Lifetime** — one child per flag, started before the first turn and killed with its process tree when
   the process ends. A server that will not answer its handshake is a startup failure and `exit 2`.
 
-## Language-provided tools (015)
+## Language-provided tools (015, 034)
 
-`--fsharp` registers three read-only tools that answer from a type checker linked into the process rather
-than from the index. They are language-neutral: each takes a Domain port (`ICodeDiagnostics`,
-`ISymbolUses`, `ISignatureHelp`), and `LanguageRouter` picks the adapter whose `ILanguageAdapter.Supports`
-claims the path. The full contract is `specs/015-fsharp-peer/contracts/code-intelligence.md`; the three
-names and their arguments are:
+Three read-only tools answer from a compiler linked into the process rather than from the index. They are
+language-neutral: each takes a Domain port (`ICodeDiagnostics`, `ISymbolUses`, `ISignatureHelp`), and
+`LanguageRouter` picks the adapter whose `ILanguageAdapter.Supports` claims the path. C# is registered by
+default; `--no-csharp` removes it. `--fsharp` adds the F# adapter behind the same tools. The language-specific
+contracts are [`specs/015-fsharp-peer`](../../015-fsharp-peer/contracts/code-intelligence.md) and
+[`specs/034-csharp-compiler-oracle`](../../034-csharp-compiler-oracle/contracts/code-intelligence.md); the
+three names and their arguments are:
 
 - **`file_diagnostics`** — `path`. Answers `path:line:column · severity id · message` per diagnostic, or
   `path · no diagnostics` for a clean file. Success and failure are different sentences.
@@ -171,9 +177,68 @@ names and their arguments are:
 - **`signature_at`** — `path`, `line`, `column`. Answers the overloads at a call site, numbers them, and
   marks the argument the position sits inside with `← active`.
 
-Every failure carries a stable code — `FSH001`–`FSH006` from the adapter, `LANG001` for an extension no
-adapter claims, `LANG002` for an adapter that claims a file without implementing the port — and a hint that
-names a registered tool. None of them closes the turn's verification gate: only `dotnet_verify` does.
+Every failure carries a stable code — `FSH001`–`FSH006` from the F# adapter, `CSH001`–`CSH006` from the C#
+adapter, `LANG001` for an extension no adapter claims, `LANG002` for an adapter that claims a file without
+implementing the port — and a hint that names a registered tool. None of them closes the turn's verification
+gate: only `dotnet_verify` does.
+
+## Git evidence (035)
+
+`git_status` and `git_diff` answer what changed without exposing a shell. They are `ReadOnly` with no effects, so Plan
+mode and a `readonly` session call them and no approval prompt appears. The full schema, output and failure contract is
+[`specs/035-git-change-evidence/contracts/git-evidence.md`](../../035-git-change-evidence/contracts/git-evidence.md).
+What a reader of this catalogue needs:
+
+- **Fixed commands** — the model supplies only a closed `scope` and a confined `path`. No command, revision expression,
+  option, ref or output file is reachable; a path travels after `--`.
+- **Read-only evidence** — `--no-optional-locks` and `GIT_OPTIONAL_LOCKS=0` prevent an index refresh, fsmonitor is off,
+  and `git diff` disables external diff drivers and textconv. `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and other
+  repository/config-injection variables are removed, and literal pathspecs stop a path after `--` becoming Git magic.
+  There is no pager, editor, hook, credential prompt or network transport.
+- **Process host** — Git starts through the existing `ShellProcessRegistry`, not a new launch path, inherits no provider
+  credential and is killed on timeout.
+- **Bounds** — status entries 500, all output 64 KiB; truncation sets `IsTruncated` and appends the shared marker.
+- **Scope** — the command runs in the primary workspace root and every pathspec is scoped to it. Attached roots are not
+  searched for repositories.
+- **Opt-out** — `--no-git` removes both tools and `PromptLibrary.GitRule`; the rest of the registry is unchanged.
+
+## Verification profiles (037)
+
+A turn may not complete after editing a profile-owned file until the verifier that owns that profile has passed since
+the edit. The rule lives in `VerifyGate`; the language names do not. A tool implements `IVerificationTool` and declares
+`VerificationProfile(Name, DisplayName, Extensions)` records. The tool's own name is what the gate waits for and what
+the nudge names.
+
+- **Built-in** — `dotnet_verify` declares `dotnet` / `.NET` with the existing source/build extensions. Its command,
+  schema, parser, prompt and exact unverified sentence are unchanged.
+- **Opt-in** — a host or language adapter registers a tool such as `python_verify` with `python` / `.py`; editing
+  `app.py` then creates a Python gap that only a later passing `python_verify` closes.
+- **Order** — the last matching edit and last successful verifier result are compared by result index, so a
+  verification that ran before the edit does not close it, and a failed/refused result does not count.
+- **No tool, no gate** — profiles come from registered verifier tools. A registry with none has no bindings and no
+  nudge, preserving the old host-without-`dotnet_verify` behavior.
+- **Wording** — `PromptLibrary.VerifyNudgeFor` and `VerifyGate.Detail` name the display language and tool, with the
+  single .NET gap returning the legacy sentence exactly.
+
+The full contract is [`specs/037-verification-profiles/contracts/verification-profiles.md`](../../037-verification-profiles/contracts/verification-profiles.md).
+
+## Checkpoints (036)
+
+The turn loop opens one `ITurnCheckpoint` per turn and passes it through `ToolInvocationContext.Checkpoint`. The three
+file-mutating tools capture the target after validation and before mutation; a capture failure refuses the write. The
+journal, the `/undo` output and the restore rules are in
+[`specs/036-turn-checkpoints/contracts/checkpoints.md`](../../036-turn-checkpoints/contracts/checkpoints.md). What a
+reader of this catalogue needs:
+
+- **Coverage** — `write_file`, `replace_in_file` and `delete_file` only. `run_shell`, MCP tools and `dotnet_verify` do
+  not report per-file mutations the journal can capture.
+- **Turn grouping** — a top-level turn with a net change is one LIFO undo step; a `task` child merges into its parent;
+  empty, plan and review turns are discarded.
+- **Safety** — exact pre-turn bytes or absence are stored; restore refuses a file that changed after the turn ended and
+  keeps the checkpoint for retry.
+- **Lifetime** — process-local memory, 64 MiB per captured file, no persistent storage and no new process or network
+  call.
+- **Command** — `/undo` exists only in `chat` and does not run a model turn.
 
 ## Pictures (017)
 

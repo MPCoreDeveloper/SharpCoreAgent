@@ -102,6 +102,21 @@ public sealed class WorkspaceFileScannerTests
     }
 
     [Fact]
+    public void HonoursGitIgnoreAndNegation()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write(".gitignore", "*.generated.cs\nbuild/\n!Keep.generated.cs\n");
+        sandbox.Write("src/Drop.generated.cs", "class D { }");
+        sandbox.Write("src/Keep.generated.cs", "class K { }");
+        sandbox.Write("build/Out.cs", "class O { }");
+        sandbox.Write("src/Real.cs", "class R { }");
+
+        var scanned = Scan(sandbox);
+
+        Assert.Equal([".gitignore", "src/Keep.generated.cs", "src/Real.cs"], scanned.Select(file => file.Path));
+    }
+
+    [Fact]
     public void DoesNotWalkTheSameDirectoryTwiceThroughALink()
     {
         using var sandbox = ToolTestWorkspace.Create();

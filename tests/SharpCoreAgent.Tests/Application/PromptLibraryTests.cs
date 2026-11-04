@@ -1,5 +1,6 @@
 using SharpCoreAgent.Application;
 using SharpCoreAgent.DependencyInjection;
+using SharpCoreAgent.Domain.Tools;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Application;
@@ -65,7 +66,9 @@ public sealed class PromptLibraryTests
         var disabled = new SharpCoreAgentOptions { IndexEnabled = false }.ToAgentOptions();
 
         Assert.Contains("search_code", indexed.SystemPrompt, StringComparison.Ordinal);
-        Assert.Equal(PromptLibrary.SystemPrompt, disabled.SystemPrompt);
+        Assert.Equal(
+            PromptLibrary.SystemPromptFor(indexAvailable: false, csharpAvailable: true, gitAvailable: true),
+            disabled.SystemPrompt);
     }
 
     [Fact]
@@ -254,6 +257,77 @@ public sealed class PromptLibraryTests
         // leave every delegated edit unverified, which is exactly what the parent's report would then say.
         Assert.Contains("dotnet_verify", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("with run_shell", PromptLibrary.SubAgentPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheProfileSeamLeavesTheDotnetNudgeUnchanged()
+    {
+        var profile = new VerificationProfile("dotnet", ".NET", [".cs"]);
+        var gap = new VerificationGap(profile, ToolNames.DotnetVerify);
+
+        Assert.Equal(PromptLibrary.VerifyNudge, PromptLibrary.VerifyNudgeFor([gap]));
+    }
+
+    [Fact]
+    public void AnotherProfilesNudgeNamesItsOwnToolAndLanguage()
+    {
+        var profile = new VerificationProfile("python", "Python", [".py"]);
+        var nudge = PromptLibrary.VerifyNudgeFor([new VerificationGap(profile, "python_verify")]);
+
+        Assert.Contains("Python", nudge, StringComparison.Ordinal);
+        Assert.Contains("python_verify", nudge, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet_verify", nudge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCSharpRuleNamesTheErrorsAModelCanRecoverFrom()
+    {
+        Assert.Contains("0-based column", PromptLibrary.CSharpRule, StringComparison.Ordinal);
+        Assert.Contains("dotnet_verify", PromptLibrary.CSharpRule, StringComparison.Ordinal);
+        Assert.Contains("CSH002", PromptLibrary.CSharpRule, StringComparison.Ordinal);
+        Assert.Contains("CSH001", PromptLibrary.CSharpRule, StringComparison.Ordinal);
+        Assert.DoesNotContain("F#", PromptLibrary.CSharpRule, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheContainerPromptIncludesCSharpByDefaultAndFollowsItsOptOut()
+    {
+        var enabled = new SharpCoreAgentOptions { IndexEnabled = false }.ToAgentOptions();
+        var disabled = new SharpCoreAgentOptions { IndexEnabled = false, CSharpToolsEnabled = false }.ToAgentOptions();
+
+        Assert.EndsWith(PromptLibrary.CSharpRule, enabled.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("file_diagnostics", disabled.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheGitRuleNamesBothEvidenceToolsAndTheirScopes()
+    {
+        Assert.Contains("git_status", PromptLibrary.GitRule, StringComparison.Ordinal);
+        Assert.Contains("git_diff", PromptLibrary.GitRule, StringComparison.Ordinal);
+        Assert.Contains("scope=working", PromptLibrary.GitRule, StringComparison.Ordinal);
+        Assert.Contains("scope=staged", PromptLibrary.GitRule, StringComparison.Ordinal);
+        Assert.Contains("scope=head", PromptLibrary.GitRule, StringComparison.Ordinal);
+        Assert.Contains("untracked", PromptLibrary.GitRule, StringComparison.Ordinal);
+        Assert.Contains("read-only", PromptLibrary.GitRule, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheContainerPromptIncludesGitByDefaultAndFollowsItsOptOut()
+    {
+        // Git evidence is the one capability that must survive into Plan and Review: the shell is hidden there, and a
+        // reviewer with no diff can only repeat what the model said it did.
+        var enabled = new SharpCoreAgentOptions { IndexEnabled = false, CSharpToolsEnabled = false }.ToAgentOptions();
+        var disabled = new SharpCoreAgentOptions
+        {
+            IndexEnabled = false,
+            CSharpToolsEnabled = false,
+            GitToolsEnabled = false,
+        }.ToAgentOptions();
+
+        Assert.EndsWith(PromptLibrary.GitRule, enabled.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("git_status", enabled.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("git_status", disabled.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("git_diff", disabled.SystemPrompt, StringComparison.Ordinal);
     }
 
     /// <summary>

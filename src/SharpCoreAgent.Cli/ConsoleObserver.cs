@@ -452,17 +452,27 @@ internal sealed class ConsoleObserver : IAgentObserver
                 CultureInfo.InvariantCulture,
                 $" · {report.Iterations} iteration(s){elapsed}{usage}{spend}"))));
 
-        if (!string.IsNullOrWhiteSpace(report.Detail))
+        if (!report.IsUnverified && !string.IsNullOrWhiteSpace(report.Detail))
         {
             _error.WriteLine($"  {report.Detail}");
         }
 
-        // A completion is only as good as the evidence behind it, so a turn that edited .NET source without a
-        // passing build says so on its own line: the answer above it may still be right, and the developer is
-        // the one who decides whether to rebuild.
+        // A completion is only as good as the evidence behind it, so a turn that edited profiled source without a
+        // passing verifier says so on its own line: the answer above it may still be right, and the developer is
+        // the one who decides whether to run the check.
         if (report.IsUnverified)
         {
-            _error.WriteLine(_theme.Warning("  ⚠ no passing dotnet_verify ran after the last .NET edit."));
+            var detail = report.Detail;
+            if (string.IsNullOrWhiteSpace(detail)
+                || detail.StartsWith(
+                    "the turn edited .NET source but dotnet_verify ",
+                    StringComparison.Ordinal))
+            {
+                // Keep the familiar .NET line; another profile uses its own detail verbatim.
+                detail = "no passing dotnet_verify ran after the last .NET edit.";
+            }
+
+            _error.WriteLine(_theme.Warning($"  ⚠ {detail}"));
         }
     }
 

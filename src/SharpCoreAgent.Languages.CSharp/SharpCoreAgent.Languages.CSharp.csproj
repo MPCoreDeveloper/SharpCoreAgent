@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SharpCoreAgent.Languages.CSharp</RootNamespace>
+    <AssemblyName>SharpCoreAgent.Languages.CSharp</AssemblyName>
+    <Description>C# code intelligence behind the Domain's language-neutral ports: diagnostics, compiler-bound symbol uses and signature help, answered by Roslyn in-process. Project XML and restored assets are read directly; no MSBuild host is launched.</Description>
+  </PropertyGroup>
+
+  <!-- Domain only: the adapter is handed a Workspace and knows nothing about tools, options or the agent loop. -->
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreAgent.Domain\SharpCoreAgent.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
+  </ItemGroup>
+
+</Project>

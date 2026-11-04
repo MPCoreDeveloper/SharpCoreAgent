@@ -69,18 +69,18 @@ public sealed record AgentReport
     /// </remarks>
     public IReadOnlyList<FallbackUsed> Fallbacks { get; init; } = [];
 
-    /// <summary>Gets a one-line explanation for a non-completed outcome.</summary>
+    /// <summary>Gets a one-line explanation for a non-completed outcome or an unverified completion.</summary>
     public string? Detail { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether the turn ended <see cref="AgentOutcome.Completed"/> without a passing
-    /// verification of the .NET source it edited.
+    /// verification of the profile-owned source it edited.
     /// </summary>
     /// <remarks>
-    /// False for every turn that edited no .NET file, and false as soon as a verify tool has passed after the
-    /// last such edit. A true value is not a failure: the work may be right and the harness may be wrong. It is
-    /// the difference between "the model said so" and "a build said so", which is the whole reason the loop
-    /// asks again before it accepts an answer.
+    /// False for every turn that edited no file owned by a registered verifier profile, and false as soon as that
+    /// profile's tool has passed after the last such edit. A true value is not a failure: the work may be right and the
+    /// harness may be wrong. It is the difference between "the model said so" and "a verifier said so", which is the
+    /// whole reason the loop asks again before it accepts an answer.
     /// </remarks>
     public bool IsUnverified { get; init; }
 

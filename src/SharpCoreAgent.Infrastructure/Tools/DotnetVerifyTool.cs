@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using SharpCoreAgent.Application;
 using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Tools;
 
@@ -27,10 +28,26 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// one the agent runs to check its work.
 /// </para>
 /// </remarks>
-public sealed class DotnetVerifyTool : ITool
+public sealed class DotnetVerifyTool : ITool, IVerificationTool
 {
     /// <summary>Gets the tool name.</summary>
     public const string Name = ToolNames.DotnetVerify;
+
+    /// <summary>Gets the stable identifier of the .NET verification profile.</summary>
+    public const string ProfileName = "dotnet";
+
+    /// <summary>Gets the extensions whose creation, modification or deletion can break a .NET build.</summary>
+    /// <remarks>
+    /// A constant rather than a language lookup: deciding whether a file is part of a .NET build is the build's job, and
+    /// the compiler is the one that answers it. A file that turns out not to be compiled costs a nudge and a build that
+    /// passes in a second, which is cheaper than a rule that guesses.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> SourceExtensions =
+        [".cs", ".vb", ".fs", ".csproj", ".vbproj", ".fsproj", ".props", ".targets", ".sln", ".slnx"];
+
+    /// <summary>Gets the profile this tool declares to the turn's verification gate.</summary>
+    public static readonly IReadOnlyList<VerificationProfile> VerificationProfiles =
+        [new(ProfileName, ".NET", SourceExtensions)];
 
     /// <summary>Gets the kind that compiles the workspace.</summary>
     public const string Build = "build";
@@ -97,6 +114,9 @@ public sealed class DotnetVerifyTool : ITool
 
     /// <inheritdoc />
     public ToolSafety Safety => ToolSafety.Destructive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<VerificationProfile> Profiles => VerificationProfiles;
 
     /// <summary>
     /// Builds the command line a run is described by.

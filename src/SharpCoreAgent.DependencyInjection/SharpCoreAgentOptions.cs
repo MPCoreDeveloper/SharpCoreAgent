@@ -143,17 +143,37 @@ public sealed record SharpCoreAgentOptions
     public TimeSpan IndexBudget { get; init; } = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// Gets a value indicating whether this process may ask a language service about the source it reads.
+    /// Gets a value indicating whether this process may inspect Git evidence. Default <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// Registers <c>git_status</c> and <c>git_diff</c>, both <c>ReadOnly</c>, so Plan and Review can inspect what changed
+    /// without a shell. <c>--no-git</c> removes them. The tools run a fixed Git command through the existing shell process
+    /// host; they never accept a revision expression or an option from the model.
+    /// </remarks>
+    public bool GitToolsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether this process may ask the C# compiler about the source it reads. Default
+    /// <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// The switch that registers <c>file_diagnostics</c>, <c>uses_at</c>, <c>signature_at</c> and the Roslyn adapter behind
+    /// them. On by default because C# is the language this product exists for; <c>--no-csharp</c> removes the adapter and
+    /// tools for a host that does not want the memory and first-load cost. The first question loads a project graph, but
+    /// nothing is loaded until the first question.
+    /// </remarks>
+    public bool CSharpToolsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether this process may ask the F# type checker about the source it reads.
     /// Default <see langword="false"/>.
     /// </summary>
     /// <remarks>
-    /// The switch that registers <c>file_diagnostics</c>, <c>uses_at</c> and <c>signature_at</c> and the F# adapter behind
-    /// them. Off by default for two reasons that both point the same way: the adapter is the largest dependency this
-    /// product carries, and the first question about a project spends seconds loading references before it can answer.
-    /// A host that works in F# turns it on for the invocation; like <see cref="WebAccessEnabled"/> it is deliberately
-    /// not a settings key, because an F# tool set is a decision about one workspace.
+    /// The switch that adds the F# adapter behind the same three tools. Off by default because F# is opt-in per workspace;
+    /// when <see cref="CSharpToolsEnabled"/> is also false, none of the tools is registered.
     /// </remarks>
     public bool FSharpToolsEnabled { get; init; }
+
 
     /// <summary>Gets the descriptor for <see cref="Provider"/> and <see cref="ModelId"/>.</summary>
     /// <exception cref="ArgumentException">The provider is not one this build serves.</exception>
@@ -189,7 +209,13 @@ public sealed record SharpCoreAgentOptions
             Temperature = Temperature,
             Approval = Approval,
             SystemPrompt = string.IsNullOrWhiteSpace(SystemPrompt)
-                ? PromptLibrary.SystemPromptFor(IndexEnabled, WebAccessEnabled, McpServers.Count > 0, FSharpToolsEnabled)
+                ? PromptLibrary.SystemPromptFor(
+                    IndexEnabled,
+                    WebAccessEnabled,
+                    McpServers.Count > 0,
+                    FSharpToolsEnabled,
+                    CSharpToolsEnabled,
+                    GitToolsEnabled)
                 : SystemPrompt,
         }.Validate();
     }
