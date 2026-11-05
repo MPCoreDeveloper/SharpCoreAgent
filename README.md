@@ -256,6 +256,7 @@ keep working on the file that needs repairing.
 | `--no-git` | run, chat | Git on — remove the read-only `git_status` and `git_diff` evidence tools |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--mcp-url <url>` | run, chat | none — talk streamable HTTP to this explicit endpoint; `https`, or `http` on loopback; repeatable |
+| `--mcp-sse-url <url>` | run, chat | none — talk legacy HTTP+SSE to this explicit endpoint; `https`, or `http` on loopback; repeatable |
 | `--mcp-sampling <policy>` | run, chat | `deny` — `deny`, `first` (one request per connection) or `unrestricted` (rate-limited); a server may ask the session's model to sample |
 | `--browser` | run, chat | off — start the Playwright MCP server with Edge on Windows or Chromium elsewhere; adds `npx_browser_*` tools |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
@@ -634,6 +635,10 @@ transport described by the MCP specification: one POST per message, JSON or serv
 `http` is accepted for a loopback host. This client adds no OAuth flow, follows no redirect and accepts no
 certificate it would not accept elsewhere; authentication is the endpoint's business. The tools, resources and
 prompts it advertises arrive under the same generated names as a stdio server.
+
+For a server that still speaks the older handshake, `--mcp-sse-url https://mcp.example/sse` opens the GET
+event stream, reads the POST endpoint from its `endpoint` event, and receives every answer on that same
+stream. The URL rule is identical; it is a compatibility path, not a fallback.
 
 A server may also ask the client to sample, which spends the session's model budget without the model
 deciding to. That is off unless the developer says otherwise: `--mcp-sampling deny` (the default) answers

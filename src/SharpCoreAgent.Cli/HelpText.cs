@@ -65,6 +65,7 @@ internal static class HelpText
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --mcp-url <url>          run, chat   none        talk streamable HTTP to this MCP endpoint; https, or http on loopback; repeatable
+          --mcp-sse-url <url>      run, chat   none        talk legacy HTTP+SSE to this MCP endpoint; https, or http on loopback; repeatable
           --mcp-sampling <policy>  run, chat   deny        deny, first or unrestricted; first answers one server sampling request per connection
           --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
@@ -123,6 +124,12 @@ internal static class HelpText
           http only for a loopback host. The endpoint owns its authentication; this client sends no OAuth
           flow, follows no redirect and accepts no certificate it would not accept elsewhere. Its tools,
           resources and prompts arrive under the same <server>_<tool> names as a stdio server.
+
+
+          --mcp-sse-url is the older remote handshake: it opens a GET event stream, reads the POST endpoint
+          the server names, and keeps answers on that stream. It has the same https/loopback rule, redirect
+          refusal and tool naming as --mcp-url; use it only for a server that has not moved to streamable
+          HTTP.
 
 
 

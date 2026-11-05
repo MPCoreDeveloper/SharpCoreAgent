@@ -321,6 +321,9 @@ internal sealed record CliOptions
     /// <summary>Gets the remote MCP endpoints this invocation talks to over streamable HTTP.</summary>
     public IReadOnlyList<string> McpUrls { get; init; } = [];
 
+    /// <summary>Gets the legacy HTTP+SSE MCP endpoints this invocation talks to.</summary>
+    public IReadOnlyList<string> McpSseUrls { get; init; } = [];
+
     /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
     public McpSamplingPolicy McpSampling { get; init; } = McpSamplingPolicy.Deny;
 
@@ -515,6 +518,7 @@ internal sealed record CliOptions
         GitToolsEnabled = Git,
         McpServers = Browser ? [.. McpServers, BrowserServerCommand] : McpServers,
         McpUrls = McpUrls,
+        McpSseUrls = McpSseUrls,
         McpSampling = McpSampling,
         Approval = Approval,
         MaxIterations = MaxIterations,
@@ -1949,10 +1953,10 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectMcpFlags(CliOptions options)
     {
-        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
+        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.McpSseUrls.Count > 0 || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
         {
             throw new CliUsageException(
-                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too.",
+                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too; --mcp-sse-url applies there too.",
                 "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
         }
     }
@@ -2220,6 +2224,18 @@ internal sealed record CliOptions
                 }
 
                 return options with { McpUrls = [.. options.McpUrls, url] };
+
+            case "--mcp-sse-url":
+                var sseUrl = TakeValue(args, ref index, name);
+                if (!Uri.TryCreate(sseUrl, UriKind.Absolute, out var sseEndpoint) ||
+                    (sseEndpoint.Scheme != Uri.UriSchemeHttp && sseEndpoint.Scheme != Uri.UriSchemeHttps))
+                {
+                    throw new CliUsageException(
+                        $"'{sseUrl}' is not an absolute http or https MCP SSE URL.",
+                        "Use https, or http only for a loopback MCP server.");
+                }
+
+                return options with { McpSseUrls = [.. options.McpSseUrls, sseUrl] };
 
             case "--mcp-sampling":
                 var sampling = TakeValue(args, ref index, name);

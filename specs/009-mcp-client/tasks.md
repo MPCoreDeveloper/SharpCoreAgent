@@ -121,7 +121,11 @@ next pass has a real list rather than a memory.
   the response is bounded at 8 MiB, and only `https` (or loopback `http`) is accepted. It reuses the
   connection's handshake, tools, resources, prompts and supervision. `HttpJsonRpcChannelTests` covers
   JSON, SSE, the session header, HTTP failure, the URL rule and a full handshake over the fake handler.
-- [ ] T035b Legacy HTTP+SSE transport and OAuth. The streamable-HTTP half is done; these remain.
+- [X] T035b Legacy HTTP+SSE transport (`--mcp-sse-url`). **Closed.** A GET event stream names the POST
+  endpoint and carries every answer; the channel enforces the same https/loopback rule, no redirects, an
+  8 MiB event ceiling, and a 20-second endpoint wait. `SseJsonRpcChannelTests` covers the answer and a
+  full connection handshake; OAuth is not part of it.
+- [ ] T035c OAuth for remote transports. The two transport handshakes are done; delegated authorization remains.
 - [ ] T037 A declarative server list read from a file.
 
 ## Amendment — T036 supervision (2026-11-05)

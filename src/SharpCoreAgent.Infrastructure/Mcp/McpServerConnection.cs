@@ -46,6 +46,7 @@ public sealed class McpServerConnection : IAsyncDisposable
     private readonly Stream? _output;
     private readonly Uri? _endpoint;
     private readonly HttpMessageHandler? _handler;
+    private readonly bool _legacySse;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
     private IJsonRpcChannel? _pipe;
@@ -112,12 +113,19 @@ public sealed class McpServerConnection : IAsyncDisposable
     /// <param name="endpoint">The <c>http</c> or <c>https</c> endpoint the developer named.</param>
     /// <param name="options">The ceilings the conversation works within.</param>
     /// <param name="log">Receives channel diagnostics while <c>--verbose</c> is in force.</param>
+    /// <param name="legacySse">Whether to use the legacy HTTP+SSE handshake instead of streamable HTTP.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is blank.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> or <paramref name="options"/> is null.</exception>
-    public McpServerConnection(string name, Uri endpoint, McpClientOptions options, Action<string>? log = null)
+    public McpServerConnection(
+        string name,
+        Uri endpoint,
+        McpClientOptions options,
+        Action<string>? log = null,
+        bool legacySse = false)
         : this(name, endpoint?.ToString() ?? string.Empty, options, log)
     {
         _endpoint = endpoint;
+        _legacySse = legacySse;
     }
 
     internal McpServerConnection(
@@ -125,8 +133,9 @@ public sealed class McpServerConnection : IAsyncDisposable
         Uri endpoint,
         HttpMessageHandler handler,
         McpClientOptions options,
-        Action<string>? log = null)
-        : this(name, endpoint, options, log)
+        Action<string>? log = null,
+        bool legacySse = false)
+        : this(name, endpoint, options, log, legacySse)
     {
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
     }
@@ -793,7 +802,9 @@ public sealed class McpServerConnection : IAsyncDisposable
 
         if (_endpoint is not null)
         {
-            _pipe = new HttpJsonRpcChannel(_endpoint, _log, _handler);
+            _pipe = _legacySse
+                ? new SseJsonRpcChannel(_endpoint, _log, _handler)
+                : new HttpJsonRpcChannel(_endpoint, _log, _handler);
             return;
         }
 

@@ -210,5 +210,25 @@ public sealed class McpOptionTests
         Assert.Contains("--mcp-url", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ALegacySseUrlIsParsedForTheTurnCommands()
+    {
+        var options = CliOptions.Parse(
+            ["chat", "--mcp-sse-url", "https://mcp.example/sse"],
+            NoEnvironment);
+
+        Assert.Equal(["https://mcp.example/sse"], options.McpSseUrls);
+        Assert.Equal(["https://mcp.example/sse"], options.ToSharpCoreAgentOptions().McpSseUrls);
+    }
+
+    [Fact]
+    public void ALegacySseUrlIsRefusedWhereNoTurnRuns()
+    {
+        var error = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["models", "--mcp-sse-url", "https://mcp.example/sse"], NoEnvironment));
+
+        Assert.Contains("--mcp-sse-url", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 }

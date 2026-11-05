@@ -55,13 +55,15 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     /// <param name="options">The ceilings every connection works within.</param>
     /// <param name="models">The resolver sampling uses, or null when the host did not provide one.</param>
     /// <param name="urls">The remote streamable-HTTP endpoints, in the order the flags were given.</param>
+    /// <param name="sseUrls">The legacy HTTP+SSE endpoints, in the order the flags were given.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="ArgumentException">A command line is blank, or a URL is not absolute http or https.</exception>
     public McpToolHost(
         IEnumerable<string> servers,
         McpClientOptions options,
         IChatModelResolver? models = null,
-        IEnumerable<string>? urls = null)
+        IEnumerable<string>? urls = null,
+        IEnumerable<string>? sseUrls = null)
     {
         ArgumentNullException.ThrowIfNull(servers);
         _options = (options ?? throw new ArgumentNullException(nameof(options))).Validate();
@@ -85,20 +87,31 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
 
         foreach (var url in urls ?? [])
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(url);
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var endpoint) ||
-                (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
-            {
-                throw new ArgumentException($"'{url}' is not an absolute http or https MCP URL", nameof(urls));
-            }
-
-            var count = Next(seen, endpoint.Host);
-            _connections.Add(new McpServerConnection(
-                McpToolName.ForServer(endpoint.Host, count),
-                endpoint,
-                _options,
-                _sink.Write));
+            AddEndpoint(url, legacySse: false, seen);
         }
+
+        foreach (var url in sseUrls ?? [])
+        {
+            AddEndpoint(url, legacySse: true, seen);
+        }
+    }
+
+    private void AddEndpoint(string url, bool legacySse, Dictionary<string, int> seen)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var endpoint) ||
+            (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException($"'{url}' is not an absolute http or https MCP URL", nameof(url));
+        }
+
+        var count = Next(seen, endpoint.Host);
+        _connections.Add(new McpServerConnection(
+            McpToolName.ForServer(endpoint.Host, count),
+            endpoint,
+            _options,
+            _sink.Write,
+            legacySse));
     }
 
     private static int Next(Dictionary<string, int> seen, string stem)

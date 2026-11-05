@@ -82,6 +82,21 @@ public sealed class McpRegistrationTests
         Assert.Contains("mcp", server.Name, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ALegacySseUrlRegistersAHostWithoutStartingIt()
+    {
+        using var provider = Build(new SharpCoreAgentOptions
+        {
+            IndexEnabled = false,
+            McpSseUrls = ["https://mcp.example/sse"],
+        });
+
+        var host = provider.GetRequiredService<McpToolHost>();
+        var server = Assert.Single(host.Servers);
+        Assert.Equal("https://mcp.example/sse", server.CommandLine);
+        Assert.Contains("mcp", server.Name, StringComparison.Ordinal);
+    }
+
     private static ServiceProvider Build(SharpCoreAgentOptions options) =>
         new ServiceCollection().AddSharpCoreAgent(options).BuildServiceProvider();
 }
