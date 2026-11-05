@@ -275,8 +275,9 @@ the edit and zero stale files; then assert a no-op start costs under the budget.
   against 3 s; `write`/`commit` dominate and the store still reloads every table on each commit. The fixed-width
   layout D29 measured at 3.44 s is unavailable for the single-file store in the shipped engine, so the target
   stands as the future engine/storage work rather than a client-side tweak.)*
-- **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95. *(Not measured:
-  this repository's index holds 8 206 passages and no latency harness exists. Open, not assumed; `research.md` D16.)*
+- **SC-003**: A `search_code` call on a 20 000-passage index answers in under 250 ms at p95. *(Measured 2026-11-04
+  in `048-search-latency-harness`: 20,400 passages, 100 calls, **p95 50.8 ms**; the pre-change p95 was 613.1 ms. The
+  harness is skipped by default and run with `SHARPCOREAGENT_RUN_LATENCY=1`; `research.md` D31.)*
 - **SC-004**: On the five recorded benchmark tasks, a turn that uses `search_code` before `read_file`
   consumes at least 30% fewer input tokens than the same turn with the file tools only.
 - **SC-005**: 100% of evidence blocks name a path, a line range and a hash; 0 blocks point outside the

@@ -1004,7 +1004,7 @@ empty checkbox.
 
 | Round | Open | Why it is still open |
 |---|---|---|
-| 0 | `002` SC-003 | the 20 000-passage p95 latency harness is still unmeasured. T034 itself is closed by the measured restatement in `research.md` D30: 735 files in 28.1 s / 44.9 MiB, one changed file 9.35 s, 6.4× size; the stated 90 s / 3 s / 0.5× targets remain unmet and are accepted. D29's 3.44 s fixed-width layout is unavailable for the single-file store in the shipped engine |
+| 0 | `002` SC-003 — **closed 2026-11-04 by `048-search-latency-harness`** | 20,400 synthetic passages, 100 `search_code` calls, **p95 50.8 ms** against 250 ms; the first run measured 613.1 ms and exposed the engine `FullTextIndex` cost, replaced by `LexicalIndex` BM25 over the stored tokens. The harness is skipped by default (`SHARPCOREAGENT_RUN_LATENCY=1`), so CI does not pay the build. T034 remains closed by the measured restatement in `research.md` D30 |
 | 1 | `007` T030–T032 | a writable attachment, an indexed attachment, persisted attachments — each a specification of its own, and T032 is refused on principle rather than deferred |
 | 1 | `003` T032–T034 | `--resume`'s listing is closed by `041-session-resume`; Git-based checkpoints remain out of scope because `035` keeps Git read-only and `036` chose a process-local journal; T034's context-fraction automatic compaction is closed by `042-context-fraction-compaction` |
 | 2 | `008` T031, T033 | paging a long page and `robots.txt`, refused rather than deferred — no transcript has hit the character ceiling, and politeness is not a second request per fetch. T032 (a web search tool) is decided against: see the decision record, 2026-10-31 |

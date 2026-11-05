@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using SharpCoreDB.Interfaces;
-using SharpCoreDB.Search.Lexical;
 using SharpCoreDB.VectorSearch;
 
 namespace SharpCoreAgent.Indexing.Retrieval;
@@ -227,18 +226,18 @@ internal sealed class IndexReader
     /// </summary>
     /// <param name="database">An open index database.</param>
     /// <returns>The lexical index, ready for <c>Search</c>.</returns>
-    private static FullTextIndex LoadLexical(IDatabase database)
+    private static LexicalIndex LoadLexical(IDatabase database)
     {
-        var lexical = new FullTextIndex();
+        var documents = new List<(long Id, string Tokens)>();
 
         foreach (var row in IndexSql.Query(database, "SELECT id, tokens FROM chunks ORDER BY id"))
         {
-            lexical.Add(
+            documents.Add((
                 IndexSql.AsLong(row.GetValueOrDefault("id")),
-                IndexSql.AsText(row.GetValueOrDefault("tokens")));
+                IndexSql.AsText(row.GetValueOrDefault("tokens"))));
         }
 
-        return lexical;
+        return LexicalIndex.Build(documents);
     }
 
     private static double ToDouble(object? value) =>

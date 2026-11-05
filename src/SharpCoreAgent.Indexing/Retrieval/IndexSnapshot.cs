@@ -1,5 +1,3 @@
-using SharpCoreDB.Search.Lexical;
-
 namespace SharpCoreAgent.Indexing.Retrieval;
 
 /// <summary>
@@ -160,7 +158,7 @@ internal sealed class IndexSnapshot
     public required IReadOnlyList<EdgeRow> Edges { get; init; }
 
     /// <summary>Gets the BM25 index over <c>chunks.tokens</c>.</summary>
-    public required FullTextIndex Lexical { get; init; }
+    public required LexicalIndex Lexical { get; init; }
 
     /// <summary>Gets the workspace-relative path of every indexed file, by <c>files.id</c>.</summary>
     public required IReadOnlyDictionary<long, string> Paths { get; init; }

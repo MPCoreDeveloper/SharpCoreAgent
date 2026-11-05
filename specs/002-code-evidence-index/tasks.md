@@ -513,6 +513,13 @@ only when `dotnet build SharpCoreAgent.slnx -c Release` and
     the shipped package: single-file storage raises `NotSupportedException` for `MigrateTableToFixedWidth` and the
     config documents directory-mode tables. The targets remain in `spec.md`; the gap is recorded rather than hidden.
 
+- [X] **T035** Measure SC-003 and bring the lexical leg inside 250 ms p95 — done 2026-11-04 by
+  `048-search-latency-harness`. A skipped-by-default harness builds 20,400 synthetic passages and measures 100
+  `search_code` calls; the first run exposed 613.1 ms p95, and the engine `FullTextIndex` was replaced by
+  `LexicalIndex`, a BM25 index over the stored `chunks.tokens`. The same harness now measures **50.8 ms p95**.
+  Ordinary suite: 1,655 passed, 1 skipped. See `research.md` D31.
+
+## Traceability
 ## Traceability — requirement to task
 
 | FR | Tasks | FR | Tasks |

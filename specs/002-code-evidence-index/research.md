@@ -1280,6 +1280,27 @@ fixed-width one taken on the *larger* 148.3 MiB file, before its vacuum); the no
 both); the suite at **1 520 with 3 failures** on the patched engine plus the flag, then **1 520 green** after both
 reverts, with `git status` clean in both repositories and the packaged engine DLL (1 924 KiB) back in `bin`.
 
+## D31 — SC-003 measured, and the lexical leg that was hiding in it (2026-11-04)
+
+**Measured**: `048-search-latency-harness` generates 1,700 C# files with 20 methods each, builds them through
+`RebuildAsync`, and calls `SearchCodeTool` 100 times. The index holds **20,400 passages**. The first run, against the
+engine's `FullTextIndex`, measured **p50 528.6 ms / p95 613.1 ms / max 1,951.2 ms** — a miss, not a harness defect.
+
+**What changed**: `LexicalIndex` builds an immutable BM25 index from the already-stored `chunks.tokens` strings at
+snapshot load. The query path is a dictionary lookup per token plus a bounded sort, instead of the engine's
+general-purpose search over 20,000 postings. The database, schema, snapshot cache, ranker and tools are unchanged.
+
+**Measured after**: **p50 25.8 ms / p95 50.8 ms / max 903.0 ms** on the same corpus and machine. The max is the first
+call, which includes the cold snapshot load; p95 is the criterion and it is **5× inside** the 250 ms target.
+
+**Harness cost**: the build is minutes and stays outside CI. The test reports itself skipped unless
+`SHARPCOREAGENT_RUN_LATENCY=1`, so the ordinary suite is 1,655 passed and 1 skipped in about 17 seconds.
+
+**Why this is safe**: the lexical leg's input, ordering and candidate contract are unchanged; 15 focused retrieval tests
+and the full suite pass. A future regression fails the harness when it is run, and the skipped result keeps the cost
+visible in every ordinary run.
+
+
 
 
 
