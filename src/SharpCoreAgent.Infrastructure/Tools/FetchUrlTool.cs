@@ -39,7 +39,7 @@ public sealed class FetchUrlTool : ITool
     public const string Name = "fetch_url";
 
     private const string Schema =
-        """{"type":"object","properties":{"url":{"type":"string","description":"Absolute http or https URL to read."},"max_chars":{"type":"integer","minimum":1,"maximum":60000,"description":"Longest text to return; defaults to the tool's ceiling."}},"required":["url"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"url":{"type":"string","description":"Absolute http or https URL to read."},"max_chars":{"type":"integer","minimum":1,"maximum":60000,"description":"Longest text to return; defaults to the tool's ceiling."},"start_index":{"type":"integer","minimum":0,"maximum":1000000,"description":"Zero-based character offset to start the returned window at; defaults to 0."}},"required":["url"],"additionalProperties":false}""";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly WebFetchOptions _options;
@@ -87,6 +87,7 @@ public sealed class FetchUrlTool : ITool
         using var arguments = ToolArgumentReader.Parse(Name, toolCall.ArgumentsJson);
         var url = arguments.GetRequiredString("url");
         var maxChars = arguments.GetOptionalInt("max_chars", _options.MaxChars, minimum: 1, maximum: _options.MaxChars);
+        var startIndex = arguments.GetOptionalInt("start_index", 0, minimum: 0, maximum: 1_000_000);
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var requested))
         {
@@ -147,7 +148,7 @@ public sealed class FetchUrlTool : ITool
                     continue;
                 }
 
-                return await AnswerAsync(toolCall, context, requested, current, hops, response, maxChars, token).ConfigureAwait(false);
+                return await AnswerAsync(toolCall, context, requested, current, hops, response, maxChars, startIndex, token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -263,6 +264,7 @@ public sealed class FetchUrlTool : ITool
     /// <param name="hops">How many redirects were followed.</param>
     /// <param name="response">The response, headers read and body not yet consumed.</param>
     /// <param name="maxChars">The character ceiling in force for this call.</param>
+    /// <param name="startIndex">The zero-based character offset the returned window starts at.</param>
     /// <param name="cancellationToken">Cancels the body read.</param>
     /// <returns>The result: the header block, then the text or the picture.</returns>
     private async ValueTask<ToolResult> AnswerAsync(
@@ -273,6 +275,7 @@ public sealed class FetchUrlTool : ITool
         int hops,
         HttpResponseMessage response,
         int maxChars,
+        int startIndex,
         CancellationToken cancellationToken)
     {
         var contentType = response.Content.Headers.ContentType;
@@ -320,14 +323,34 @@ public sealed class FetchUrlTool : ITool
             .TrimEnd();
 
         var readable = IsHtml(mediaType) ? HtmlToText.Reduce(text) : text;
-        var truncated = stoppedByBytes;
-        if (readable.Length > maxChars)
+        var total = readable.Length;
+        var offset = Math.Min(startIndex, total);
+        var available = total - offset;
+        var take = Math.Min(maxChars, available);
+        var windowed = offset > 0 || take < available;
+        bool truncated;
+        if (windowed || stoppedByBytes)
         {
-            var total = readable.Length;
-            readable = string.Create(
-                CultureInfo.InvariantCulture,
-                $"{readable[..maxChars]}\n[truncated: kept the first {maxChars} of {total} characters]");
+            string note;
+            if (offset == 0 && take < available)
+            {
+                note = string.Create(CultureInfo.InvariantCulture, $"\n[truncated: kept the first {take} of {total} characters]");
+            }
+            else if (windowed)
+            {
+                note = string.Create(CultureInfo.InvariantCulture, $"\n[window: kept characters {offset + 1}..{offset + take} of {total}]");
+            }
+            else
+            {
+                note = string.Empty;
+            }
+
+            readable = string.Concat(readable.AsSpan(offset, take), note);
             truncated = true;
+        }
+        else
+        {
+            truncated = false;
         }
 
         if (truncated)

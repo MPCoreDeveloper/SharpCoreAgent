@@ -187,6 +187,27 @@ public sealed class FetchUrlToolTests
     }
 
     [Fact]
+    public async Task PagingReturnsTheRequestedWindowAndNamesIt()
+    {
+        var handler = new StubHandler().Map(Url, () => Respond("abcdefghij", "text/plain"));
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var result = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "fetch_url",
+                ToolTestWorkspace.Args(new { url = Url, max_chars = 3, start_index = 4 })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.EndsWith(
+            "efg\n[window: kept characters 5..7 of 10]",
+            result.Content,
+            StringComparison.Ordinal);
+        Assert.True(result.IsTruncated);
+    }
+
+    [Fact]
     public async Task StopsReadingAtTheByteCeiling()
     {
         var handler = new StubHandler().Map(Url, () => Respond(new string('a', 4_096)));
