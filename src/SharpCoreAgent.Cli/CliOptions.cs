@@ -4,6 +4,7 @@ using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Domain.Model;
+using SharpCoreAgent.Infrastructure.Mcp;
 using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.Cli;
@@ -317,6 +318,9 @@ internal sealed record CliOptions
     /// </remarks>
     public IReadOnlyList<string> McpServers { get; init; } = [];
 
+    /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
+    public McpSamplingPolicy McpSampling { get; init; } = McpSamplingPolicy.Deny;
+
     /// <summary>Gets a value indicating whether this invocation starts the Playwright browser server.</summary>
     /// <remarks>
     /// This is a named MCP server, not a second browser implementation: the command starts
@@ -507,6 +511,7 @@ internal sealed record CliOptions
         CSharpToolsEnabled = CSharp,
         GitToolsEnabled = Git,
         McpServers = Browser ? [.. McpServers, BrowserServerCommand] : McpServers,
+        McpSampling = McpSampling,
         Approval = Approval,
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
@@ -1940,11 +1945,30 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectMcpFlags(CliOptions options)
     {
-        if (options.McpServers.Count > 0 || options.Browser)
+        if (options.McpServers.Count > 0 || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
         {
             throw new CliUsageException(
-                "--mcp applies to run and chat, and --browser applies there too.",
+                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too.",
                 "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
+        }
+    }
+
+    private static bool TryParseSampling(string value, out McpSamplingPolicy policy)
+    {
+        switch (value.Trim().ToLowerInvariant())
+        {
+            case "deny":
+                policy = McpSamplingPolicy.Deny;
+                return true;
+            case "first":
+                policy = McpSamplingPolicy.First;
+                return true;
+            case "unrestricted":
+                policy = McpSamplingPolicy.Unrestricted;
+                return true;
+            default:
+                policy = McpSamplingPolicy.Deny;
+                return false;
         }
     }
 
@@ -2180,6 +2204,14 @@ internal sealed record CliOptions
                 {
                     McpServers = [.. options.McpServers, TakeValue(args, ref index, name)],
                 };
+
+            case "--mcp-sampling":
+                var sampling = TakeValue(args, ref index, name);
+                return TryParseSampling(sampling, out var policy)
+                    ? options with { McpSampling = policy }
+                    : throw new CliUsageException(
+                        $"unknown MCP sampling policy '{sampling}'.",
+                        "Use deny, first or unrestricted.");
 
             case "--browser":
                 return options with { Browser = true };

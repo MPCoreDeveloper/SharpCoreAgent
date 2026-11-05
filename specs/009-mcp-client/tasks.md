@@ -102,7 +102,14 @@ next pass has a real list rather than a memory.
 
 ## Deliberately not in this round
 
-- [ ] T034 MCP resources, prompts and sampling. Logging notifications are done in `046-mcp-log-notifications`.
+- [X] T034a Server sampling (`sampling/createMessage`). **Closed.** `--mcp-sampling deny|first|unrestricted`
+  decides whether a server may spend the session's model budget; deny is the default and answers `-32601`.
+  `first` admits one request per connection and `unrestricted` uses the ceilings in `McpClientOptions`
+  (10 calls and 100 000 input tokens per minute, 25 000 output tokens per call). Only text content is
+  accepted, the session's current model answers, and the limiter survives a restart. `McpSamplingTests`
+  proves the policy, the ceiling and the text-only rule; `JsonRpcPipeTests` proves the result and refusal
+  envelopes.
+- [ ] T034b MCP resources and prompts. Sampling is done; these two remain.
 - [ ] T035 Remote transports (HTTP+SSE, streamable HTTP).
 - [ ] T037 A declarative server list read from a file.
 

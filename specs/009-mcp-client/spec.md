@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033 and T036; T034, T035 and T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033, T034a and T036; T034b, T035 and T037 deferred, listed in `tasks.md`)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -134,6 +134,10 @@ Acceptance:
   instruction, and a destructive one asks for approval like any other write.
 - **FR-017** The `chat` banner gains an `mcp` row only when servers were named, naming the server
   count and the tool count, and stays silent under `--quiet`.
+- **FR-018** A server's `sampling/createMessage` is answered `-32601` unless `--mcp-sampling` names
+  `first` (one request per connection) or `unrestricted` (10 calls and 100 000 input tokens per
+  minute, 25 000 output tokens per call). Only text content is accepted, the session's current model
+  answers, and the limiter counts an admitted request even when that model call fails.
 
 ## Non-functional requirements
 
@@ -146,9 +150,9 @@ Acceptance:
 
 ## Out of scope (recorded, not forgotten)
 
-- **MCP resources, prompts, sampling and logging.** Four more capabilities of the same protocol, and
-  none of them is a tool the model calls. A round that ships `tools/*` correctly is the one that can
-  ship `resources/*` next.
+- **MCP resources, prompts and logging.** Three more capabilities of the same protocol, and none of
+  them is a tool the model calls. A round that ships `tools/*` correctly is the one that can ship
+  `resources/*` next. Sampling is no longer out of scope: see T034a and `--mcp-sampling`.
 - **Remote transports (HTTP+SSE, streamable HTTP).** A socket, a token and an OAuth flow are a
   different threat model from a child process the developer started.
 - **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five

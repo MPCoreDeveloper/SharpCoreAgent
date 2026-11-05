@@ -54,6 +54,19 @@ public sealed class McpRegistrationTests
         Assert.DoesNotContain("Using the MCP servers", quiet, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheSamplingPolicyReachesTheClientOptions()
+    {
+        using var provider = Build(new SharpCoreAgentOptions
+        {
+            IndexEnabled = false,
+            McpServers = ["npx -y one"],
+            McpSampling = McpSamplingPolicy.First,
+        });
+
+        Assert.Equal(McpSamplingPolicy.First, provider.GetRequiredService<McpClientOptions>().SamplingPolicy);
+    }
+
     private static ServiceProvider Build(SharpCoreAgentOptions options) =>
         new ServiceCollection().AddSharpCoreAgent(options).BuildServiceProvider();
 }

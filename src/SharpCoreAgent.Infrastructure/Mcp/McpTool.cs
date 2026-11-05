@@ -26,6 +26,7 @@ public sealed class McpTool : ITool
     private readonly McpToolInfo _info;
     private readonly McpServerConnection _connection;
     private readonly McpClientOptions _options;
+    private readonly IChatModelResolver? _models;
 
     /// <summary>
     /// Creates the adapter for one server tool.
@@ -34,9 +35,15 @@ public sealed class McpTool : ITool
     /// <param name="info">What the server said about the tool at startup.</param>
     /// <param name="connection">The running server the call goes to.</param>
     /// <param name="options">The ceilings: the call budget and the result ceiling.</param>
+    /// <param name="models">The resolver sampling uses, or null when the host did not provide one.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is blank.</exception>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public McpTool(string name, McpToolInfo info, McpServerConnection connection, McpClientOptions options)
+    public McpTool(
+        string name,
+        McpToolInfo info,
+        McpServerConnection connection,
+        McpClientOptions options,
+        IChatModelResolver? models = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(info);
@@ -46,6 +53,7 @@ public sealed class McpTool : ITool
         _info = info;
         _connection = connection;
         _options = options;
+        _models = models;
 
         Definition = new ToolDefinition(name, Describe(info, connection), info.SchemaJson);
         Safety = info.ReadOnly ? ToolSafety.ReadOnly : ToolSafety.Destructive;
@@ -78,9 +86,10 @@ public sealed class McpTool : ITool
         // One sink per call: it holds the artefacts written so far, so the per-call ceiling counts this
         // answer and only this answer.
         var sink = new McpArtefactSink(context.Workspace, context.Approval, _connection.Name, _info.Name, _options);
+        var sampling = McpSampling.Create(_models, context.Model, _connection, _options);
 
         var answer = await _connection
-            .CallAsync(_info.Name, arguments.Root, _options.CallTimeout, sink.Save, cancellationToken)
+            .CallAsync(_info.Name, arguments.Root, _options.CallTimeout, sink.Save, sampling, cancellationToken)
             .ConfigureAwait(false);
 
         // Two ceilings, and this is the first: the tool's own. The loop's MaxToolResultChars still applies

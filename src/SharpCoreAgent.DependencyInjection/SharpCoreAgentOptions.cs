@@ -2,6 +2,7 @@
 using SharpCoreAgent.Domain;
 using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Model;
+using SharpCoreAgent.Infrastructure.Mcp;
 using SharpCoreAgent.Infrastructure.Providers;
 
 namespace SharpCoreAgent.DependencyInjection;
@@ -72,6 +73,14 @@ public sealed record SharpCoreAgentOptions
     /// granted by whoever last ran <c>config set</c>.
     /// </remarks>
     public IReadOnlyList<string> McpServers { get; init; } = [];
+
+    /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
+    /// <remarks>
+    /// A server request spends the developer's model budget without the model deciding to, so the default is deny.
+    /// <c>--mcp-sampling first</c> admits one request per connection and <c>unrestricted</c> admits requests within the
+    /// per-minute ceilings.
+    /// </remarks>
+    public McpSamplingPolicy McpSampling { get; init; } = McpSamplingPolicy.Deny;
 
     /// <summary>Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.</summary>
     public ApprovalMode Approval { get; init; } = ApprovalMode.Ask;

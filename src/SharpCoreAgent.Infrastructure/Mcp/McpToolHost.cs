@@ -1,5 +1,7 @@
 namespace SharpCoreAgent.Infrastructure.Mcp;
 
+using SharpCoreAgent.Domain.Model;
+
 /// <summary>
 /// Where a server's stderr goes, changing at most once while the process runs.
 /// </summary>
@@ -37,6 +39,7 @@ internal sealed class McpLogSink
 public sealed class McpToolHost : IDisposable, IAsyncDisposable
 {
     private readonly McpClientOptions _options;
+    private readonly IChatModelResolver? _models;
     private readonly McpLogSink _sink = new();
     private readonly List<McpServerConnection> _connections = [];
     private readonly List<McpTool> _tools = [];
@@ -49,12 +52,17 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="servers">The command lines, in the order the flags were given.</param>
     /// <param name="options">The ceilings every connection works within.</param>
+    /// <param name="models">The resolver sampling uses, or null when the host did not provide one.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="ArgumentException">A command line is blank.</exception>
-    public McpToolHost(IEnumerable<string> servers, McpClientOptions options)
+    public McpToolHost(
+        IEnumerable<string> servers,
+        McpClientOptions options,
+        IChatModelResolver? models = null)
     {
         ArgumentNullException.ThrowIfNull(servers);
         _options = (options ?? throw new ArgumentNullException(nameof(options))).Validate();
+        _models = models;
 
         // A stem that repeats gets `_2`, `_3` … so two `npx` servers keep distinct tool names without the
         // developer having to invent one.
@@ -217,7 +225,7 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
 
             lock (_gate)
             {
-                _tools.Add(new McpTool(unique, info, connection, _options));
+                _tools.Add(new McpTool(unique, info, connection, _options, _models));
             }
         }
     }

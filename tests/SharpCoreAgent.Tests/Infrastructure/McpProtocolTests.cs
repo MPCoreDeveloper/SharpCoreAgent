@@ -38,6 +38,26 @@ public sealed class McpProtocolTests
     }
 
     [Fact]
+    public async Task SamplingIsDeclaredInTheHandshakeOnlyWhenEnabled()
+    {
+        await using var server = new ScriptedMcpServer(request => request.Method switch
+        {
+            "initialize" => Initialized(request),
+            "tools/list" => ScriptedMcpServer.Answer(request.Id, new JsonObject
+            {
+                ["tools"] = new JsonArray(Tool("search", readOnly: true)),
+            }),
+            _ => null,
+        });
+
+        await using var connection = Connect(server, new McpClientOptions { SamplingPolicy = McpSamplingPolicy.First });
+        await connection.StartAsync(Token);
+
+        var parameters = server.Received[0].Parameters ?? throw new InvalidOperationException("no initialize params");
+        Assert.Equal(JsonValueKind.Object, parameters.GetProperty("capabilities").GetProperty("sampling").ValueKind);
+    }
+
+    [Fact]
     public async Task ToolsAreReadAcrossPagesWithTheCursorTheServerGave()
     {
         await using var server = new ScriptedMcpServer(request => request.Method switch
@@ -215,8 +235,8 @@ public sealed class McpProtocolTests
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static McpServerConnection Connect(ScriptedMcpServer server) =>
-        new("npx", "npx -y test-server", server.Input, server.Output, new McpClientOptions());
+    private static McpServerConnection Connect(ScriptedMcpServer server, McpClientOptions? options = null) =>
+        new("npx", "npx -y test-server", server.Input, server.Output, options ?? new McpClientOptions());
 
     private static JsonObject Initialized(ScriptedRequest request) => ScriptedMcpServer.Answer(request.Id, new JsonObject
     {

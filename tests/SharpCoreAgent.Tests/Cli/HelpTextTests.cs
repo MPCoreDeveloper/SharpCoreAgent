@@ -51,6 +51,13 @@ public sealed class HelpTextTests
     }
 
     [Fact]
+    public void TheUsageBlockDocumentsTheSamplingPolicy()
+    {
+        Assert.Contains("--mcp-sampling <policy>", HelpText.Usage, StringComparison.Ordinal);
+        Assert.Contains("deny, first or unrestricted", HelpText.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheChatCommandsDocumentTheCostReport()
     {
         // `/cost` prints a number a developer plans a session on, so the two qualifiers travel with it:

@@ -64,6 +64,7 @@ internal static class HelpText
           --no-verify              run, chat   gate on     do not require dotnet_verify after a .NET edit for this run
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
+          --mcp-sampling <policy>  run, chat   deny        deny, first or unrestricted; first answers one server sampling request per connection
           --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
           --write                  mcp config  off         write the block into that file instead of printing it
@@ -117,6 +118,12 @@ internal static class HelpText
           saw the failure is not repeated. Search is not built in: a server, such as
           @brave/brave-search-mcp-server with BRAVE_API_KEY set, is what the flag
           is for.
+
+          --mcp-sampling decides whether a server may ask the session's model to sample: deny (the
+          default) answers -32601, first answers one request per connection, and unrestricted answers
+          within 10 calls and 100000 input tokens per minute, with 25000 output tokens per call. Only
+          text content is accepted, and the current model answers, so /model remains the developer's
+          choice.
 
         Credentials
           sharpcoreagent credentials --check          each provider's key, and the file:line or environment

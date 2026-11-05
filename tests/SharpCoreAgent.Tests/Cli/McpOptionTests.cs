@@ -1,4 +1,5 @@
 using SharpCoreAgent.Cli;
+using SharpCoreAgent.Infrastructure.Mcp;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Cli;
@@ -127,6 +128,54 @@ public sealed class McpOptionTests
             NoEnvironment);
 
         Assert.Equal(["npx -y one", CliOptions.BrowserServerCommand], options.ToSharpCoreAgentOptions().McpServers);
+    }
+
+    [Fact]
+    public void SamplingIsDeniedUnlessTheCommandLineSaysOtherwise()
+    {
+        var options = CliOptions.Parse(["run", "hello"], NoEnvironment);
+
+        Assert.Equal(McpSamplingPolicy.Deny, options.McpSampling);
+        Assert.Equal(McpSamplingPolicy.Deny, options.ToSharpCoreAgentOptions().McpSampling);
+    }
+
+    [Theory]
+    [InlineData("deny", McpSamplingPolicy.Deny)]
+    [InlineData("first", McpSamplingPolicy.First)]
+    [InlineData("unrestricted", McpSamplingPolicy.Unrestricted)]
+    [InlineData("FIRST", McpSamplingPolicy.First)]
+    public void SamplingPolicyIsParsedCaseInsensitively(string value, McpSamplingPolicy expected)
+    {
+        var options = CliOptions.Parse(["run", "hello", "--mcp-sampling", value], NoEnvironment);
+
+        Assert.Equal(expected, options.McpSampling);
+        Assert.Equal(expected, options.ToSharpCoreAgentOptions().McpSampling);
+    }
+
+    [Fact]
+    public void AnUnknownSamplingPolicyIsRefusedWithTheThreeNames()
+    {
+        var error = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["run", "hello", "--mcp-sampling", "always"], NoEnvironment));
+
+        Assert.Contains("unknown MCP sampling policy 'always'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("deny, first or unrestricted", error.Hint, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("models")]
+    [InlineData("index")]
+    [InlineData("config")]
+    [InlineData("setup")]
+    public void SamplingIsRefusedWhereNoTurnRuns(string command)
+    {
+        var arguments = command == "index"
+            ? new[] { command, "--status", "--mcp-sampling", "first" }
+            : [command, "--mcp-sampling", "first"];
+
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(arguments, NoEnvironment));
+
+        Assert.Contains("--mcp-sampling applies there too", error.Message, StringComparison.Ordinal);
     }
 
     private static string? NoEnvironment(string name) => null;

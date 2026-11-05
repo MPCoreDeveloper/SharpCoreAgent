@@ -6,8 +6,10 @@ namespace SharpCoreAgent.Infrastructure.Mcp;
 /// <remarks>
 /// Every number here answers a question a server could otherwise answer for us: how long a request may
 /// take before the session stops waiting, how many pages of tools are worth reading, and how much of one
-/// answer reaches the model. None of them is a command-line flag, for the same reason the fetch ceilings
-/// are not: a budget is a property of the capability, not of the invocation.
+/// answer reaches the model. No number here is a command-line flag, for the same reason the fetch ceilings
+/// are not: a budget is a property of the capability, not of the invocation. <see cref="SamplingPolicy"/> is
+/// the exception, because letting a server spend the model budget is an authority decision the developer makes
+/// per invocation.
 /// </remarks>
 public sealed record McpClientOptions
 {
@@ -50,6 +52,22 @@ public sealed record McpClientOptions
     /// turns supervision off for an embedder that wants the old behaviour.
     /// </remarks>
     public int MaxRestarts { get; init; } = 3;
+
+    /// <summary>Gets what a server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
+    /// <remarks>
+    /// Sampling is a server request, not a tool call: it spends the developer's model budget without the model
+    /// deciding to. Deny is therefore the default; the CLI exposes the policy as <c>--mcp-sampling</c>.
+    /// </remarks>
+    public McpSamplingPolicy SamplingPolicy { get; init; } = McpSamplingPolicy.Deny;
+
+    /// <summary>Gets how many sampling requests one connection may answer in a minute. Default ten.</summary>
+    public int MaxSamplingCallsPerMinute { get; init; } = 10;
+
+    /// <summary>Gets how many input tokens sampling may spend in a minute. Default 100 000.</summary>
+    public int MaxSamplingInputTokensPerMinute { get; init; } = 100_000;
+
+    /// <summary>Gets the largest output one sampling call may request. Default 25 000.</summary>
+    public int MaxSamplingOutputTokensPerCall { get; init; } = 25_000;
 
     /// <summary>Gets the most characters one MCP result returns. Default 64 000.</summary>
     /// <remarks>
@@ -106,6 +124,9 @@ public sealed record McpClientOptions
         Require(CallTimeout, TimeSpan.FromSeconds(1), TimeSpan.FromHours(1), nameof(CallTimeout));
         Require(MaxToolPages, 1, 100, nameof(MaxToolPages));
         Require(MaxRestarts, 0, 100, nameof(MaxRestarts));
+        Require(MaxSamplingCallsPerMinute, 1, 1_000, nameof(MaxSamplingCallsPerMinute));
+        Require(MaxSamplingInputTokensPerMinute, 1_000, 10_000_000, nameof(MaxSamplingInputTokensPerMinute));
+        Require(MaxSamplingOutputTokensPerCall, 256, 64_000, nameof(MaxSamplingOutputTokensPerCall));
         Require(MaxResultChars, 1_000, 1_000_000, nameof(MaxResultChars));
         Require(MaxStderrLines, 1, 10_000, nameof(MaxStderrLines));
         Require(MaxArtefactBytes, 1024, 64L * 1024 * 1024, nameof(MaxArtefactBytes));

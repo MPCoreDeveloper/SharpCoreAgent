@@ -325,10 +325,11 @@ public static class ServiceCollectionExtensions
     /// </remarks>
     private static void AddMcp(IServiceCollection services, SharpCoreAgentOptions options)
     {
-        services.AddSingleton(new McpClientOptions());
+        services.AddSingleton(new McpClientOptions { SamplingPolicy = options.McpSampling });
         services.AddSingleton(provider => new McpToolHost(
             options.McpServers,
-            provider.GetRequiredService<McpClientOptions>()));
+            provider.GetRequiredService<McpClientOptions>(),
+            provider.GetRequiredService<IChatModelResolver>()));
 
         services.AddSingleton<IToolRegistry>(provider =>
         {

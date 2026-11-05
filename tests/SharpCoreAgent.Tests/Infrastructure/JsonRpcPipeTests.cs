@@ -153,6 +153,39 @@ public sealed class JsonRpcPipeTests
         Assert.True(pipe.IsClosed);
     }
 
+    [Fact]
+    public async Task AHandlerAnswersAServersRequestWithAResult()
+    {
+        using var pair = new PipePair();
+        await using var pipe = new JsonRpcPipe(pair.ClientInput, pair.ClientOutput);
+        var server = new StreamReader(pair.ServerInput, Encoding.UTF8);
+        var writer = new StreamWriter(pair.ServerOutput, new UTF8Encoding(false)) { AutoFlush = true };
+        pipe.ServerRequestHandler = (_, _, _) => Task.FromResult<JsonObject?>(new JsonObject { ["text"] = "sampled" });
+
+        await SendAsync(writer, """{"jsonrpc":"2.0","id":100,"method":"sampling/createMessage","params":{}}""");
+
+        using var document = JsonDocument.Parse((await ReadAsync(server))!);
+        Assert.Equal(100, document.RootElement.GetProperty("id").GetInt64());
+        Assert.Equal("sampled", document.RootElement.GetProperty("result").GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task AHandlerRefusalBecomesAJsonRpcError()
+    {
+        using var pair = new PipePair();
+        await using var pipe = new JsonRpcPipe(pair.ClientInput, pair.ClientOutput);
+        var server = new StreamReader(pair.ServerInput, Encoding.UTF8);
+        var writer = new StreamWriter(pair.ServerOutput, new UTF8Encoding(false)) { AutoFlush = true };
+        pipe.ServerRequestHandler = (_, _, _) => throw new McpSamplingException("sampling is denied");
+
+        await SendAsync(writer, """{"jsonrpc":"2.0","id":101,"method":"sampling/createMessage","params":{}}""");
+
+        using var document = JsonDocument.Parse((await ReadAsync(server))!);
+        Assert.Equal(101, document.RootElement.GetProperty("id").GetInt64());
+        Assert.Equal(-32600, document.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.Contains("denied", document.RootElement.GetProperty("error").GetProperty("message").GetString()!);
+    }
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static Task<string?> ReadAsync(StreamReader reader) => reader.ReadLineAsync(Token).AsTask();

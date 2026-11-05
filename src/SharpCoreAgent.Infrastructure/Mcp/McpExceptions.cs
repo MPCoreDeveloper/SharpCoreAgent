@@ -61,6 +61,26 @@ public sealed class McpTransportException : Exception
 }
 
 /// <summary>
+/// A sampling request the client refuses, or cannot answer.
+/// </summary>
+/// <remarks>
+/// Raised while answering a server request, then converted by <see cref="JsonRpcPipe"/> into a JSON-RPC error. It is
+/// not a tool failure: the server asked the <em>client</em> to do something, and the answer belongs on the server
+/// request's id rather than in a tool result.
+/// </remarks>
+public sealed class McpSamplingException : Exception
+{
+    /// <summary>
+    /// Creates the refusal.
+    /// </summary>
+    /// <param name="message">Why the request was refused.</param>
+    public McpSamplingException(string message)
+        : base(message)
+    {
+    }
+}
+
+/// <summary>
 /// A server answered a request with a JSON-RPC error object.
 /// </summary>
 public sealed class JsonRpcException : Exception

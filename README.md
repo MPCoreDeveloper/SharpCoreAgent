@@ -255,6 +255,7 @@ keep working on the file that needs repairing.
 | `--no-csharp` | run, chat | C# on — remove the Roslyn adapter and its three code-intelligence tools for this invocation |
 | `--no-git` | run, chat | Git on — remove the read-only `git_status` and `git_diff` evidence tools |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
+| `--mcp-sampling <policy>` | run, chat | `deny` — `deny`, `first` (one request per connection) or `unrestricted` (rate-limited); a server may ask the session's model to sample |
 | `--browser` | run, chat | off — start the Playwright MCP server with Edge on Windows or Chromium elsewhere; adds `npx_browser_*` tools |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
 | `--write` | mcp config, ide | off — merge the block into that file, or write the profile or the task, instead of printing it |
@@ -625,6 +626,12 @@ naming the command line. A server that exits later is restarted on the next call
 with a fresh handshake; the call that saw the failure is not repeated. Each child is killed with its
 process tree when the session ends, its stderr is kept for `--verbose` and never reaches the transcript,
 and there is no MCP client in a process that did not pass the flag.
+
+A server may also ask the client to sample, which spends the session's model budget without the model
+deciding to. That is off unless the developer says otherwise: `--mcp-sampling deny` (the default) answers
+`-32601`; `first` answers one request per connection; `unrestricted` answers within 10 calls and 100 000
+input tokens per minute, with 25 000 output tokens per call. Only text content is accepted, and the
+session's current model answers, so `/model` remains the developer's choice.
 
 A browser is the one server where describing is not enough. A screenshot the model cannot see and the
 developer cannot open is a fact about a page nobody has, so the bytes are written once, under the

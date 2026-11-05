@@ -39,6 +39,15 @@ internal sealed class JsonRpcPipe : IAsyncDisposable
     private bool _disposed;
 
     /// <summary>
+    /// Gets or sets the handler for a request the server sends to this client.
+    /// </summary>
+    /// <remarks>
+    /// Null keeps the old behaviour: every server request is answered <c>-32601</c>. A connection sets this only while a
+    /// tool call is in flight, so a sampling request cannot outlive the turn that authorized it.
+    /// </remarks>
+    internal Func<string, JsonElement, CancellationToken, Task<JsonObject?>>? ServerRequestHandler { get; set; }
+
+    /// <summary>
     /// Creates a pipe over an already-open pair of streams.
     /// </summary>
     /// <param name="input">Where the server writes; read line by line until it ends.</param>
@@ -222,9 +231,13 @@ internal sealed class JsonRpcPipe : IAsyncDisposable
 
             if (hasMethod && hasId)
             {
-                // A request from the server (sampling, elicitation, roots). This client implements tools
-                // only, and answering "method not found" is what the specification asks of it.
-                Answer(method.GetString() ?? string.Empty, id);
+                // A request from the server (sampling, elicitation, roots). The connection may install a handler for
+                // sampling while a tool call is in flight; otherwise this client implements tools only.
+                var methodName = method.GetString() ?? string.Empty;
+                var parameters = root.TryGetProperty("params", out var paramsElement) && paramsElement.ValueKind == JsonValueKind.Object
+                    ? paramsElement.Clone()
+                    : default;
+                _ = HandleServerRequestAsync(methodName, parameters, id.Clone());
                 return;
             }
 
@@ -309,26 +322,70 @@ internal sealed class JsonRpcPipe : IAsyncDisposable
             : $"server log [{level}]: {message}";
     }
 
+    private async Task HandleServerRequestAsync(string method, JsonElement parameters, JsonElement id)
+    {
+        var handler = ServerRequestHandler;
+        if (handler is null)
+        {
+            Answer(method, id);
+            return;
+        }
+
+        try
+        {
+            var result = await handler(method, parameters, CancellationToken.None).ConfigureAwait(false);
+            if (result is null)
+            {
+                Answer(method, id);
+                return;
+            }
+
+            await SafeWriteAsync(Success(id, result)).ConfigureAwait(false);
+        }
+        catch (McpSamplingException ex)
+        {
+            await SafeWriteAsync(Error(id, -32600, ex.Message)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke(string.Create(
+                CultureInfo.InvariantCulture,
+                $"failed to answer the server's '{method}': {ex.Message}"));
+            await SafeWriteAsync(Error(id, -32603, ex.Message)).ConfigureAwait(false);
+        }
+    }
+
     private void Answer(string method, JsonElement id)
     {
         _log?.Invoke(string.Create(
             CultureInfo.InvariantCulture,
             $"answered the server's '{method}' with -32601: this client calls tools only"));
-
-        var message = new JsonObject
-        {
-            ["jsonrpc"] = "2.0",
-            ["id"] = id.ValueKind == JsonValueKind.Number ? JsonValue.Create(id.GetInt64()) : JsonValue.Create(id.GetString()),
-            ["error"] = new JsonObject
-            {
-                ["code"] = -32601,
-                ["message"] = $"'{method}' is not implemented by this client, which calls tools only",
-            },
-        };
-
-        // Fire and forget on purpose: a reply the server does not need must not fail the caller's request.
-        _ = SafeWriteAsync(message);
+        _ = SafeWriteAsync(Error(
+            id,
+            -32601,
+            $"'{method}' is not implemented by this client, which calls tools only"));
     }
+
+    private static JsonObject Success(JsonElement id, JsonObject result) => new()
+    {
+        ["jsonrpc"] = "2.0",
+        ["id"] = Id(id),
+        ["result"] = result,
+    };
+
+    private static JsonObject Error(JsonElement id, int code, string message) => new()
+    {
+        ["jsonrpc"] = "2.0",
+        ["id"] = Id(id),
+        ["error"] = new JsonObject
+        {
+            ["code"] = code,
+            ["message"] = message,
+        },
+    };
+
+    private static JsonValue? Id(JsonElement id) =>
+        id.ValueKind == JsonValueKind.Number ? JsonValue.Create(id.GetInt64()) : JsonValue.Create(id.GetString());
 
     private async Task SafeWriteAsync(JsonObject message)
     {

@@ -34,6 +34,7 @@ namespace SharpCoreAgent.Infrastructure.Mcp;
 public sealed class McpServerConnection : IAsyncDisposable
 {
     private readonly McpClientOptions _options;
+    private readonly McpSamplingLimiter _sampling;
     private readonly Action<string>? _log;
     private readonly List<McpToolInfo> _tools = [];
     private readonly object _toolsGate = new();
@@ -69,6 +70,7 @@ public sealed class McpServerConnection : IAsyncDisposable
         Name = name;
         CommandLine = commandLine.Trim();
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _sampling = new McpSamplingLimiter(_options);
         _log = log;
         _processExit = (_, _) => KillQuietly();
 
@@ -132,6 +134,9 @@ public sealed class McpServerConnection : IAsyncDisposable
     /// than to reward one that fails slowly. The property is public for the host's diagnostics and for tests.
     /// </remarks>
     public int RestartCount => Volatile.Read(ref _restartCount);
+
+    internal bool TryAcquireSampling(int inputTokens, out string reason) =>
+        _sampling.TryAcquire(inputTokens, out reason);
 
     /// <summary>Gets a value indicating whether the server this connection started still answers.</summary>
     /// <remarks>
@@ -226,7 +231,9 @@ public sealed class McpServerConnection : IAsyncDisposable
         var parameters = new JsonObject
         {
             ["protocolVersion"] = _options.ProtocolVersion,
-            ["capabilities"] = new JsonObject(),
+            ["capabilities"] = _options.SamplingPolicy == McpSamplingPolicy.Deny
+                ? new JsonObject()
+                : new JsonObject { ["sampling"] = new JsonObject() },
             ["clientInfo"] = new JsonObject
             {
                 ["name"] = _options.ClientName,
@@ -332,7 +339,7 @@ public sealed class McpServerConnection : IAsyncDisposable
         JsonElement arguments,
         TimeSpan timeout,
         CancellationToken cancellationToken) =>
-        CallAsync(tool, arguments, timeout, save: null, cancellationToken);
+        CallAsync(tool, arguments, timeout, save: null, sampling: null, cancellationToken);
 
     /// <summary>
     /// Calls one of the server's tools, offering its binary content to a sink.
@@ -341,6 +348,7 @@ public sealed class McpServerConnection : IAsyncDisposable
     /// <param name="arguments">The argument object, forwarded unchanged.</param>
     /// <param name="timeout">The wall-clock ceiling for this call.</param>
     /// <param name="save">Turns a binary entry of the answer into the sentence describing what became of it.</param>
+    /// <param name="sampling">Answers a server sampling request while this call is in flight, or null to refuse it.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The server's answer, or a failure phrased for the model.</returns>
     /// <remarks>
@@ -355,6 +363,7 @@ public sealed class McpServerConnection : IAsyncDisposable
         JsonElement arguments,
         TimeSpan timeout,
         Func<McpArtefact, string>? save,
+        Func<string, JsonElement, CancellationToken, Task<JsonObject?>>? sampling,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tool);
@@ -391,7 +400,7 @@ public sealed class McpServerConnection : IAsyncDisposable
 
             try
             {
-                return await SendAsync(pipe, parameters, timeout, save, cancellationToken).ConfigureAwait(false);
+                return await SendAsync(pipe, parameters, timeout, save, sampling, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -435,23 +444,33 @@ public sealed class McpServerConnection : IAsyncDisposable
         JsonObject parameters,
         TimeSpan timeout,
         Func<McpArtefact, string>? save,
+        Func<string, JsonElement, CancellationToken, Task<JsonObject?>>? sampling,
         CancellationToken cancellationToken)
     {
-        var result = await pipe
-            .RequestAsync("tools/call", parameters, timeout, cancellationToken)
-            .ConfigureAwait(false);
+        var previous = pipe.ServerRequestHandler;
+        pipe.ServerRequestHandler = sampling;
+        try
+        {
+            var result = await pipe
+                .RequestAsync("tools/call", parameters, timeout, cancellationToken)
+                .ConfigureAwait(false);
 
-        var isError = result.ValueKind == JsonValueKind.Object &&
-                      result.TryGetProperty("isError", out var flag) &&
-                      flag.ValueKind == JsonValueKind.True;
+            var isError = result.ValueKind == JsonValueKind.Object &&
+                          result.TryGetProperty("isError", out var flag) &&
+                          flag.ValueKind == JsonValueKind.True;
 
-        // The answer is already in hand, so a cancellation that arrives now would land mid-save: the
-        // remaining artefacts are not written and the caller, who cancelled, sees the cancellation.
-        cancellationToken.ThrowIfCancellationRequested();
+            // The answer is already in hand, so a cancellation that arrives now would land mid-save: the
+            // remaining artefacts are not written and the caller, who cancelled, sees the cancellation.
+            cancellationToken.ThrowIfCancellationRequested();
 
-        var flattened = McpContent.FlattenWithImages(result, Name, save);
+            var flattened = McpContent.FlattenWithImages(result, Name, save);
 
-        return new McpCallResult(isError, flattened.Text) { Images = flattened.Images };
+            return new McpCallResult(isError, flattened.Text) { Images = flattened.Images };
+        }
+        finally
+        {
+            pipe.ServerRequestHandler = previous;
+        }
     }
 
     private bool CanRestart => _input is null && _output is null;
