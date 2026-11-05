@@ -6,7 +6,7 @@ using SharpCoreAgent.Infrastructure.Images;
 namespace SharpCoreAgent.Infrastructure.Tools;
 
 /// <summary>
-/// Shows the model an image file: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment.
+/// Shows the model an image file: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment.
 /// </summary>
 /// <remarks>
 /// This is the half of reading a picture that no other tool can do. <c>read_file</c> refuses a binary file because
@@ -15,7 +15,9 @@ namespace SharpCoreAgent.Infrastructure.Tools;
 /// on the message that follows.
 /// <para>
 /// Two rules keep it honest. The extension decides the media type, because a provider is told what the bytes
-/// are and will reject a mislabelled payload — sniffing would only move the failure later. And the model's own
+/// are and will reject a mislabelled payload — sniffing would only move the failure later. SVG is the one
+/// exception because no provider accepts it: <see cref="SvgImage"/> renders it to PNG at the document's own size,
+/// and the answer names both the source and the rendering. And the model's own
 /// <see cref="SharpCoreAgent.Domain.Model.ModelDescriptor.SupportsImages"/> decides whether the file is read at
 /// all: a text-only model that is handed a path answers with an invented description of a picture it never saw,
 /// which is the one failure mode this tool exists to prevent.
@@ -43,7 +45,7 @@ public sealed class ViewImageTool : ITool
         """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}""";
 
     private const string Description =
-        "Show an image file to the model: a PNG, JPEG, GIF or WebP from the workspace or a read-only attachment, up to 4 MiB. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
+        "Show an image file to the model: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(Name, Description, Schema);
@@ -83,12 +85,14 @@ public sealed class ViewImageTool : ITool
             return ToolResult.Failure(toolCall.Id, Name, $"no file at '{relative}'");
         }
 
-        if (MediaTypeFor(fullPath) is not { } mediaType)
+        var mediaType = MediaTypeFor(fullPath);
+        var isSvg = string.Equals(Path.GetExtension(fullPath), ".svg", StringComparison.OrdinalIgnoreCase);
+        if (mediaType is null && !isSvg)
         {
             return ToolResult.Failure(
                 toolCall.Id,
                 Name,
-                $"'{relative}' is not an image this tool can show. It reads files named .png, .jpg, .jpeg, .gif or .webp; use read_file for text.");
+                $"'{relative}' is not an image this tool can show. It reads files named .png, .jpg, .jpeg, .gif, .webp or .svg; use read_file for text.");
         }
 
         var length = new FileInfo(fullPath).Length;
@@ -131,11 +135,35 @@ public sealed class ViewImageTool : ITool
             return ToolResult.Failure(toolCall.Id, Name, $"'{relative}' could not be read: {ex.Message}");
         }
 
+        var sourceBytes = bytes;
+        var displayType = mediaType ?? "image/svg+xml";
+        var renderedWidth = 0;
+        var renderedHeight = 0;
+        if (isSvg)
+        {
+            if (!SvgImage.TryRender(sourceBytes, TextLimits.MaxImageBytes, out var png, out renderedWidth, out renderedHeight, out var renderError))
+            {
+                return ToolResult.Failure(
+                    toolCall.Id,
+                    Name,
+                    $"'{relative}' ({sourceBytes.Length} bytes) could not be rendered: {renderError}");
+            }
+
+            bytes = png;
+            mediaType = "image/png";
+        }
+
         var image = new ImageContent
         {
-            MediaType = mediaType,
+            MediaType = mediaType!,
             Base64 = Convert.ToBase64String(bytes),
         };
+
+        var description = isSvg
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"{displayType} · {sourceBytes.Length} bytes, rendered {renderedWidth} × {renderedHeight} PNG")
+            : string.Create(CultureInfo.InvariantCulture, $"{displayType} · {sourceBytes.Length} bytes");
 
         // Before the budget, and after the read, and both are deliberate: a duplicate can only be recognised by its
         // bytes, and once it is recognised there is nothing left to spend — the picture the turn would have paid for is
@@ -148,7 +176,7 @@ public sealed class ViewImageTool : ITool
                 Name,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"'{relative}' ({mediaType} · {bytes.Length} bytes) is not attached again: {ImageShown.Clause}. That earlier message is the copy to read — asking for the same file twice shows nothing new."))
+                    $"'{relative}' ({description}) is not attached again: {ImageShown.Clause}. That earlier message is the copy to read — asking for the same file twice shows nothing new."))
                 with
             {
                 Effects = [new ToolEffect(ToolEffectKind.Read, relative)],
@@ -164,12 +192,12 @@ public sealed class ViewImageTool : ITool
                 Name,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"'{relative}' ({mediaType} · {bytes.Length} bytes) was not attached: {ImageBudget.Spent(bytes.Length, left)}."));
+                    $"'{relative}' ({description}) was not attached: {ImageBudget.Spent(bytes.Length, left)}."));
         }
 
         var note = string.Create(
             CultureInfo.InvariantCulture,
-            $"'{relative}' ({mediaType} · {bytes.Length} bytes) is attached to the next message.");
+            $"'{relative}' ({description}) is attached to the next message.");
 
         return ToolResult.Image(toolCall.Id, Name, note, image) with
         {

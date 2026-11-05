@@ -104,3 +104,16 @@ Four things a reader of the spec above would otherwise have to rediscover:
    so `view_image` is reachable from a normal session and not from a served one; the test that pins it says so in
    one `InlineData`, and a later round that wants to serve images has to change that line on purpose.
 
+## SVG amendment (T027)
+
+An SVG cannot travel as itself: every provider in the catalogue accepts PNG, JPEG, GIF and WebP, and an
+`image/svg+xml` part is a rejected request. `SvgImage` therefore renders through `Svg.Skia` at the document's own
+`width`/`height` or `viewBox`, disables JavaScript before parsing, and caps either side at 4 096 pixels so one
+enormous artboard cannot allocate a gigabyte. The PNG then goes through the same `ImagePayload` ceiling, duplicate
+check and turn budget as a native picture, and the tool's sentence names both the source size and the rendering.
+
+The renderer is in `Infrastructure`, not `Domain`, and the SkiaSharp native assets are referenced for Windows,
+Linux and macOS. `--image` uses the same `ImageFile` path, so a workspace SVG enters a `run` prompt the same way a
+PNG does; stdin still recognises only the four byte signatures, because an extensionless stream would need an XML
+sniff and that is a different door.
+

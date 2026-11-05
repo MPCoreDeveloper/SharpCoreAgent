@@ -77,7 +77,47 @@ public sealed class ViewImageToolTests
 
         Assert.True(result.IsError);
         Assert.Empty(result.Images);
-        Assert.Contains(".png, .jpg, .jpeg, .gif or .webp", result.Content, StringComparison.Ordinal);
+        Assert.Contains(".png, .jpg, .jpeg, .gif, .webp or .svg", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnSvgIsRenderedToPngAtItsOwnSize()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write("diagrams/flow.svg", Svg);
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"diagrams/flow.svg"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains("image/svg+xml", result.Content, StringComparison.Ordinal);
+        Assert.Contains("rendered 120 × 40 PNG", result.Content, StringComparison.Ordinal);
+
+        var image = Assert.Single(result.Images);
+        Assert.Equal("image/png", image.MediaType);
+
+        var bytes = Convert.FromBase64String(image.Base64);
+        Assert.True(bytes.Length > 8);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], bytes[..8]);
+        Assert.Equal(new ToolEffect(ToolEffectKind.Read, "diagrams/flow.svg"), Assert.Single(result.Effects));
+    }
+
+    [Fact]
+    public async Task AnSvgThatCannotBeParsedIsRefused()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.Write("broken.svg", "<svg><not-closed>");
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"broken.svg"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("could not be rendered", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -353,6 +393,14 @@ public sealed class ViewImageToolTests
 
     private static ToolInvocationContext ReadingImages(ToolTestWorkspace sandbox) =>
         new(sandbox.Workspace) { Model = new ModelDescriptor("grok", "grok-4", "Grok 4", SupportsImages: true) };
+
+    private const string Svg =
+        """
+        <svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">
+          <rect width="120" height="40" fill="#0f0"/>
+          <text x="4" y="28" font-size="20" fill="#000">SVG</text>
+        </svg>
+        """;
 
     private static ToolInvocationContext TextOnly(ToolTestWorkspace sandbox) =>
         new(sandbox.Workspace) { Model = new ModelDescriptor("deepseek", "deepseek-chat", "DeepSeek Chat") };

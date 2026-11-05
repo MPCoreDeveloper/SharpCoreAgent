@@ -17,7 +17,7 @@ namespace SharpCoreAgent.Infrastructure.Images;
 public static class ImageFile
 {
     /// <summary>Gets the file extensions this helper accepts.</summary>
-    public static IReadOnlyList<string> Extensions { get; } = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+    public static IReadOnlyList<string> Extensions { get; } = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
 
     /// <summary>Loads one image file.</summary>
     /// <param name="workspace">The workspace and its read-only attachments.</param>
@@ -42,11 +42,12 @@ public static class ImageFile
         }
 
         var mediaType = MediaTypeFor(fullPath);
-        if (mediaType is null)
+        var isSvg = IsSvg(fullPath);
+        if (mediaType is null && !isSvg)
         {
             error = string.Create(
                 CultureInfo.InvariantCulture,
-                $"'{workspace.ToRelative(fullPath)}' is not one of the picture types a provider accepts ({string.Join(", ", Extensions)})");
+                $"'{workspace.ToRelative(fullPath)}' is not one of the picture types a provider accepts ({string.Join(", ", Extensions)}); SVG is rendered to PNG before it is attached");
             return false;
         }
 
@@ -78,6 +79,22 @@ public static class ImageFile
         {
             error = $"'{workspace.ToRelative(fullPath)}' could not be read: {ex.Message}";
             return false;
+        }
+
+        if (isSvg)
+        {
+            if (!SvgImage.TryRender(bytes, TextLimits.MaxImageBytes, out var png, out _, out _, out error))
+            {
+                image = null!;
+                return false;
+            }
+
+            return ImagePayload.TryCreate(
+                "image/png",
+                Convert.ToBase64String(png),
+                TextLimits.MaxImageBytes,
+                out image,
+                out error);
         }
 
         return ImagePayload.TryCreate(
@@ -168,6 +185,9 @@ public static class ImageFile
 
         return null;
     }
+
+    private static bool IsSvg(string fullPath) =>
+        string.Equals(Path.GetExtension(fullPath), ".svg", StringComparison.OrdinalIgnoreCase);
 
     private static string? MediaTypeFor(string fullPath) =>
         Path.GetExtension(fullPath).ToLowerInvariant() switch

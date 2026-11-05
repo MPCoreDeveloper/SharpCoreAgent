@@ -89,6 +89,18 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
 
     <!--
+      SVG rendering for the image view (spec 017 T027).
+
+      A provider accepts PNG, JPEG, GIF and WebP, not SVG; Svg.Skia is the portable renderer that turns a vector
+      file into one of those at the point it is read. SkiaSharp ships native binaries for Windows, Linux and macOS,
+      which is what keeps this a cross-platform capability rather than a Windows-only one.
+    -->
+    <PackageVersion Include="Svg.Skia" Version="5.2.3" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.macOS" Version="4.148.0" />
+
+    <!--
       The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
       PrivateAssets="all" keeps it out of every package and out of a consumer's build.
     -->

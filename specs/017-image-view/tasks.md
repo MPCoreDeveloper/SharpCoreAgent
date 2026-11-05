@@ -16,7 +16,8 @@ has a real list rather than a memory.
 ## Phase 1 — the tool
 
 - [X] T004 `ViewImageTool` in `Infrastructure.Tools`: `PathSafety.TryResolveRead`, the extension table
-      (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`, case-insensitive), the ceiling, the capability gate, then one read.
+      (`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`, case-insensitive; `.svg` was added by T027's amendment and is rendered to
+      PNG through `SvgImage`), the ceiling, the capability gate, then one read.
 - [X] T005 `TextLimits.MaxImageBytes` = 4 MiB, with the note that base64 spends a third on top and a provider bills
       pixels whether the file is compressed or not.
 - [X] T006 Every refusal a `ToolResult` and none an exception, in the order extension → empty → ceiling → model →
@@ -76,8 +77,11 @@ has a real list rather than a memory.
       4 MiB a file goes through, and the fetch's own 2 MiB cut is refused rather than sent as half a picture.
 - [ ] T026 **OCR, local vision, captioning.** The bytes go to the model the developer chose. A local decoder is a
       dependency, a licence and a second opinion nobody asked for.
-- [ ] T027 **PDF, SVG, audio and video.** Five extensions are the whole table; a format whose extension would lie is
-      refused rather than relabelled.
+- [X] T027 **SVG.** `view_image` and `--image` accept `.svg` and `SvgImage` renders it to PNG at its own size (at
+      most 4096 px on either side) through Svg.Skia; the answer names the source and the rendering. PDF, audio and
+      video remain refused: their extensions would lie about what a provider can read.
+- [ ] T027b **PDF, audio and video.** A PDF, a video or an audio file named as a picture would be a provider
+      rejection; extracting text or frames needs a separate runtime and a round that argues for it.
 - [ ] T028 **Resizing, re-encoding, rotating.** Show the file or refuse it with the number that says why; silently
       rewriting a developer's picture is worse than a refusal.
 - [ ] T029 **Images in session files.** Deliberate, and documented in `JsonFileSessionStore`: a transcript people

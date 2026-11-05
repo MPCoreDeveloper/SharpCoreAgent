@@ -421,8 +421,8 @@ but no Python runtime gets the verifier's start failure, not a silent unverified
 `list_roots` reports the primary root and every read-only attached root, and it is the one tool result
 that prints an absolute path: naming the legal ones is its whole job.
 
-`view_image` is how a picture enters the conversation. It reads a `.png`, `.jpg`, `.jpeg`, `.gif` or
-`.webp` from the workspace or an attached root, up to 4 MiB, and answers with the image itself attached to
+`view_image` is how a picture enters the conversation. It reads a `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or
+`.svg` from the workspace or an attached root, up to 4 MiB, and answers with the image itself attached to
 the message that follows — the tool role carries text only, because every OpenAI-compatible provider
 rejects an image there, so the loop hands the picture over on the next user message. It refuses before
 reading a byte when the session's model is not declared to read images, and the refusal names the model, so
@@ -433,6 +433,10 @@ screenshot is already a file under `.sharpcoreagent/artifacts/`, which is the co
 ```text
 view_image · .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (image/png · 36,912 bytes) is attached to the next message.
 ```
+
+An SVG is the one extension that is not sent as itself: no provider accepts `image/svg+xml`, so Svg.Skia renders it
+to PNG at the document's own size (at most 4096 pixels on either side) and the answer names the source and the
+rendering: `'diagram.svg' (image/svg+xml · 812 bytes, rendered 120 × 40 PNG) is attached to the next message.`
 
 A session file keeps the transcript's text and not its images: a screenshot is megabytes of base64 on one
 line of a document people grep, and the file it came from is still on disk and one `view_image` call away —
@@ -445,11 +449,11 @@ still writes the file and still names the path, because that is what a resumed t
 bytes also go to the model that can see them instead of costing a `view_image` call on a screenshot the
 client already had in hand. `fetch_url` returns a picture when the response is one of the four types a
 provider accepts (`image/png`, `image/jpeg`, `image/gif`, `image/webp`), the body arrived whole, and the
-session's model can see — an `image/jpg` is relabelled `image/jpeg`, an `image/svg+xml` is still refused by
-name, and a body cut at the fetch ceiling is refused rather than attached, because half a PNG is not a
-picture. Four pictures per tool result is the ceiling; every one that is not attached is named with its
-number and its reason, and a session whose model is declared text-only is told the picture was not
-attached rather than left to describe what it was never shown.
+session's model can see — an `image/jpg` is relabelled `image/jpeg`, an `image/svg+xml` from a server or URL is
+still refused by name (a workspace SVG reaches `view_image`, which renders it to PNG), and a body cut at the fetch
+ceiling is refused rather than attached, because half a PNG is not a picture. Four pictures per tool result is the
+ceiling; every one that is not attached is named with its number and its reason, and a session whose model is
+declared text-only is told the picture was not attached rather than left to describe what it was never shown.
 
 Those three doors share one ceiling, and it belongs to the turn rather than to any of them: 16 MiB of
 picture. An attached picture is re-sent on every request that follows it, so a turn that shows four
@@ -1151,8 +1155,8 @@ the second duplicates settings that would drift.
   loop, the paste and the file write; the whole suite is 1,228 green in `Release` at 0 warnings, with no line added
   to `Domain`.
 
-- `specs/017-image-view` — a picture can enter a turn. `view_image` reads a `.png`, `.jpg`, `.jpeg`, `.gif` or
-  `.webp` up to 4 MiB from the workspace or an attached root, `ImageContent` carries the bytes as
+- `specs/017-image-view` — a picture can enter a turn. `view_image` reads a `.png`, `.jpg`, `.jpeg`, `.gif`,
+  `.webp` or `.svg` up to 4 MiB from the workspace or an attached root, `ImageContent` carries the bytes as
   `Domain.Conversation` types (`MediaType`, base64, `ToDataUri`), and because every compatible provider rejects an
   image in the tool role the loop hands it over on the user message that follows the tool result — the call, the
   sentence, the picture. The gate is a declared capability rather than a guess: `ModelDescriptor.SupportsImages` is
@@ -1168,7 +1172,8 @@ the second duplicates settings that would drift.
   sentence that describes them, instead of being flattened into `[image: image/png · 36,912 base64 characters]`. The
   rule is one class, `ImagePayload`: four media types (five spellings — `image/jpg` becomes `image/jpeg`), the
   `TextLimits.MaxImageBytes` ceiling measured from the base64 length before anything is decoded, and the closed list
-  that keeps `image/bmp`, `image/svg+xml` and `image/tiff` out of a request body a provider would reject. Attachment
+  that keeps `image/bmp`, `image/svg+xml` and `image/tiff` out of a request body a provider would reject; the
+  workspace `view_image` path rasterizes an SVG to PNG before it reaches this list. Attachment
   is additive: the artefact sink still writes the file and names the path, because that is what a resumed transcript
   keeps. Four pictures per result, and every one that is not attached is named with its number and reason — including
   the one a text-only session was never shown. `fetch_url` refuses a body cut at its own ceiling rather than sending

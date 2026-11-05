@@ -56,6 +56,25 @@ public sealed class ImageFileTests
     }
 
     [Fact]
+    public void AnSvgInsideTheWorkspaceIsRenderedToPng()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        File.WriteAllText(
+            Path.Combine(sandbox.Root, "diagram.svg"),
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">
+              <rect width="120" height="40" fill="#0f0"/>
+            </svg>
+            """);
+
+        Assert.True(ImageFile.TryLoad(sandbox.Workspace, "diagram.svg", out var image, out var error), error);
+        Assert.Equal("image/png", image.MediaType);
+
+        var bytes = Convert.FromBase64String(image.Base64);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], bytes[..8]);
+    }
+
+    [Fact]
     public void AnUnsupportedExtensionIsExplained()
     {
         using var sandbox = ToolTestWorkspace.Create();

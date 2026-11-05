@@ -37,7 +37,7 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 | `ChatMessage.Images` / `HasImages` / `User(text, images)` | `Domain.Conversation` | a user message carries pictures beside its text; no other role can |
 | `ToolResult.Images` / `ToolResult.Image(...)` | `Domain.Tools` | a tool answers with a picture and still describes it in text |
 | `ModelDescriptor.SupportsImages` | `Domain.Model` | declared per model, `false` by default |
-| `view_image` | `Infrastructure.Tools` | the tool: read-only, one `path`, five extensions, one ceiling |
+| `view_image` | `Infrastructure.Tools` | the tool: read-only, one `path`, six extensions, one ceiling; SVG is rendered to PNG |
 | the hand-over | `Application.CodingAgent` | after the tool message, a user message carrying `PromptLibrary.ImageAttached` and the image |
 | rule 9 and `ImageAttached` | `Application.PromptLibrary` | the guidance and the sentence, shipped with the tool |
 | `OpenAiContent.ImageDataUris` | `Infrastructure.Chat` | `image_url` parts with a `data:` URI; text-only messages stay strings |
@@ -55,8 +55,10 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   turn and a `readonly` session call it without a prompt, takes exactly one argument `path`, and reports a `Read`
   effect naming the file workspace-relative.
 - **FR-004** The extension alone decides the media type the provider is told: `.png` → `image/png`, `.jpg`/`.jpeg`
-  → `image/jpeg`, `.gif` → `image/gif`, `.webp` → `image/webp`, case-insensitive. Anything else is refused by
-  name, listing those five extensions and `read_file` for text. The bytes are never sniffed: a provider rejects a
+  → `image/jpeg`, `.gif` → `image/gif`, `.webp` → `image/webp`, case-insensitive. `.svg` is rendered to PNG at its
+  own size by `SvgImage` before it is attached, because no provider accepts `image/svg+xml`; the rendered PNG obeys
+  the same 4 MiB ceiling and the answer names the source size and the rendering. Anything else is refused by
+  name, listing those six extensions and `read_file` for text. The bytes are never sniffed: a provider rejects a
   mislabelled payload, and guessing would only move the failure later.
 - **FR-005** The file is read only under the ceiling (`TextLimits.MaxImageBytes`, 4 MiB), checked from the file's
   length before a byte is read. A refusal states the size and the ceiling, and asks for a smaller copy.
@@ -85,7 +87,7 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 | path outside the workspace | `ToolResult.Refused` from `PathSafety` — the same sentence every tool gives |
 | a directory | `'<path>' is a directory. Use list_directory to see what it contains.` |
 | no such file | `no file at '<path>'` |
-| not one of the five extensions | the five extensions, and `read_file` for text |
+| not one of the six extensions | the six extensions, and `read_file` for text |
 | a zero-byte file | `'<path>' is empty (0 bytes), so there is nothing to show.` |
 | over the ceiling | the file's size, the ceiling and the 4 MiB reading, and a request for a smaller copy |
 | model declared text-only | the model's name, "declared text-only in this build", and "Do not describe what the image contains" |
@@ -127,8 +129,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   sentence, the sink and the path.
 - **`fetch_url` returning images**, a `Content-Type: image/*` branch, or a download tool. **Closed by `019`** for the
   four types a provider accepts; every other binary keeps this round's refusal.
-- **PDF, SVG, audio and video.** Five extensions are the whole table, and a format whose extension would lie is
-  refused by name rather than relabelled.
+- **PDF, audio and video.** The extension table still lies for these: a PDF or a video named as a picture would be a
+  provider rejection. SVG is no longer in this list: `SvgImage` renders it to PNG through Svg.Skia, whose SkiaSharp
+  binaries ship for Windows, Linux and macOS.
 - **Pasted, dragged or piped images**, and an `--image` flag on `run`. A picture enters a conversation the way any
   other evidence does: through a tool, with a path a report can name.
 - **Resizing, re-encoding, rotating or downscaling.** The developer's file is shown as it is, or refused with the
