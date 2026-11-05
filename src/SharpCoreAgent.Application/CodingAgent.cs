@@ -340,7 +340,7 @@ public sealed class CodingAgent
             // touched has to have run, and passed, since the last such edit. Plan mode writes nothing and a registry
             // without that profile's verifier is not gated at all, so both keep the behaviour they had before this rule.
             var gaps = state.UnverifiedGaps;
-            if (VerifyGate.IsRequired(session, gaps))
+            if (_options.VerifyEdits && VerifyGate.IsRequired(session, gaps))
             {
                 if (state.VerificationNudges < MaxVerificationNudges)
                 {

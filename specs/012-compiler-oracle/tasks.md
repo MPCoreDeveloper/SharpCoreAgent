@@ -77,8 +77,7 @@ has a real list rather than a memory.
 
 - [ ] T023 Roslyn, or any analyzer that answers "does this compile" without the compiler. The process is the
   oracle; a semantic model would also make `SCA0001` a lie about what this repository needs to run.
-- [ ] T024 `--no-verify`, a settings key, or an environment variable that turns the gate off. A gate with a
-  switch is a gate that is off in the first script anybody writes.
+- [X] T024 `--no-verify`, a settings key, or an environment variable that turns the gate off. **Done for the CLI opt-out in this slice:** `--no-verify` is accepted on `run` and `chat` only and sets `AgentOptions.VerifyEdits=false` for that invocation. It is still not a settings key or environment variable.
 - [ ] T025 Automatic retry of a failed build without the model's involvement. The nudge is the retry policy:
   the model sees the diagnostics and decides, which is the work it is paid for.
 - [ ] T026 A verification requirement for scripts, SQL or notebooks. Each needs its own oracle, and none of

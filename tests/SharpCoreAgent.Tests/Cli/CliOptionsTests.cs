@@ -464,6 +464,19 @@ public sealed class CliOptionsTests
         Assert.Contains("--image applies to run", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void NoVerifyIsAnExplicitRunAndChatOptOut()
+    {
+        var run = CliOptions.Parse(["run", "build", "--no-verify"], NoEnvironment);
+        var chat = CliOptions.Parse(["chat", "--no-verify"], NoEnvironment);
+
+        Assert.True(run.NoVerify);
+        Assert.True(chat.NoVerify);
+        Assert.False(run.ToSharpCoreAgentOptions().ToAgentOptions().VerifyEdits);
+        Assert.True(CliOptions.Parse(["run", "build"], NoEnvironment).ToSharpCoreAgentOptions().ToAgentOptions().VerifyEdits);
+        Assert.Throws<CliUsageException>(() => CliOptions.Parse(["models", "--no-verify"], NoEnvironment));
+    }
+
     private static string? NoEnvironment(string name) => null;
 
     private static bool NotInteractive() => false;

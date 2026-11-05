@@ -341,6 +341,9 @@ internal sealed record CliOptions
     /// </remarks>
     public int MaxIterations { get; init; } = 400;
 
+    /// <summary>Gets a value indicating whether <c>--no-verify</c> disabled the edit-verification gate.</summary>
+    public bool NoVerify { get; init; }
+
     /// <summary>Gets the per-request output ceiling.</summary>
     public int MaxOutputTokens { get; init; } = 8_000;
 
@@ -497,6 +500,7 @@ internal sealed record CliOptions
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
         MaxTotalTokens = MaxTotalTokens,
+        VerifyEdits = !NoVerify,
         CompactAtContextFraction = CompactAtContextFraction,
         Temperature = Temperature,
         BaseUrl = BaseUrl,
@@ -917,6 +921,11 @@ internal sealed record CliOptions
         if (options.CredentialsCheck && command != CliCommand.Credentials)
         {
             throw new CliUsageException("--check is only valid with the credentials command.");
+        }
+
+        if (options.NoVerify && command is not (CliCommand.Run or CliCommand.Chat))
+        {
+            throw new CliUsageException("--no-verify applies to run and chat only.");
         }
 
         if (options.Force && command != CliCommand.Ide)
@@ -2182,6 +2191,9 @@ internal sealed record CliOptions
 
             case "--max-total-tokens":
                 return options with { MaxTotalTokens = ParseLong(name, TakeValue(args, ref index, name)) };
+
+            case "--no-verify":
+                return options with { NoVerify = true };
 
             case "--compact-at":
                 return options with { CompactAtContextFraction = ParseDouble(name, TakeValue(args, ref index, name)) };

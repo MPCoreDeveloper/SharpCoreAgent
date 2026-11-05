@@ -79,6 +79,9 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the per-turn model round-trip ceiling. Default 400.</summary>
     public int MaxIterations { get; init; } = 400;
 
+    /// <summary>Gets a value indicating whether the edit-verification gate is enabled. Default true.</summary>
+    public bool VerifyEdits { get; init; } = true;
+
     /// <summary>Gets the per-request output token ceiling. Default 8 000.</summary>
     public int MaxOutputTokensPerTurn { get; init; } = 8_000;
 
@@ -211,6 +214,7 @@ public sealed record SharpCoreAgentOptions
             MaxIterations = MaxIterations,
             MaxOutputTokensPerTurn = MaxOutputTokensPerTurn,
             MaxTotalTokens = MaxTotalTokens,
+        VerifyEdits = VerifyEdits,
             CompactAtContextFraction = CompactAtContextFraction,
             MaxToolResultChars = MaxToolResultChars,
             Temperature = Temperature,

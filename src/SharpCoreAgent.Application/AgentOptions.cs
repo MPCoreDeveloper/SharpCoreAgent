@@ -28,6 +28,9 @@ namespace SharpCoreAgent.Application;
 /// </remarks>
 public sealed record AgentOptions
 {
+    /// <summary>Gets a value indicating whether the edit-verification gate is enabled. Default true.</summary>
+    public bool VerifyEdits { get; init; } = true;
+
     /// <summary>Gets the maximum number of model round trips in one turn. Default 400.</summary>
     /// <remarks>
     /// One iteration is one model call, and a call that runs a tool is followed by a call that reads the
