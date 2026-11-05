@@ -83,12 +83,7 @@ has a real list rather than a memory.
 - [ ] T029 **Images in session files.** Deliberate, and documented in `JsonFileSessionStore`: a transcript people
       grep is not a blob store, and the file is one `view_image` call away.
 - [ ] T030 **Pasted, dragged or piped images.** Piping is shipped in two parts: `--image <path>` in `047-run-image-input` and `--image -` (stdin) in `050-stdin-image-input`. Dragging and a clipboard API remain open, because each is a UI concern rather than a file path.
-- [ ] T031 **Transcript trimming.** Two clauses of this row were closed around it: `020` (round 11) put a per-turn ceiling
-      of 16 MiB on what a turn may add, and `021` (round 12) stopped a picture the conversation already carries from being
-      attached a second time — the row's *deduplication* half, by all three doors, as a success rather than a refusal.
-      What is still open is the transcript itself: it grows and stays grown. Manual compaction exists —
-      `AgentSession.Compact(int keepRecent)` behind `/compact [n]`, shipped in `003` T029–T031 — so the gap is a policy
-      for *when* to trim rather than a missing feature, which is what `003` T034 names from the other side.
+- [X] T031 **Transcript trimming.** Closed by `042-context-fraction-compaction`: `CompactAtContextFraction` defaults to 0.8, compacts before the request when the estimated prompt exceeds that fraction of the model window, keeps system prompts and the newest message, and never splits a tool round. `/compact [n]` remains the manual override. The per-turn image ceiling (`020`) and duplicate suppression (`021`) still bound what a turn adds.
 - [ ] T032 **An image token estimate before the request.** A provider bills the pixels it decodes; the number
       arrives in `Usage` after the call or not at all, and inventing one would make `/cost` a guess.
 - [ ] T033 **Serving `view_image` over `mcp serve`.** The published set is a compile-time allow-list of the five
