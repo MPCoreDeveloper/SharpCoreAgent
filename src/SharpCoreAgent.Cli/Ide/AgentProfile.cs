@@ -58,6 +58,7 @@ internal static class AgentProfile
         string[] lines =
         [
             "---",
+            "name: sharpcoreagent",
             "description: Answers questions about this workspace from its code index, through the sharpcoreagent MCP server.",
             string.Create(CultureInfo.InvariantCulture, $"tools: [{tools}]"),
             "---",

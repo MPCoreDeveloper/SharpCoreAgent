@@ -34,6 +34,10 @@ public sealed class IdeTasksWriteTests
         var tasks = document.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
         var task = Assert.Single(tasks);
         Assert.Equal("sharpcoreagent: index", task.GetProperty("label").GetString());
+        Assert.Equal("shell", task.GetProperty("type").GetString());
+        Assert.Equal("build", task.GetProperty("group").GetProperty("kind").GetString());
+        Assert.True(task.GetProperty("group").GetProperty("isDefault").GetBoolean());
+        Assert.Equal("$msCompile", task.GetProperty("problemMatcher").GetString());
         Assert.True(File.Exists(task.GetProperty("command").GetString()));
 
         // The last argument is the verb: whatever precedes it is the .NET host's assembly, when this runs under the host.

@@ -21,9 +21,9 @@ public sealed class AgentProfileTests
 
         Assert.Equal("---", lines[0]);
 
-        // Closed on the fourth line: description, tools, close. A fifth key would mean the round added one without a
+        // Closed on the fifth line: name, description, tools, close. A sixth key would mean the round added one without a
         // paragraph in the plan saying which.
-        Assert.Equal("---", lines[3]);
+        Assert.Equal("---", lines[4]);
         Assert.Equal(2, lines.Count(line => line == "---"));
     }
 
@@ -32,15 +32,15 @@ public sealed class AgentProfileTests
     {
         var lines = Lines(AgentProfile.Render());
 
-        Assert.StartsWith("description: ", lines[1], StringComparison.Ordinal);
-        Assert.StartsWith("tools: [", lines[2], StringComparison.Ordinal);
+        Assert.StartsWith("description: ", lines[2], StringComparison.Ordinal);
+        Assert.StartsWith("tools: [", lines[3], StringComparison.Ordinal);
 
-        // The four keys this round decided against, each for a documented reason: the file's name is the name, the
-        // model belongs to the developer, unset target means both environments, and IDE agents ignore mcp-servers.
-        Assert.DoesNotContain(lines[1..3], line => line.StartsWith("name:", StringComparison.Ordinal));
-        Assert.DoesNotContain(lines[1..3], line => line.StartsWith("model:", StringComparison.Ordinal));
-        Assert.DoesNotContain(lines[1..3], line => line.StartsWith("target:", StringComparison.Ordinal));
-        Assert.DoesNotContain(lines[1..3], line => line.Contains("mcp-servers", StringComparison.Ordinal));
+        // The keys this round deliberately leaves to the editor: model belongs to the developer, unset target means both
+        // environments, and IDE agents ignore mcp-servers.
+        Assert.StartsWith("name: ", lines[1], StringComparison.Ordinal);
+        Assert.DoesNotContain(lines[1..4], line => line.StartsWith("model:", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines[1..4], line => line.StartsWith("target:", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines[1..4], line => line.Contains("mcp-servers", StringComparison.Ordinal));
     }
 
     [Fact]

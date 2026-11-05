@@ -58,8 +58,15 @@ internal static class WorkspaceTasks
         return new JsonObject
         {
             ["label"] = Label,
+            ["type"] = "shell",
             ["command"] = command,
             ["args"] = args,
+            ["group"] = new JsonObject
+            {
+                ["kind"] = "build",
+                ["isDefault"] = true,
+            },
+            ["problemMatcher"] = "$msCompile",
         };
     }
 
