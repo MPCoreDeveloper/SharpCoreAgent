@@ -75,8 +75,9 @@ has a real list rather than a memory.
       arrived whole and the session's model can see, and keeps `008`'s refusal-by-name for everything else — which now
       names those four types instead of promising that the tool never downloads a binary. The ceiling is the same
       4 MiB a file goes through, and the fetch's own 2 MiB cut is refused rather than sent as half a picture.
-- [ ] T026 **OCR, local vision, captioning.** The bytes go to the model the developer chose. A local decoder is a
-      dependency, a licence and a second opinion nobody asked for.
+- [X] T026 **OCR.** `ocr_image` reads a PNG/JPEG/GIF/WebP/SVG/PDF page through RapidOcrNet's local PP-OCRv5 Latin
+      model and returns text; it never captions or describes the picture. The models ship with the build. Local
+      vision and captioning remain refused.
 - [X] T027 **SVG.** `view_image` and `--image` accept `.svg` and `SvgImage` renders it to PNG at its own size (at
       most 4096 px on either side) through Svg.Skia; the answer names the source and the rendering. PDF, audio and
       video remain refused: their extensions would lie about what a provider can read.

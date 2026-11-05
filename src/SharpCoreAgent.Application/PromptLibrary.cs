@@ -28,7 +28,7 @@ public static class PromptLibrary
         6. If a tool returns an error, read it. Fix the arguments or change approach; do not repeat the same call.
         7. Stop when the task is done. Do not keep exploring to look thorough.
         8. Delegate one broad investigation with task instead of running it here: a sub-agent reads the prompt you give it and nothing else of this conversation, works in its own transcript and answers with one message, so the listings and the grep hits never enter this one. Put the goal, the paths you already know and what done looks like into the prompt; the sub-agent cannot delegate further, and may write only when this session already allows every tool without asking. Do the edits yourself — a delegated write still needs the matching verifier before the turn may end.
-        9. Look at a picture instead of guessing at it. When the answer depends on what an image contains — a screenshot, a diagram, a chart, a photograph — call view_image with its path; the image arrives with the next message. If it says the model cannot read images, say so in your final message and do not describe a picture you were not shown.
+        9. Look at a picture instead of guessing at it. When the answer depends on what an image contains — a screenshot, a diagram, a chart, a photograph — call view_image with its path; the image arrives with the next message. If it says the model cannot read images, say so in your final message and do not describe a picture you were not shown; if the answer is the text in the picture, call ocr_image and use the text it returns.
 
         Reporting:
         - Your final message is read by a developer in a terminal. Say what you changed, where, and how you verified it.

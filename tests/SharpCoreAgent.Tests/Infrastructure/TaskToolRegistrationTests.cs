@@ -36,6 +36,7 @@ public sealed class TaskToolRegistrationTests
         "list_directory",
         "list_roots",
         "node_verify",
+        "ocr_image",
         "python_verify",
         "read_file",
         "replace_in_file",
@@ -68,7 +69,7 @@ public sealed class TaskToolRegistrationTests
     public void EveryToolResolvesAndTheSurfaceIsTheDocumentedSet()
     {
         // Both halves of the promise at once: the registry builds without a circular dependency, and the set is the
-        // twenty-five the container's own remark names. A tool arriving or leaving has to move this line with it.
+        // twenty-six the container's own remark names. A tool arriving or leaving has to move this line with it.
         using var provider = Build(new SharpCoreAgentOptions());
 
         var tools = provider.GetServices<ITool>().ToList();

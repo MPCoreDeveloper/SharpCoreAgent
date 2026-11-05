@@ -90,4 +90,13 @@
     <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
   </ItemGroup>
 
+  <Target Name="CopyOcrModels" AfterTargets="Build">
+    <!-- The OCR tests run the bundled RapidOcrNet models; the package does not copy its content into a consumer output. -->
+    <ItemGroup>
+      <_OcrModelFiles Include="$(NuGetPackageRoot)rapidocrnet\4.2.0\models\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OcrModelFiles)" DestinationFolder="$(OutDir)models\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+
 </Project>

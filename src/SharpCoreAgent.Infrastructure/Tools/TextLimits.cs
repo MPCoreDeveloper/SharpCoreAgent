@@ -57,6 +57,13 @@ public static class TextLimits
     /// <summary>Gets how many leading bytes are inspected when deciding whether a file is binary.</summary>
     public const int BinarySniffBytes = 8 * 1024;
 
+    /// <summary>Gets the largest number of characters one OCR answer returns.</summary>
+    /// <remarks>
+    /// Sixteen thousand characters is a dense page of OCR text; the model usually needs the few lines it asked about,
+    /// and the turn's result ceiling still applies on top.
+    /// </remarks>
+    public const int MaxOcrChars = 16 * 1024;
+
     /// <summary>Gets the largest number of characters one code-intelligence answer returns.</summary>
     /// <remarks>
     /// One file's diagnostics, or one symbol's uses, are bounded by the code itself rather than by this number; it

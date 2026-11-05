@@ -118,6 +118,13 @@ Linux and macOS. `--image` uses the same `ImageFile` path, so a workspace SVG en
 PNG does; stdin still recognises only the four byte signatures, because an extensionless stream would need an XML
 sniff and that is a different door.
 
+## OCR amendment (T026)
+
+`ocr_image` turns the text in a picture into text with RapidOcrNet's bundled PP-OCRv5 Latin ONNX models. It goes
+through `ImageFile` first, so the same path safety, extension table, SVG/PDF rendering and 4 MiB ceiling apply. The
+tool is `ReadOnly`, never captions or describes the picture, and never sends the file anywhere. The models are copied
+to `models/v5` beside the assembly by the Infrastructure build; the engine is created lazily on the first OCR call.
+
 ## PDF amendment (T027b)
 
 `view_image` accepts `.pdf`. `PdfImage` opens the bytes with PdfPig, adds its Skia page factory and renders one page —

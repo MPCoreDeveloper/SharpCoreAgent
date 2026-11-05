@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "mode": "recorded",
   "provider": "demo",
-  "createdAtUtc": "2026-11-05T18:32:13.6776847+00:00",
+  "createdAtUtc": "2026-11-05T18:43:30.1510947+00:00",
   "scenarios": [
     {
       "id": "csharp-division",
@@ -21,9 +21,9 @@
         }
       ],
       "unexpectedChanges": [],
-      "inputTokens": 22048,
+      "inputTokens": 22701,
       "outputTokens": 88,
-      "elapsedMilliseconds": 1851,
+      "elapsedMilliseconds": 2411,
       "commandsRun": [
         "dotnet build src/Calculator.csproj"
       ],
@@ -48,7 +48,7 @@
         {
           "callId": "call-3-1",
           "tool": "dotnet_verify",
-          "content": "kind         build\r\nproject      src/Calculator.csproj\r\nexit code    0\r\nresult       passed\r\nwarnings     0\r\nduration     0.7s\r\nsummary      Build succeeded.\r\nerrors       none\r\n\r\n  Determining projects to restore...\n  Restored \u003Cworkspace\u003E\\src\\Calculator.csproj (in 0,8 ms).\nC:\\Program Files\\dotnet\\sdk\\11.0.100-rc.3.26522.148\\Sdks\\Microsoft.NET.Sdk\\targets\\Microsoft.NET.RuntimeIdentifierInference.targets(385,5): message NETSDK1057: You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy [\u003Cworkspace\u003E\\src\\Calculator.csproj]\n  Calculator -\u003E \u003Cworkspace\u003E\\src\\bin\\Debug\\net11.0\\Calculator.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n\nTime Elapsed 00:00:00.32\r\n",
+          "content": "kind         build\r\nproject      src/Calculator.csproj\r\nexit code    0\r\nresult       passed\r\nwarnings     0\r\nduration     1.0s\r\nsummary      Build succeeded.\r\nerrors       none\r\n\r\n  Determining projects to restore...\n  Restored \u003Cworkspace\u003E\\src\\Calculator.csproj (in 1 ms).\nC:\\Program Files\\dotnet\\sdk\\11.0.100-rc.3.26522.148\\Sdks\\Microsoft.NET.Sdk\\targets\\Microsoft.NET.RuntimeIdentifierInference.targets(385,5): message NETSDK1057: You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy [\u003Cworkspace\u003E\\src\\Calculator.csproj]\n  Calculator -\u003E \u003Cworkspace\u003E\\src\\bin\\Debug\\net11.0\\Calculator.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n\nTime Elapsed 00:00:00.42\r\n",
           "isError": false,
           "isRefused": false,
           "isTruncated": false
@@ -81,9 +81,9 @@
         }
       ],
       "unexpectedChanges": [],
-      "inputTokens": 22082,
+      "inputTokens": 22738,
       "outputTokens": 86,
-      "elapsedMilliseconds": 355,
+      "elapsedMilliseconds": 521,
       "commandsRun": [
         "node --test test/discount.test.js"
       ],
@@ -108,7 +108,7 @@
         {
           "callId": "call-3-1",
           "tool": "node_verify",
-          "content": "kind         node --test\r\ntarget       test/discount.test.js\r\ncommand      node --test test/discount.test.js\r\nexit code    0\r\nresult       passed\r\nduration     0.2s\r\n\r\nTAP version 13\n# Subtest: applies a percentage rather than subtracting currency\nok 1 - applies a percentage rather than subtracting currency\n  ---\n  duration_ms: 0.8753\n  type: \u0027test\u0027\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 88.0379\r\n",
+          "content": "kind         node --test\r\ntarget       test/discount.test.js\r\ncommand      node --test test/discount.test.js\r\nexit code    0\r\nresult       passed\r\nduration     0.2s\r\n\r\nTAP version 13\n# Subtest: applies a percentage rather than subtracting currency\nok 1 - applies a percentage rather than subtracting currency\n  ---\n  duration_ms: 1.1207\n  type: \u0027test\u0027\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 124.4483\r\n",
           "isError": false,
           "isRefused": false,
           "isTruncated": false
@@ -117,7 +117,7 @@
       "gradeResult": {
         "callId": "independent-grade",
         "tool": "run_shell",
-        "content": "$ node --test grading/discount.hidden.test.js\nexit code: 0\nTAP version 13\n# Subtest: zero percent leaves the price unchanged\nok 1 - zero percent leaves the price unchanged\n  ---\n  duration_ms: 0.9436\n  type: \u0027test\u0027\n  ...\n# Subtest: one hundred percent makes the price zero\nok 2 - one hundred percent makes the price zero\n  ---\n  duration_ms: 0.1359\n  type: \u0027test\u0027\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 86.2338",
+        "content": "$ node --test grading/discount.hidden.test.js\nexit code: 0\nTAP version 13\n# Subtest: zero percent leaves the price unchanged\nok 1 - zero percent leaves the price unchanged\n  ---\n  duration_ms: 1.4399\n  type: \u0027test\u0027\n  ...\n# Subtest: one hundred percent makes the price zero\nok 2 - one hundred percent makes the price zero\n  ---\n  duration_ms: 0.4146\n  type: \u0027test\u0027\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 133.0745",
         "isError": false,
         "isRefused": false,
         "isTruncated": false
@@ -141,9 +141,9 @@
         }
       ],
       "unexpectedChanges": [],
-      "inputTokens": 22057,
+      "inputTokens": 22710,
       "outputTokens": 75,
-      "elapsedMilliseconds": 286,
+      "elapsedMilliseconds": 455,
       "commandsRun": [
         "python -m unittest discover -v -s tests"
       ],
@@ -168,7 +168,7 @@
         {
           "callId": "call-3-1",
           "tool": "python_verify",
-          "content": "kind         unittest\r\ntarget       tests\r\ncommand      python -m unittest discover -v -s tests\r\nexit code    0\r\nresult       passed\r\nduration     0.1s\r\n\r\ntest_sums_prices_without_adding_item_count (test_cart.CartTests.test_sums_prices_without_adding_item_count) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\r\n",
+          "content": "kind         unittest\r\ntarget       tests\r\ncommand      python -m unittest discover -v -s tests\r\nexit code    0\r\nresult       passed\r\nduration     0.2s\r\n\r\ntest_sums_prices_without_adding_item_count (test_cart.CartTests.test_sums_prices_without_adding_item_count) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\r\n",
           "isError": false,
           "isRefused": false,
           "isTruncated": false
@@ -193,7 +193,7 @@
     "attempted": 3,
     "successRate": 1,
     "unintendedChanges": 0,
-    "inputTokens": 66187,
+    "inputTokens": 68149,
     "outputTokens": 249
   }
 }

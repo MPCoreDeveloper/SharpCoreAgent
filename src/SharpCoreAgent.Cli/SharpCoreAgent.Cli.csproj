@@ -34,4 +34,12 @@
     <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
   </ItemGroup>
 
+  <Target Name="CopyOcrModels" AfterTargets="Build">
+    <!-- The CLI host is what ships the OCR tool; copy the bundled PP-OCRv5 models beside it. -->
+    <ItemGroup>
+      <_OcrModelFiles Include="$(NuGetPackageRoot)rapidocrnet\4.2.0\models\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OcrModelFiles)" DestinationFolder="$(OutDir)models\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

@@ -19,6 +19,7 @@
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" />
     <PackageReference Include="PdfPig" />
     <PackageReference Include="PdfPig.Rendering.Skia" />
+    <PackageReference Include="RapidOcrNet" GeneratePathProperty="true" />
     <!--
       Logging abstractions come from the net11.0 shared framework; an explicit package reference only
       earns NU1510.
@@ -28,5 +29,19 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SharpCoreAgent.Tests" />
   </ItemGroup>
+
+  <Target Name="CopyRapidOcrModels" AfterTargets="Build">
+    <!--
+      RapidOcrNet puts its PP-OCRv5 Latin models under the package's `models/` folder but does not copy them into a
+      consumer's output. The OCR tool resolves `models/v5` next to the assembly, so the build puts them there.
+    -->
+    <ItemGroup>
+      <_RapidOcrModelFiles Include="$(PkgRapidOcrNet)\models\**\*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_RapidOcrModelFiles)"
+      DestinationFolder="$(OutDir)models\%(RecursiveDir)"
+      SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

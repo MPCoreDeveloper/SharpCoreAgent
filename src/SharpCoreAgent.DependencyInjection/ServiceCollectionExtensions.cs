@@ -146,17 +146,17 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the eighteen workspace tools and the registry that advertises them.
+    /// Registers the nineteen workspace tools and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
     /// <c>fetch_url</c> is not one of them: it is registered by <see cref="AddWeb"/> only when the developer asked for the
     /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off. The number is the
     /// surface a default build advertises — fifteen tools from rounds 1–3, <c>dotnet_verify</c> from <c>012</c>,
-    /// <c>python_verify</c> and <c>node_verify</c> from <c>040</c>, <c>task</c> from <c>011</c> and <c>view_image</c>
-    /// from the image round — and <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added or
+    /// <c>python_verify</c> and <c>node_verify</c> from <c>040</c>, <c>task</c> from <c>011</c>, <c>view_image</c>
+    /// from the image round and <c>ocr_image</c> from T026 — and <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added or
     /// dropped without a failing test. <see cref="AddCodeIntelligence"/> adds the three language-neutral code tools by
-    /// default, making the default process surface twenty-five.
+    /// default, making the default process surface twenty-six.
     ///
     /// The tools are singletons because they are stateless: each call resolves every path through the
     /// workspace it is handed, so one instance serves every session in the process. The five index-backed
@@ -180,6 +180,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, ListDirectoryTool>();
         services.AddSingleton<ITool, ReadFileTool>();
         services.AddSingleton<ITool, ViewImageTool>();
+        services.AddSingleton<ITool, OcrImageTool>();
         services.AddSingleton<ITool, SearchTextTool>();
         services.AddSingleton<ITool, ListRootsTool>();
         services.AddSingleton<ITool, ListArtifactsTool>();
@@ -391,7 +392,7 @@ public static class ServiceCollectionExtensions
     /// declared".
     /// <para>
     /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface is
-    /// twenty-five workspace tools including the ones that write, start processes and delegate, and the server's
+    /// twenty-six workspace tools including the ones that write, start processes and delegate, and the server's
     /// allow-list is the statement that this container holds none of them. The published set filters this registry
     /// again, so the two gates the contract requires are both present.
     /// </para>

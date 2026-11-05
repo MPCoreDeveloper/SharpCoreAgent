@@ -375,7 +375,7 @@ session: a standing approval belongs to the conversation that earned it.
 
 ## Tools
 
-`list_directory`, `read_file`, `view_image`, `search_text`, `list_roots`, `list_artifacts`, `write_file`, `replace_in_file`,
+`list_directory`, `read_file`, `view_image`, `ocr_image`, `search_text`, `list_roots`, `list_artifacts`, `write_file`, `replace_in_file`,
 `delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `python_verify`, `node_verify`,
 `git_status`, `git_diff`, `task`, `file_diagnostics`, `uses_at`, `signature_at`.
 
@@ -441,6 +441,10 @@ to PNG at the document's own size (at most 4096 pixels on either side) and the a
 rendering: `'diagram.svg' (image/svg+xml · 812 bytes, rendered 120 × 40 PNG) is attached to the next message.`
 A PDF is rendered a page at a time with PdfPig and SkiaSharp: page 1 by default, `page` selects another, and the
 answer names the page and the rendered size. When a caller asks for `max_dimension`, the renderer caps the PNG at that size.
+
+`ocr_image` is the text-only path: it reads the same picture, SVG or PDF page through the local RapidOcrNet PP-OCRv5
+Latin model and returns the recognized text. It never captions or describes the picture and never sends it anywhere;
+the bundled models are copied to `models/v5` beside the binary.
 
 A session file keeps the transcript's text and not its images: a screenshot is megabytes of base64 on one
 line of a document people grep, and the file it came from is still on disk and one `view_image` call away —
@@ -516,7 +520,7 @@ undo: restored 1 file(s), removed 0 created file(s)
 
 `fetch_url` is an opt-in tool and one of three flags that add tools to the registry. `--web` adds this
 one for a single invocation, and without the flag it is absent from the registry, from the definitions the
-model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-five
+model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-six
 tools a build starts with; `--no-csharp` removes the adapter and its three tools for one invocation, and `--no-git`
 removes `git_status` and `git_diff`. `--fsharp` adds a second adapter behind
 the same three tools, and `--mcp` adds whatever each server offers. Of the optional capabilities,

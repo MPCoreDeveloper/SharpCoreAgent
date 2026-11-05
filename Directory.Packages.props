@@ -112,6 +112,12 @@
     <PackageVersion Include="PdfPig.Rendering.Skia" Version="0.1.16.7" />
 
     <!--
+      Local OCR for T026. RapidOcrNet uses ONNX PaddleOCR models and SkiaSharp; it ships the Latin models and runs
+      on Windows, Linux and macOS, unlike the Windows-only Tesseract wrapper. Apache-2.0, models included.
+    -->
+    <PackageVersion Include="RapidOcrNet" Version="4.2.0" />
+
+    <!--
       The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
       PrivateAssets="all" keeps it out of every package and out of a consumer's build.
     -->

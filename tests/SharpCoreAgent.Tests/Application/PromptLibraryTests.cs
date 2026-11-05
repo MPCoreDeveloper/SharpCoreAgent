@@ -208,6 +208,7 @@ public sealed class PromptLibraryTests
         var rule = Rule(9);
 
         Assert.Contains("view_image", rule, StringComparison.Ordinal);
+        Assert.Contains("ocr_image", rule, StringComparison.Ordinal);
 
         // The refusal path matters as much as the call. `view_image` refuses on its own when the model cannot read
         // pictures, and this sentence is what turns that refusal into an answer instead of a confident invention.

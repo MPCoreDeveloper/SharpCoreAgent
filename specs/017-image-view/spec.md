@@ -38,6 +38,7 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 | `ToolResult.Images` / `ToolResult.Image(...)` | `Domain.Tools` | a tool answers with a picture and still describes it in text |
 | `ModelDescriptor.SupportsImages` | `Domain.Model` | declared per model, `false` by default |
 | `view_image` | `Infrastructure.Tools` | the tool: read-only, `path` plus optional `max_dimension`/`rotation`/`page`, seven extensions, one ceiling; SVG and PDF are rendered to PNG |
+| `ocr_image` | `Infrastructure.Tools` | local PP-OCRv5 text extraction from the same file types; never captions or describes |
 | the hand-over | `Application.CodingAgent` | after the tool message, a user message carrying `PromptLibrary.ImageAttached` and the image |
 | rule 9 and `ImageAttached` | `Application.PromptLibrary` | the guidance and the sentence, shipped with the tool |
 | `OpenAiContent.ImageDataUris` | `Infrastructure.Chat` | `image_url` parts with a `data:` URI; text-only messages stay strings |
@@ -86,6 +87,10 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   that already fits is returned byte for byte. A caller MAY also pass `rotation` (90, 180 or 270) to turn a sideways
   picture clockwise after any rendering or downscale; the answer names both. Omitting both arguments shows the file
   unchanged, which is the default and the reason there is no silent transformation. Arbitrary angles are refused.
+- **FR-013** `ocr_image` reads the text in a PNG, JPEG, GIF, WebP, SVG or PDF page with the bundled local PP-OCRv5
+  Latin model. It never captions or describes the picture, never sends it anywhere, bounds the answer at 16 000
+  characters, and reports a `Read` effect. Its path, extension and 4 MiB rules are `ImageFile`'s, the same as
+  `view_image`.
 
 ## Edge cases
 
@@ -121,15 +126,16 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   no, DeepSeek and the demo adapter no, `openai-compatible` yes.
 - **SC-006** `PromptLibraryTests.TheShippedPromptSendsAPictureThroughViewImage` — rule 9 names the tool and the
   refusal, and survives `SystemPromptFor` with the index and the network both off.
-- **SC-007** `TaskToolRegistrationTests` pins the eighteen default names including `view_image`, and
+- **SC-007** `TaskToolRegistrationTests` pins the twenty-six default names including `view_image` and `ocr_image`, and
   `McpServerPublishedSetTests` pins `view_image` as registered but not published.
 - **SC-008** `dotnet build .\SharpCoreAgent.slnx -c Release` with zero warnings and the whole suite green —
   1256 passed, 0 failed, 0 skipped, which is the number `README.md` carries.
 
 ## Out of scope, on purpose
 
-- **Reading a picture without a model that can.** There is no OCR, no local vision, no captioning. The bytes go to
-  the model that was chosen; if it cannot see, the tool says so.
+- **OCR, local vision and captioning.** OCR is now a local tool (<c>ocr_image</c>, RapidOcrNet PP-OCRv5); it turns a
+  picture into text and never describes it. Local vision and captioning remain refused: the bytes go to the model the
+  developer chose, and a second opinion nobody asked for would be a different product.
 - **Images inside MCP results.** `McpContent.Flatten` still described an `image` as a MIME type and a size, and
   round 4's contract stood unchanged. A browser screenshot was shown by calling `view_image` on the file
   `McpArtefactSink` wrote — one tool call and no new sink. **Closed by `019`**, which attaches the part and keeps the
