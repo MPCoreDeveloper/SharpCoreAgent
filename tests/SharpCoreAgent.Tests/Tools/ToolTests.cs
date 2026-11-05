@@ -1,3 +1,4 @@
+using SharpCoreAgent.Domain.Agents;
 using SharpCoreAgent.Domain.Errors;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Tools;
@@ -325,6 +326,40 @@ public sealed class ToolTests
         Assert.False(result.IsError);
         Assert.Contains("f src/Order.cs", result.Content, StringComparison.Ordinal);
         Assert.Contains("d src/", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteFile_WritesAnAttachmentOnlyWhenTheSessionAllowsAll()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        var target = Path.Combine(attachment, "src", "Order.cs");
+        var allowed = new ToolInvocationContext(sandbox.Workspace) { Approval = ApprovalMode.AllowAll };
+
+        var written = await new WriteFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call("write_file", ToolTestWorkspace.Args(new { path = target, content = "class Order { }" })),
+            allowed,
+            CancellationToken.None);
+
+        Assert.False(written.IsRefused, written.Content);
+        Assert.Equal("class Order { }", await File.ReadAllTextAsync(target, TestContext.Current.CancellationToken));
+        Assert.Equal("src/Order.cs", Assert.Single(written.Effects).Target);
+
+        var replaced = await new ReplaceInFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                "replace_in_file",
+                ToolTestWorkspace.Args(new { path = target, find = "Order", replace = "Invoice" })),
+            allowed,
+            CancellationToken.None);
+        Assert.False(replaced.IsRefused, replaced.Content);
+        Assert.Equal("class Invoice { }", await File.ReadAllTextAsync(target, TestContext.Current.CancellationToken));
+
+        var refused = await new DeleteFileTool().ExecuteAsync(
+            ToolTestWorkspace.Call("delete_file", ToolTestWorkspace.Args(new { path = target })),
+            sandbox.Context,
+            CancellationToken.None);
+        Assert.True(refused.IsRefused);
+        Assert.True(File.Exists(target));
     }
 
     [Fact]

@@ -156,7 +156,13 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
         string? project = null;
         if (projectArgument is { Length: > 0 })
         {
-            if (!PathSafety.TryResolve(context.Workspace, projectArgument, out var resolved, out var error))
+            if (!PathSafety.TryResolveWrite(
+                context.Workspace,
+                context.Approval,
+                projectArgument,
+                out var resolved,
+                out _,
+                out var error))
             {
                 return ToolResult.Refused(toolCall.Id, Name, error!);
             }

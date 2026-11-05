@@ -51,7 +51,7 @@ internal static class HelpText
           --reviewer <model>       run, chat   session     the model /review sends its read-only turn to
           --fallback <p:model>     run, chat   none        replay a 401 or 5xx turn once at this model
           --workspace <path>       all         current directory
-          --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
+          --add-root <path>        run, chat   none        a root the read tools may also read; writable under --approval allow; repeatable
           --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
           --image <path|->         run         none        attach a PNG, JPEG, GIF or WebP picture to the prompt; repeatable, '-' reads stdin
           --fsharp                 run, chat   off         also let file_diagnostics, uses_at and signature_at ask the F# type checker

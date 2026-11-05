@@ -40,7 +40,13 @@ public sealed class DeleteFileTool : ITool
         using var arguments = ToolArgumentReader.Parse(Name, toolCall.ArgumentsJson);
         var path = arguments.GetRequiredString("path");
 
-        if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
+        if (!PathSafety.TryResolveWrite(
+                context.Workspace,
+                context.Approval,
+                path,
+                out var fullPath,
+                out var owner,
+                out var error))
         {
             return ToolResult.Refused(
                 toolCall.Id,
@@ -48,7 +54,7 @@ public sealed class DeleteFileTool : ITool
                 PathSafety.ExplainWriteRefusal(context.Workspace, path, error!));
         }
 
-        var relative = context.Workspace.ToRelative(fullPath);
+        var relative = PathSafety.Relative(context.Workspace, owner, fullPath);
         if (Directory.Exists(fullPath))
         {
             return ToolResult.Failure(

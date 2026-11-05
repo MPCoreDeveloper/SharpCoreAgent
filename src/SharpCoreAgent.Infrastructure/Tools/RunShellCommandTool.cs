@@ -150,7 +150,13 @@ public sealed class RunShellCommandTool : ITool
         var workingDirectory = context.Workspace.Root;
         if (workingDirectoryArgument is { Length: > 0 })
         {
-            if (!PathSafety.TryResolve(context.Workspace, workingDirectoryArgument, out var resolved, out var error))
+            if (!PathSafety.TryResolveWrite(
+                context.Workspace,
+                context.Approval,
+                workingDirectoryArgument,
+                out var resolved,
+                out _,
+                out var error))
             {
                 return ToolResult.Refused(toolCall.Id, Name, error!);
             }

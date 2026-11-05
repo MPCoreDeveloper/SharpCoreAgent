@@ -106,7 +106,13 @@ public abstract class ProcessVerifyTool : ITool, IVerificationTool
         string? target = null;
         if (targetArgument is { Length: > 0 })
         {
-            if (!PathSafety.TryResolve(context.Workspace, targetArgument, out var resolved, out var error))
+            if (!PathSafety.TryResolveWrite(
+                context.Workspace,
+                context.Approval,
+                targetArgument,
+                out var resolved,
+                out _,
+                out var error))
             {
                 return ToolResult.Refused(toolCall.Id, Definition.Name, error!);
             }

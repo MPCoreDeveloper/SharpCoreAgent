@@ -104,6 +104,33 @@ public sealed class PathSafetyTests
     }
 
     [Fact]
+    public void TheWritePathAllowsAnAttachmentOnlyUnderAllowAll()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var attachment = sandbox.AddAttachment("shared");
+        var target = Path.Combine(attachment, "src", "Order.cs");
+
+        Assert.False(PathSafety.TryResolveWrite(
+            sandbox.Workspace,
+            SharpCoreAgent.Domain.Agents.ApprovalMode.Ask,
+            target,
+            out _,
+            out _,
+            out var refused));
+        Assert.Contains("outside", refused!, StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(PathSafety.TryResolveWrite(
+            sandbox.Workspace,
+            SharpCoreAgent.Domain.Agents.ApprovalMode.AllowAll,
+            target,
+            out var fullPath,
+            out var owner,
+            out var error), error);
+        Assert.Equal(target, fullPath);
+        Assert.Same(sandbox.Workspace.Attachments[0], owner);
+    }
+
+    [Fact]
     public void TheWritePathStillRefusesALinkOutOfThePrimaryRoot()
     {
         using var sandbox = ToolTestWorkspace.Create();

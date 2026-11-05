@@ -49,7 +49,7 @@ next pass has a real list rather than a memory.
 
 ## Deliberately not in this round
 
-- [ ] T030 A writable attachment (`--add-root --writable`). Needs per-root approval and a per-root safety class; a specification of its own.
+- [X] T030 A writable attachment (`--add-root --writable`). **Done in `051-writable-attachments`:** `--add-root` is readable in every mode and writable under `--approval allow`; `Ask`/`ReadOnly` keep the read-only refusal, and relative paths stay primary-only.
 - [ ] T031 Indexing an attachment. Needs a second index or a composite one, a staleness story per root and a new meaning for `index verify`.
 - [ ] T032 Persisting attachments in the settings file. Refused on principle (`spec.md`, "What this feature rejects"), so this line is a reminder rather than work.
 

@@ -1,6 +1,6 @@
-# 007 — Look into another project: read-only attached roots
+# 007 — Look into another project: attached roots
 
-**Status**: implemented (T001–T029; T030–T032 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T030; T031–T032 deferred, listed in `tasks.md`)
 **Branch**: `feature/007-external-roots`, merged to `main` as `dbc0701`
 **Depends on**: `001-coding-agent-core` (the tool model and `Workspace`), `003-terminal-console-agent`
 (the console surface this extends), `006-interactive-start-and-config` (the precedence rules this
@@ -19,8 +19,9 @@ workarounds today are both worse than the problem: copy the file in, which is a 
 and a file to delete later, or widen `--workspace` to a parent directory, which hands the agent write
 access to every sibling project at once.
 
-So this round adds a second kind of root: attached, explicitly named, readable, and never writable.
-The primary root keeps every guarantee it has. An attachment is a reading list, not a second workspace.
+So this round adds a second kind of root: attached, explicitly named, and readable. Under `--approval allow`
+it is writable too, because the developer who named the root and allowed all is the authority for that path;
+under `ask` and `readonly` it stays a reading list. The primary root keeps every guarantee it has.
 
 ## User stories
 
@@ -36,20 +37,19 @@ Acceptance:
 - `list_directory` and `search_text` accept the same absolute path and answer from that tree.
 - `list_roots` names the primary root and every attachment, so the model can see what it may read
   instead of guessing a path.
-- The banner says the session has one read-only attachment.
+- The banner says the session has one attachment.
 
-### US2 — The write is refused, and says why (P0, Phase 1)
+### US2 — Writes follow the approval mode (P0, Phase 1)
 
-As a developer who attached a repository to read, I want a write into it refused with a sentence I can
-act on, so that an attachment can never become an edit I did not intend.
+As a developer who attached a repository to read, I want a write into it refused under `ask`/`readonly`, and
+allowed under `allow`, so that naming a root and allowing all is one deliberate grant rather than two flags.
 
 Acceptance:
 
-- `write_file`, `replace_in_file` and `delete_file` refuse an absolute path inside an attachment, and
-  the refusal names the root and the words `read-only`.
-- `run_shell` is unchanged: it runs in the primary root, and what a command does with the rest of the
-  file system is the trust decision `--approval` already makes. This round does not pretend the shell
-  is confined when it never was.
+- Under `--approval ask` or `readonly`, `write_file`, `replace_in_file` and `delete_file` refuse an absolute
+  path inside an attachment, and the refusal names the root and the words `read-only`.
+- Under `--approval allow`, those tools write an absolute path inside the attachment, and `run_shell` and the
+  verifiers accept an attachment path as their working directory/target.
 - A relative path still means the primary root, even when an attachment holds a file of the same
   relative name.
 
@@ -70,12 +70,13 @@ Acceptance:
 - **FR-001** `Workspace` MUST carry an ordered set of attached roots alongside its primary root. The
   set is part of the workspace value, so `ToolInvocationContext.Workspace` reaches it without a new
   context type and no tool can be invoked with attachments silently missing.
-- **FR-002** An attached root MUST be readable and MUST NOT be writable. `write_file`,
-  `replace_in_file`, `delete_file` and every shell command MUST resolve against the primary root alone.
-- **FR-003** `Workspace.TryResolve` MUST keep its current behaviour, messages included, because it is
-  the write path and the suite pins it. A separate read path MUST accept a relative path (meaning the
-  primary root) and an absolute path inside the primary root or any attachment, and MUST reject
-  everything else.
+- **FR-002** An attached root MUST be readable. It MUST be writable exactly when the conversation's
+  approval mode is `AllowAll`; `Ask` and `ReadOnly` MUST keep the read-only refusal. A relative path MUST
+  still resolve against the primary root alone.
+- **FR-003** `Workspace.TryResolve` MUST keep its current behaviour, messages included, because it is the
+  primary write path and the suite pins it. `PathSafety.TryResolveWrite` MUST accept an absolute path inside
+  any attachment under `AllowAll`, and a separate read path MUST accept an absolute path inside any attachment
+  in every mode.
 - **FR-004** A relative path MUST always mean the primary root. Attachments MUST NOT be searched in
   order, because two projects that both contain `src/Order.cs` must not make one path mean whichever
   root was attached first.
@@ -121,8 +122,8 @@ Acceptance:
 
 - **Making the workspace a list and letting every tool pick from it.** Then "which root did that write
   land in" becomes a per-call question, every confinement assertion in the suite has to be rewritten,
-  and the primary root stops being a guarantee. An attachment is the narrower thing: secondary, and
-  read-only.
+  and the primary root stops being a guarantee. An attachment is still secondary; `AllowAll` narrows the
+  difference to an explicit absolute path.
 - **A root-qualified path syntax (`@shared/src/Order.cs`).** A second path grammar is a second parser,
   a second error vocabulary and one more thing the model gets wrong. Every tool already understands an
   absolute path; `list_roots` is how one is learned.
@@ -133,9 +134,7 @@ Acceptance:
   staleness story per root, and makes `verify` mean two things at once.
 - **Confining the shell tool to the primary root.** It never was confined — a command can `cd ..` —
   and saying otherwise in an error message would be a lie in the transcript. The shell's boundary is
-  `--approval`, unchanged.
-- **A writable attachment (`--add-root --writable`).** Deferred rather than refused on principle: it
-  needs a per-root approval prompt and a per-root safety class, which is its own specification.
+  `--approval`, unchanged. Under `AllowAll`, an attachment path is also accepted as its working directory.
 
 ## Exit codes
 
@@ -163,8 +162,8 @@ No new number. A bad root is a bad command line, which is exactly what 2 already
    than invented.
 2. **Per invocation, never persisted.** `--add-root` and `SHARPCOREAGENT_ADD_ROOTS` only; the settings
    file and the session snapshot are untouched, and a resume inherits nothing.
-3. **Read-only, always.** Writes, deletes and shell commands resolve against the primary root alone,
-   and the refusal says `read-only` in as many words.
+3. **Writable only under `AllowAll`.** `--add-root` is the grant; `--approval allow` is the write authority
+   for those roots. `Ask` and `ReadOnly` keep the read-only refusal, and a relative path stays primary-only.
 4. **The index stays primary-only.** Index tools answer from the root the index was opened for and say
    so when asked about an attachment.
 5. **One containment authority.** Attachments live in `Workspace`, not in a parallel type each tool

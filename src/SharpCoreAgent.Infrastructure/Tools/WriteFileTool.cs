@@ -23,7 +23,7 @@ public sealed class WriteFileTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Create or replace a file in the workspace. Writes are confined to the workspace root: an attached root is read-only and refuses every write. Parent directories are created as needed. Content is written as UTF-8 without a BOM.",
+        "Create or replace a file in the workspace. Writes are confined to the workspace root; an attached root is read-only unless the session uses --approval allow, in which case an absolute path inside it is writable. Parent directories are created as needed. Content is written as UTF-8 without a BOM.",
         Schema);
 
     /// <inheritdoc />
@@ -43,7 +43,13 @@ public sealed class WriteFileTool : ITool
         var content = arguments.GetRequiredString("content", allowEmpty: true);
         var overwrite = arguments.GetOptionalBool("overwrite", true);
 
-        if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
+        if (!PathSafety.TryResolveWrite(
+                context.Workspace,
+                context.Approval,
+                path,
+                out var fullPath,
+                out var owner,
+                out var error))
         {
             return ToolResult.Refused(
                 toolCall.Id,
@@ -51,7 +57,7 @@ public sealed class WriteFileTool : ITool
                 PathSafety.ExplainWriteRefusal(context.Workspace, path, error!));
         }
 
-        var relative = context.Workspace.ToRelative(fullPath);
+        var relative = PathSafety.Relative(context.Workspace, owner, fullPath);
         if (Directory.Exists(fullPath))
         {
             return ToolResult.Failure(

@@ -90,7 +90,7 @@ sharpcoreagent run "summarise what changed in src" --provider deepseek
 ```
 
 `--workspace <path>` names a different root for one invocation, and `--add-root` attaches a second
-repository read-only.
+repository: readable always, writable only when the session is `--approval allow`.
 
 ### Install from a GitHub release
 
@@ -247,7 +247,7 @@ keep working on the file that needs repairing.
 | `--reviewer <model>` | run, chat | session model — where `/review` sends its read-only turn |
 | `--fallback <provider:model>` | run, chat | none — a 401 or 5xx is replayed once there |
 | `--workspace <path>` | run, chat, index | current directory |
-| `--add-root <path>` | run, chat | none — a read-only root the read tools may also answer from; repeatable |
+| `--add-root <path>` | run, chat | none — a root the read tools may answer from; writable under `--approval allow`; repeatable |
 | `--web` | run, chat | off — `fetch_url` may read http and https pages; the network is off otherwise |
 | `--image <path|->` | run | none — attach a PNG, JPEG, GIF or WebP picture to the prompt; repeatable, `-` reads stdin |
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
@@ -661,16 +661,20 @@ Every path is resolved against the workspace root, and anything that escapes it 
 path outside, a link pointing out — is refused before the tool runs. Tool output is truncated at a
 fixed budget so one large file cannot consume the context window.
 
-An attached root (`--add-root`) is the narrower thing: a reading list. `read_file`, `list_directory` and
-`search_text` answer from it when given an absolute path, a symbolic link inside it is judged against
-every attached root (one that lands outside all of them is refused), and every write, delete and shell
-command still resolves against `--workspace` alone. The refusal says `read-only` and names the root, so
-a write into another repository reads as a decision rather than a broken tool:
+An attached root (`--add-root`) is the narrower thing: a reading list, and a writing surface only when the
+session is `--approval allow`. `read_file`, `list_directory` and `search_text` answer from it when given an
+absolute path, a symbolic link inside it is judged against every attached root (one that lands outside all
+of them is refused). Under `--approval ask` or `readonly`, every write, delete and shell command still
+resolves against `--workspace` alone, and the refusal says `read-only` and names the root:
 
 ```text
 refused: path 'D:\repos\Shared.Contracts\src\Order.cs' resolves outside the workspace root 'D:\repos\App'.
 'D:\repos\Shared.Contracts' is a read-only attachment; writes stay in the primary root.
 ```
+
+Under `--approval allow`, an absolute path inside an attached root is writable by `write_file`,
+`replace_in_file`, `delete_file`, the shell and the verifiers. A relative path still means the primary root;
+use `list_roots` to learn the absolute prefix.
 
 A relative path always means the primary root, even when an attachment holds a file with the same
 relative name, and the five index tools stay primary-only: one index describes one tree, so they answer
@@ -1031,10 +1035,10 @@ the second duplicates settings that would drift.
   `sh-N` handles that `shell_output` drains and `shell_stop` kills, and `replace_in_file` takes a batch
   of fragments matched through a four-rung ladder. The suite is 944 tests, all green, with no compiler
   warnings.
-- `specs/007-external-roots` — implemented: `Workspace` carries read-only attachments, `read_file`,
+- `specs/007-external-roots` — implemented: `Workspace` carries attachments, `read_file`,
   `list_directory` and `search_text` answer from them by absolute path, `list_roots` reports the roots,
-  `--add-root`/`SHARPCOREAGENT_ADD_ROOTS` name them per invocation, and the write, delete and shell
-  paths did not move.
+  `--add-root`/`SHARPCOREAGENT_ADD_ROOTS` name them per invocation, and under `--approval allow` those roots
+  are writable too (`051-writable-attachments`); `ask`/`readonly` keep the read-only write path.
 - `specs/008-web-fetch` — implemented: `--web` registers `fetch_url` for one invocation (and nothing else
   does), `--web-allow <host>` exempts a host from the address rule, the tool reads one page as text with
   a redirect, byte and character ceiling, and the request carries no cookie and no credential. The

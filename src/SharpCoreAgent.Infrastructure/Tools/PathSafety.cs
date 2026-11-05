@@ -1,5 +1,6 @@
 using System.Globalization;
 using SharpCoreAgent.Domain;
+using SharpCoreAgent.Domain.Agents;
 
 namespace SharpCoreAgent.Infrastructure.Tools;
 
@@ -41,6 +42,81 @@ public static class PathSafety
         var judged = JudgePhysical(workspace, path, lexical, allowAttachments: false, out error);
         fullPath = judged ?? string.Empty;
         return judged is not null;
+    }
+
+    /// <summary>
+    /// Resolves a path a write tool may use, allowing a writable attachment when the approval mode is
+    /// <see cref="ApprovalMode.AllowAll"/>.
+    /// </summary>
+    /// <param name="workspace">The workspace the invocation may touch.</param>
+    /// <param name="approval">The conversation's approval mode.</param>
+    /// <param name="path">The model's path argument.</param>
+    /// <param name="fullPath">The absolute path when the call succeeds.</param>
+    /// <param name="owner">The attachment that answered, or <see langword="null"/> when the primary root did.</param>
+    /// <param name="error">A message naming the escape when the call fails.</param>
+    /// <returns><see langword="true"/> when the path is safe to write.</returns>
+    /// <remarks>
+    /// A relative path still means the primary root, so two attached repositories cannot make one argument
+    /// ambiguous. An absolute path inside an attachment is writable only under <see cref="ApprovalMode.AllowAll"/>:
+    /// <see cref="ApprovalMode.Ask"/> and <see cref="ApprovalMode.ReadOnly"/> retain the read-only contract, because
+    /// a prompt cannot grant a directory the command line did not name.
+    /// </remarks>
+    public static bool TryResolveWrite(
+        Workspace workspace,
+        ApprovalMode approval,
+        string path,
+        out string fullPath,
+        out Workspace? owner,
+        out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        owner = null;
+
+        if (approval is not ApprovalMode.AllowAll)
+        {
+            return TryResolve(workspace, path, out fullPath, out error);
+        }
+
+        if (Path.IsPathRooted(path))
+        {
+            if (!workspace.TryResolveRead(path, out var lexical, out owner, out error))
+            {
+                fullPath = string.Empty;
+                return false;
+            }
+
+            var writable = JudgePhysical(workspace, path, lexical, allowAttachments: true, out error);
+            fullPath = writable ?? string.Empty;
+            if (writable is null)
+            {
+                owner = null;
+            }
+
+            return writable is not null;
+        }
+
+        if (!workspace.TryResolve(path, out var primary, out error))
+        {
+            fullPath = string.Empty;
+            return false;
+        }
+
+        var judged = JudgePhysical(workspace, path, primary, allowAttachments: false, out error);
+        fullPath = judged ?? string.Empty;
+        return judged is not null;
+    }
+
+    /// <summary>
+    /// Renders a path relative to the tree that owns it.
+    /// </summary>
+    /// <param name="workspace">The primary workspace.</param>
+    /// <param name="owner">The attachment that answered, or <see langword="null"/> for the primary root.</param>
+    /// <param name="fullPath">The absolute path.</param>
+    /// <returns>A forward-slash relative path.</returns>
+    public static string Relative(Workspace workspace, Workspace? owner, string fullPath)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        return (owner ?? workspace).ToRelative(fullPath);
     }
 
     /// <summary>

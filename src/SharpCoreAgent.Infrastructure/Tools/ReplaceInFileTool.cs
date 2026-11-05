@@ -44,7 +44,7 @@ public sealed class ReplaceInFileTool : ITool, IToolPreview
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Replace fragments in an existing file in the workspace. An attached root is read-only and refuses every write. Prefer this over write_file: it cannot drop lines the model did not intend to change. Pass find/replace for one fragment, or edits for several applied in order (the call is all-or-nothing). A fragment must be unique unless all=true; trailing whitespace and indentation differences are tolerated and reported.",
+        "Replace fragments in an existing file in the workspace. An attached root is read-only unless the session uses --approval allow, in which case an absolute path inside it is writable. Prefer this over write_file: it cannot drop lines the model did not intend to change. Pass find/replace for one fragment, or edits for several applied in order (the call is all-or-nothing). A fragment must be unique unless all=true; trailing whitespace and indentation differences are tolerated and reported.",
         Schema);
 
     /// <inheritdoc />
@@ -120,12 +120,18 @@ public sealed class ReplaceInFileTool : ITool, IToolPreview
         var path = arguments.GetRequiredString("path");
         var blocks = Blocks(arguments);
 
-        if (!PathSafety.TryResolve(context.Workspace, path, out var fullPath, out var error))
+        if (!PathSafety.TryResolveWrite(
+                context.Workspace,
+                context.Approval,
+                path,
+                out var fullPath,
+                out var owner,
+                out var error))
         {
             return (null, PathSafety.ExplainWriteRefusal(context.Workspace, path, error!), true);
         }
 
-        var relative = context.Workspace.ToRelative(fullPath);
+        var relative = PathSafety.Relative(context.Workspace, owner, fullPath);
         if (Directory.Exists(fullPath))
         {
             return (null, $"'{relative}' is a directory; {Name} only edits files.", false);
