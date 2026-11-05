@@ -258,6 +258,59 @@ public sealed class FetchUrlToolTests
     }
 
     [Fact]
+    public async Task CookiesAreOnlySentWhenAllowedAndStayOnTheirHost()
+    {
+        var handler = new StubHandler()
+            .Map(Url, () =>
+            {
+                var redirect = Respond("moved", "text/plain", HttpStatusCode.Found, "Found");
+                redirect.Headers.Location = new Uri("/final", UriKind.Relative);
+                redirect.Headers.TryAddWithoutValidation("Set-Cookie", "session=abc; Path=/");
+                return redirect;
+            })
+            .Map("https://example.com/final", () => Respond("done"));
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var allowed = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url, allow_cookies = true, ignore_robots = true })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(allowed.IsError);
+        Assert.Contains("Cookie: session=abc", handler.Requests[1].Headers, StringComparison.Ordinal);
+
+        var without = new StubHandler().Map(Url, () => Respond("done"));
+        var denied = await Tool(without).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url, ignore_robots = true })),
+            sandbox.Context,
+            CancellationToken.None);
+        Assert.False(denied.IsError);
+        Assert.DoesNotContain("Cookie:", without.Requests[0].Headers, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheRobotsDocumentIsCachedPerOrigin()
+    {
+        var handler = new StubHandler().Map(Url, () => Respond("hello"));
+        using var sandbox = ToolTestWorkspace.Create();
+        var tool = Tool(handler);
+
+        var first = await tool.ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url })),
+            sandbox.Context,
+            CancellationToken.None);
+        var second = await tool.ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(first.IsError);
+        Assert.False(second.IsError);
+        Assert.Single(handler.RobotsRequests);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
     public async Task PagingReturnsTheRequestedWindowAndNamesIt()
     {
         var handler = new StubHandler().Map(Url, () => Respond("abcdefghij", "text/plain"));

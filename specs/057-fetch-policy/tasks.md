@@ -7,5 +7,5 @@
 - [x] T005 Per-call cookies.
 - [x] T006 Fail-closed/fail-open.
 - [x] T007 Fixed UA and description.
-- [x] T008 Focused tests: 29/29.
-- [x] T009 Full suite/evaluation: 1,680 passed, 1 skipped; evaluation 3/3.
+- [x] T008 Focused tests: 31/31, including cookie scoping and robots cache.
+- [x] T009 Full suite/evaluation: see the commit's validation run.
