@@ -1,6 +1,6 @@
 # 010 — The page a browser returns: a screenshot is a file, not a sentence
 
-**Status**: implemented 2026-10-30 — `T001`–`T030`, both phases, committed as `a447a4d` (round 4 of
+**Status**: implemented 2026-10-30, `T031` added 2026-11-04 — `T001`–`T031`, both phases, committed as `a447a4d` (round 4 of
 [`000-parity-roadmap.md`](../000-parity-roadmap.md)). `McpArtefactSink` writes an `image` entry or an image
 `resource` blob to `<workspace>/.sharpcoreagent/artifacts/`, the answer names the path and the size or one
 `· not saved:` sentence, and a saved entry adds a `Created` effect even for a tool the server annotated
@@ -204,10 +204,10 @@ Acceptance:
 
 ## Non-goals (this round)
 
-- **A browser we ship.** No bundled browser, no driver manager, no JavaScript engine of ours, no `browser`
-  tool of ours, no `--browser` flag — the decision record of 2026-10-28 stands, and the server's own
-  `browser_navigate` (published to the model as `npx_browser_navigate`) is the browser tool, with the
-  schema its authors maintain.
+- **A bundled browser.** No browser binary, no driver manager and no JavaScript engine of ours. `--browser`
+  starts the official Playwright MCP server with the installed Edge on Windows or Chromium elsewhere; the server
+  owns the page and the `browser_*` tools, and the first call downloads nothing because the channel names a
+  browser the developer already has.
 - **Images in the transcript.** Nothing adds an `image` content part to a `ChatMessage`, sends base64 to a
   model, or asks a provider to look at anything. The bytes go to disk; the model gets a path.
 - **Looking at the picture.** No OCR, no captioning, no "describe this screenshot" fallback: the developer

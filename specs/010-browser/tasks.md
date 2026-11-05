@@ -158,8 +158,10 @@ temp workspace. Each test states the SC it answers.
 
 ## Deliberately not in this round
 
-- [ ] T031 A browser of our own: no bundled driver, no `--browser` flag, no `browser` tool. The
-  decision record stands and `--mcp` is the only door.
+- [X] T031 A browser of our own. **Opened and closed as a named MCP convenience in `052-browser-automation`:**
+  `--browser` starts `npx -y @playwright/mcp@latest --browser msedge` on Windows and `--browser chromium`
+  elsewhere. No bundled binary or driver; the tools arrive as `npx_browser_*` through the existing MCP client.
+  The decision record is amended rather than erased: the old `--mcp` command still works.
 - [ ] T032 PDF, video or audio artefacts, and any `application/*` type: the five image types are the whole
   table, and a format whose extension would lie is refused by name (FR-004).
 - [X] T033 Retention, cleanup, deduplication or a size-bounded artefacts directory. **Done in `049-artefact-retention`:** `MaxArtefactDirectoryBytes` defaults to 256 MiB, deletes the oldest files in `.sharpcoreagent/artifacts/` until the new one fits, and does no deduplication.

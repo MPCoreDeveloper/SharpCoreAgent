@@ -90,5 +90,44 @@ public sealed class McpOptionTests
         Assert.DoesNotContain("Using the MCP servers", without.SystemPrompt, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheBrowserFlagStartsThePlaywrightServer()
+    {
+        var run = CliOptions.Parse(["run", "open the page", "--browser"], NoEnvironment);
+        var chat = CliOptions.Parse(["chat", "--browser"], NoEnvironment);
+
+        Assert.True(run.Browser);
+        Assert.True(chat.Browser);
+        Assert.Empty(run.McpServers);
+        Assert.Contains(CliOptions.BrowserServerCommand, run.ToSharpCoreAgentOptions().McpServers);
+        Assert.Contains(CliOptions.BrowserServerCommand, chat.ToSharpCoreAgentOptions().McpServers);
+    }
+
+    [Theory]
+    [InlineData("models")]
+    [InlineData("index")]
+    [InlineData("config")]
+    [InlineData("setup")]
+    public void TheBrowserFlagIsRefusedWhereNoTurnRuns(string command)
+    {
+        var arguments = command == "index"
+            ? new[] { command, "--status", "--browser" }
+            : [command, "--browser"];
+
+        var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(arguments, NoEnvironment));
+
+        Assert.Contains("--browser applies there too", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheBrowserFlagAndAnExplicitServerStayInOrder()
+    {
+        var options = CliOptions.Parse(
+            ["run", "hello", "--browser", "--mcp", "npx -y one"],
+            NoEnvironment);
+
+        Assert.Equal(["npx -y one", CliOptions.BrowserServerCommand], options.ToSharpCoreAgentOptions().McpServers);
+    }
+
     private static string? NoEnvironment(string name) => null;
 }

@@ -59,6 +59,7 @@ internal static class HelpText
           --no-git                 run, chat   Git on      remove the read-only git_status and git_diff evidence tools
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
+          --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
           --write                  mcp config  off         write the block into that file instead of printing it
           --approval <mode>        run, chat   ask         readonly, ask, allow; -y is shorthand for allow

@@ -297,6 +297,20 @@ internal sealed record CliOptions
     /// </remarks>
     public IReadOnlyList<string> McpServers { get; init; } = [];
 
+    /// <summary>Gets a value indicating whether this invocation starts the Playwright browser server.</summary>
+    /// <remarks>
+    /// This is a named MCP server, not a second browser implementation: the command starts
+    /// <c>@playwright/mcp</c> with the system Edge on Windows and Chromium elsewhere. The server owns the page,
+    /// the driver and the tool schemas, exactly as it does when a developer types the same command into
+    /// <c>--mcp</c>; the flag only removes the copy-paste.
+    /// </remarks>
+    public bool Browser { get; init; }
+
+    /// <summary>Gets the command line the <c>--browser</c> flag starts.</summary>
+    public static string BrowserServerCommand => OperatingSystem.IsWindows()
+        ? "npx -y @playwright/mcp@latest --browser msedge"
+        : "npx -y @playwright/mcp@latest --browser chromium";
+
     /// <summary>
     /// Gets the approval mode. Default <see cref="ApprovalMode.Ask"/>.
     /// </summary>
@@ -466,7 +480,7 @@ internal sealed record CliOptions
         FSharpToolsEnabled = FSharp,
         CSharpToolsEnabled = CSharp,
         GitToolsEnabled = Git,
-        McpServers = McpServers,
+        McpServers = Browser ? [.. McpServers, BrowserServerCommand] : McpServers,
         Approval = Approval,
         MaxIterations = MaxIterations,
         MaxOutputTokensPerTurn = MaxOutputTokens,
@@ -1096,6 +1110,7 @@ internal sealed record CliOptions
 
             case CliCommand.Ide:
                 // The same reason: which flags apply depends on the action, and the action is the first operand.
+                RejectMcpFlags(options);
                 return FinishIde(options, positionals);
 
             default:
@@ -1878,10 +1893,10 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectMcpFlags(CliOptions options)
     {
-        if (options.McpServers.Count > 0)
+        if (options.McpServers.Count > 0 || options.Browser)
         {
             throw new CliUsageException(
-                "--mcp applies to run and chat.",
+                "--mcp applies to run and chat, and --browser applies there too.",
                 "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
         }
     }
@@ -2118,6 +2133,9 @@ internal sealed record CliOptions
                 {
                     McpServers = [.. options.McpServers, TakeValue(args, ref index, name)],
                 };
+
+            case "--browser":
+                return options with { Browser = true };
 
             case "--client":
                 return options with { McpClient = ParseClient(TakeValue(args, ref index, name)) };

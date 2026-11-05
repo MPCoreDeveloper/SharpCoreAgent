@@ -117,7 +117,7 @@ internal static class CliHost
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(error);
 
-        if (options.McpServers.Count == 0)
+        if (options.McpServers.Count == 0 && !options.Browser)
         {
             return true;
         }

@@ -255,6 +255,7 @@ keep working on the file that needs repairing.
 | `--no-csharp` | run, chat | C# on — remove the Roslyn adapter and its three code-intelligence tools for this invocation |
 | `--no-git` | run, chat | Git on — remove the read-only `git_status` and `git_diff` evidence tools |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
+| `--browser` | run, chat | off — start the Playwright MCP server with Edge on Windows or Chromium elsewhere; adds `npx_browser_*` tools |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
 | `--write` | mcp config, ide | off — merge the block into that file, or write the profile or the task, instead of printing it |
 | `--approval <mode>` | run, chat | `ask` |
@@ -617,22 +618,27 @@ developer cannot open is a fact about a page nobody has, so the bytes are writte
 workspace, and the model reads a path instead of 48 000 characters of base64:
 
 ```text
-sharpcoreagent chat --mcp "npx -y @playwright/mcp@latest"
+sharpcoreagent chat --browser
+# equivalent to:
+sharpcoreagent chat --mcp "npx -y @playwright/mcp@latest --browser msedge"
 ```
 
-An image entry (`image/png`, `image/jpeg` or `image/jpg`, `image/gif`, `image/webp`, `image/bmp` — up to
-8 MiB each and eight per call) becomes `<workspace>/.sharpcoreagent/artifacts/<server>-<tool>-<n>.<ext>`,
-and the entry reads
+`--browser` is the short form with `--browser msedge` on Windows and `--browser chromium` elsewhere; it still starts
+the Playwright MCP server through the ordinary MCP client, so the tools are named `npx_browser_*` and the server owns
+the page, driver and schemas. A developer who wants a different
+channel can still type the whole `--mcp` command. An image entry (`image/png`, `image/jpeg` or `image/jpg`,
+`image/gif`, `image/webp`, `image/bmp` — up to 8 MiB each and eight per call) becomes
+`<workspace>/.sharpcoreagent/artifacts/<server>-<tool>-<n>.<ext>`, and the entry reads
 `[image: image/png · 48213 base64 characters → .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (36.4 KiB)]`.
 The turn reports a `Created` effect for each file even though the server annotated its screenshot tool
 read-only, so `/files` and `--json` name what was written. Nothing is overwritten — a second capture is
 `-2` — nothing is indexed, listed or searched, and a session that may not write (`--approval readonly`, or
 a sub-agent under it) keeps the sentence it writes today and adds
-`· not saved: this session may not write`. The browser stays the developer's: no bundled driver, no
-`--browser` flag. `npx -y @playwright/mcp@latest` was measured working with this client on 2026-10-30, with the
-server's own `--browser msedge` passed because its default channel wants a browser Playwright downloads itself;
-the server's `--output-dir` copy is its business — ours is the one the transcript names. The full rule,
-including the six ways an image is not saved, is
+`· not saved: this session may not write`. The browser still comes from Playwright and the developer's installed
+Edge/Chromium: this repository ships no driver or browser binary. `npx -y @playwright/mcp@latest --version` measured
+0.0.84 here on 2026-11-04, and the client's earlier live run used `--browser msedge` because Playwright's default
+channel wants a browser it downloads itself; the server's `--output-dir` copy is its business — ours is the one the
+transcript names. The full rule, including the six ways an image is not saved, is
 [`specs/010-browser/contracts/mcp-content.md`](specs/010-browser/contracts/mcp-content.md).
 
 `replace_in_file` is the edit the agent is told to prefer: `edits` carries up to twenty fragments that
