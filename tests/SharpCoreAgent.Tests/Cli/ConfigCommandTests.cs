@@ -385,5 +385,26 @@ public sealed class ConfigCommandTests
 
     private static bool NotInteractive() => false;
 
+    [Fact]
+    public void APersistedAttachmentListIsReadAsRoots()
+    {
+        using var directory = TempDirectory.Create();
+        var first = Path.Combine(directory.Path, "one").Replace('\\', '/');
+        var second = Path.Combine(directory.Path, "two").Replace('\\', '/');
+        Directory.CreateDirectory(first);
+        Directory.CreateDirectory(second);
+        var json = $"{{\"attachments\":\"{first}{Path.PathSeparator}{second}\"}}";
+
+        var (cli, path) = Load(directory, json, ["chat"]);
+
+        Assert.Equal([first, second], cli.PersistedRoots);
+        Assert.Equal([first, second], cli.ToSharpCoreAgentOptions().AdditionalRoots);
+
+        var (get, _) = Load(directory, json, ["config", "get", "attachments"]);
+        var output = new StringWriter();
+        Assert.Equal(0, ConfigCommand.Execute(get, path, NoEnvironment, output));
+        Assert.Equal($"{first}{Path.PathSeparator}{second}" + System.Environment.NewLine, output.ToString());
+    }
+
     private static string? NoEnvironment(string name) => null;
 }

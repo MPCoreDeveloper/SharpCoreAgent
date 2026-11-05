@@ -253,6 +253,14 @@ internal sealed record CliOptions
     /// </remarks>
     public IReadOnlyList<string> AdditionalRoots { get; init; } = [];
 
+    /// <summary>Gets attached roots supplied by the settings file, in file order.</summary>
+    /// <remarks>
+    /// Persisted roots are defaults, not authority: a <c>--add-root</c> on the command line still comes first, and a
+    /// resumed session does not inherit them from its snapshot. They are applied by the same workspace builder as the
+    /// command-line roots.
+    /// </remarks>
+    public IReadOnlyList<string> PersistedRoots { get; init; } = [];
+
     /// <summary>
     /// Gets a value indicating whether this invocation may read the web.
     /// </summary>
@@ -489,7 +497,7 @@ internal sealed record CliOptions
         Provider = Provider,
         ModelId = Model,
         WorkspaceRoot = Workspace,
-        AdditionalRoots = AdditionalRoots,
+        AdditionalRoots = [.. AdditionalRoots, .. PersistedRoots],
         WebAccessEnabled = Web,
         WebAllowedHosts = WebAllowedHosts,
         FSharpToolsEnabled = FSharp,
@@ -697,6 +705,7 @@ internal sealed record CliOptions
         "max-output-tokens",
         "max-total-tokens",
         "credential-file",
+        "attachments",
     ];
 
     /// <summary>
@@ -727,6 +736,11 @@ internal sealed record CliOptions
             }
 
             return WithSetting(options, setting, value);
+        }
+
+        if (string.Equals(CanonicalName(name), "attachments", StringComparison.Ordinal))
+        {
+            return options with { PersistedRoots = SplitRoots(value) };
         }
 
         var flag = FlagFor(name)

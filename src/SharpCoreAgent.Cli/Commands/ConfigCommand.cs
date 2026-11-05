@@ -279,6 +279,7 @@ internal static class ConfigCommand
         "max-output-tokens" => cli.MaxOutputTokens.ToString(CultureInfo.InvariantCulture),
         "max-total-tokens" => cli.MaxTotalTokens.ToString(CultureInfo.InvariantCulture),
         "credential-file" => cli.CredentialFile ?? "none",
+        "attachments" => string.Join(Path.PathSeparator, cli.PersistedRoots),
         _ => string.Empty,
     };
     }

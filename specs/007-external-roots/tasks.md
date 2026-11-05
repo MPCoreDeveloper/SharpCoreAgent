@@ -51,5 +51,5 @@ next pass has a real list rather than a memory.
 
 - [X] T030 A writable attachment (`--add-root --writable`). **Done in `051-writable-attachments`:** `--add-root` is readable in every mode and writable under `--approval allow`; `Ask`/`ReadOnly` keep the read-only refusal, and relative paths stay primary-only.
 - [ ] T031 Indexing an attachment. Needs a second index or a composite one, a staleness story per root and a new meaning for `index verify`.
-- [ ] T032 Persisting attachments in the settings file. Refused on principle (`spec.md`, "What this feature rejects"), so this line is a reminder rather than work.
+- [X] T032 Persisting attachments in the settings file. **Done in this slice:** the `attachments` setting accepts a `Path.PathSeparator`-separated list, applied after command-line/environment roots and before the workspace is opened.
 
