@@ -336,12 +336,24 @@ internal sealed record CliOptions
     /// <summary>Gets the optional OAuth scopes.</summary>
     public string? McpOAuthScope { get; init; }
 
+    /// <summary>Gets the optional OAuth issuer to discover metadata from.</summary>
+    public string? McpOAuthIssuer { get; init; }
+
+    /// <summary>Gets the optional dynamic registration endpoint.</summary>
+    public string? McpOAuthRegistrationUrl { get; init; }
+
+    /// <summary>Gets the optional file where OAuth tokens are persisted.</summary>
+    public string? McpOAuthTokenFile { get; init; }
+
     /// <summary>Gets a value indicating whether any OAuth flag was named.</summary>
     public bool HasMcpOAuth =>
         McpOAuthClientId is not null ||
         McpOAuthAuthorizeUrl is not null ||
         McpOAuthTokenUrl is not null ||
-        McpOAuthScope is not null;
+        McpOAuthScope is not null ||
+        McpOAuthIssuer is not null ||
+        McpOAuthRegistrationUrl is not null ||
+        McpOAuthTokenFile is not null;
 
     /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
     public McpSamplingPolicy McpSampling { get; init; } = McpSamplingPolicy.Deny;
@@ -529,21 +541,24 @@ internal sealed record CliOptions
     /// <exception cref="CliUsageException">A required flag is missing or an endpoint is invalid.</exception>
     public McpOAuthOptions CreateMcpOAuth()
     {
-        if (string.IsNullOrWhiteSpace(McpOAuthClientId) ||
-            string.IsNullOrWhiteSpace(McpOAuthAuthorizeUrl) ||
-            string.IsNullOrWhiteSpace(McpOAuthTokenUrl))
+        string? resourceText = null;
+        if (McpUrls.Count > 0)
         {
-            throw new CliUsageException(
-                "--mcp-oauth needs a client id, an authorization URL and a token URL.",
-                "For example: --mcp-oauth-client sharp --mcp-oauth-auth https://id.example/authorize --mcp-oauth-token https://id.example/token");
+            resourceText = McpUrls[0];
+        }
+        else if (McpSseUrls.Count > 0)
+        {
+            resourceText = McpSseUrls[0];
         }
 
-        if (!Uri.TryCreate(McpOAuthAuthorizeUrl, UriKind.Absolute, out var authorize) ||
-            !Uri.TryCreate(McpOAuthTokenUrl, UriKind.Absolute, out var token))
+        if (McpOAuthAuthorizeUrl is null &&
+            McpOAuthTokenUrl is null &&
+            McpOAuthIssuer is null &&
+            resourceText is null)
         {
             throw new CliUsageException(
-                "the OAuth endpoints must be absolute URLs.",
-                "Use https, or http only for a loopback authorization server.");
+                "the MCP OAuth flags need endpoints, an issuer, or a remote MCP URL to discover from.",
+                "For example: --mcp-url https://mcp.example/rpc --mcp-oauth-client sharp --mcp-oauth-auth https://id.example/authorize --mcp-oauth-token https://id.example/token");
         }
 
         try
@@ -551,15 +566,31 @@ internal sealed record CliOptions
             return new McpOAuthOptions
             {
                 ClientId = McpOAuthClientId,
-                AuthorizationEndpoint = authorize,
-                TokenEndpoint = token,
+                AuthorizationEndpoint = OptionalUri(McpOAuthAuthorizeUrl, "authorization"),
+                TokenEndpoint = OptionalUri(McpOAuthTokenUrl, "token"),
+                RegistrationEndpoint = OptionalUri(McpOAuthRegistrationUrl, "registration"),
+                Issuer = OptionalUri(McpOAuthIssuer, "issuer"),
+                Resource = OptionalUri(resourceText, "resource"),
                 Scope = McpOAuthScope,
+                TokenFile = McpOAuthTokenFile,
             }.Validate();
         }
         catch (ArgumentException ex)
         {
             throw new CliUsageException(ex.Message, "Use https, or http only for a loopback authorization server.");
         }
+    }
+
+    private static Uri? OptionalUri(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            ? uri
+            : throw new CliUsageException($"the OAuth {name} must be an absolute URL.");
     }
 
     /// <summary>Projects the command line onto the container's options.</summary>
@@ -2307,6 +2338,15 @@ internal sealed record CliOptions
 
             case "--mcp-oauth-scope":
                 return options with { McpOAuthScope = TakeValue(args, ref index, name) };
+
+            case "--mcp-oauth-issuer":
+                return options with { McpOAuthIssuer = TakeValue(args, ref index, name) };
+
+            case "--mcp-oauth-reg":
+                return options with { McpOAuthRegistrationUrl = TakeValue(args, ref index, name) };
+
+            case "--mcp-oauth-file":
+                return options with { McpOAuthTokenFile = TakeValue(args, ref index, name) };
 
             case "--mcp-sampling":
                 var sampling = TakeValue(args, ref index, name);

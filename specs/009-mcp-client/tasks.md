@@ -130,8 +130,14 @@ next pass has a real list rather than a memory.
   the URL, verifies state, sends an S256 challenge, exchanges the code and returns an in-memory bearer
   token that both remote channels send. `McpOAuthTests` covers the exchange and a state mismatch; no
   browser is started and nothing is persisted.
-- [ ] T035d OAuth discovery, dynamic registration, refresh tokens and persistence. The explicit
-  authorization-code flow is done; these production-hardening pieces remain.
+- [X] T035d OAuth discovery, dynamic registration, refresh tokens and persistence. **Closed.** The first
+  remote URL or `--mcp-oauth-issuer` drives protected-resource and authorization-server discovery; a
+  missing client id is dynamically registered when the server advertises or `--mcp-oauth-reg` names a
+  registration endpoint; `--mcp-oauth-file` stores the access and refresh tokens with user-only Unix
+  permissions and refreshes an expired token on the next invocation. Tests cover discovery, registration,
+  refresh and a persisted token.
+- [ ] T035e Mid-turn OAuth refresh and OpenID-specific discovery. Startup refresh is done; a token that
+  expires during one long turn is not yet refreshed between remote calls.
 - [ ] T037 A declarative server list read from a file.
 
 ## Amendment — T036 supervision (2026-11-05)

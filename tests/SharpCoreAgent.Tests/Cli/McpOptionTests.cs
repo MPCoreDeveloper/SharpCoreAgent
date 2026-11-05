@@ -246,7 +246,7 @@ public sealed class McpOptionTests
 
         var oauth = options.CreateMcpOAuth();
         Assert.Equal("sharp", oauth.ClientId);
-        Assert.Equal("https://id.example/authorize", oauth.AuthorizationEndpoint.AbsoluteUri);
+        Assert.Equal("https://id.example/authorize", oauth.AuthorizationEndpoint?.AbsoluteUri);
         Assert.Equal("mcp.read", oauth.Scope);
     }
 
@@ -258,7 +258,7 @@ public sealed class McpOptionTests
             NoEnvironment);
 
         var error = Assert.Throws<CliUsageException>(() => options.CreateMcpOAuth());
-        Assert.Contains("client id, an authorization URL and a token URL", error.Message, StringComparison.Ordinal);
+        Assert.Contains("endpoints, an issuer", error.Message, StringComparison.Ordinal);
     }
 
     private static string? NoEnvironment(string name) => null;

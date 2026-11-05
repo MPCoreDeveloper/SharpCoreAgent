@@ -70,6 +70,9 @@ internal static class HelpText
           --mcp-oauth-auth <url>   run, chat   —           OAuth authorization endpoint the browser opens
           --mcp-oauth-token <url>  run, chat   —           OAuth token endpoint the code is exchanged at
           --mcp-oauth-scope <s>    run, chat   —           space-separated scopes to request
+          --mcp-oauth-issuer <url> run, chat   —           authorization server issuer to discover from
+          --mcp-oauth-reg <url>    run, chat   —           dynamic client registration endpoint
+          --mcp-oauth-file <path>  run, chat   —           persist the access and refresh tokens here
           --mcp-sampling <policy>  run, chat   deny        deny, first or unrestricted; first answers one server sampling request per connection
           --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
@@ -137,9 +140,10 @@ internal static class HelpText
 
           The --mcp-oauth flags add OAuth 2.1 authorization code with PKCE to a remote endpoint. The
           client opens a loopback callback, prints the authorization URL for you to open, verifies state,
-          and exchanges the code at the token endpoint; the access token stays in memory for this process
-          and is sent as a bearer credential. Dynamic registration, discovery, refresh tokens and token
-          persistence are not implemented.
+          exchanges the code at the token endpoint and sends the bearer token. It can discover metadata
+          from the remote resource or --mcp-oauth-issuer, register a public client when no client id is
+          given, refresh an expired token on the next invocation, and persist tokens only in the explicit
+          the --mcp-oauth-file.
 
 
 

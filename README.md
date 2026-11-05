@@ -260,7 +260,10 @@ keep working on the file that needs repairing.
 | `--mcp-oauth-client <id>` | run, chat | none — public OAuth client id for the remote endpoints |
 | `--mcp-oauth-auth <url>` | run, chat | none — OAuth 2.1 authorization endpoint |
 | `--mcp-oauth-token <url>` | run, chat | none — OAuth token endpoint |
-| `--mcp-oauth-scope <scope>` | run, chat | none — optional space-separated scopes |
+| `--mcp-oauth-scope <s>` | run, chat | none — optional space-separated scopes |
+| `--mcp-oauth-issuer <url>` | run, chat | none — discovery issuer, or discover from the remote resource |
+| `--mcp-oauth-reg <url>` | run, chat | none — dynamic client registration endpoint |
+| `--mcp-oauth-file <path>` | run, chat | none — persist access and refresh tokens in a user-only file |
 | `--mcp-sampling <policy>` | run, chat | `deny` — `deny`, `first` (one request per connection) or `unrestricted` (rate-limited); a server may ask the session's model to sample |
 | `--browser` | run, chat | off — start the Playwright MCP server with Edge on Windows or Chromium elsewhere; adds `npx_browser_*` tools |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
@@ -646,8 +649,10 @@ stream. The URL rule is identical; it is a compatibility path, not a fallback.
 
 For an endpoint that requires delegated authorization, the `--mcp-oauth-*` flags run OAuth 2.1 authorization
 code with PKCE. The client opens a loopback callback, prints an authorization URL for you to open, verifies
-the returned state, and exchanges the code at the token endpoint; the bearer token lives only in memory for
-that process. Discovery, dynamic registration, refresh tokens and persistence are deliberately not included.
+the returned state, and exchanges the code at the token endpoint. It can discover the authorization server
+from the remote resource or `--mcp-oauth-issuer`, register a public client when none is supplied, persist
+the access and refresh tokens in an explicit `--mcp-oauth-file`, and refresh an expired access token on the
+next invocation. The bearer token stays out of the transcript and out of the command line.
 
 A server may also ask the client to sample, which spends the session's model budget without the model
 deciding to. That is off unless the developer says otherwise: `--mcp-sampling deny` (the default) answers

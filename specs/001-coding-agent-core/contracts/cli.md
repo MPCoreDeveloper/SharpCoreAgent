@@ -46,6 +46,9 @@ settings file, its precedence and its exit code are in
 | `--mcp-oauth-auth <url>` | run, chat | — | OAuth 2.1 authorization endpoint; `https`, or `http` on loopback (009, 035c) |
 | `--mcp-oauth-token <url>` | run, chat | — | OAuth token endpoint; `https`, or `http` on loopback (009, 035c) |
 | `--mcp-oauth-scope <scope>` | run, chat | — | Optional space-separated OAuth scopes (009, 035c) |
+| `--mcp-oauth-issuer <url>` | run, chat | — | Discovery issuer, or omit to discover from the remote resource (009, 035d) |
+| `--mcp-oauth-reg <url>` | run, chat | — | Dynamic client registration endpoint, when discovery does not advertise one (009, 035d) |
+| `--mcp-oauth-file <path>` | run, chat | — | Persist the access and refresh tokens in this user-only file (009, 035d) |
 | `--mcp-sampling <policy>` | run, chat | `deny` | `deny`, `first` or `unrestricted`: whether a server may ask the session's model to sample; `first` admits one request per connection and `unrestricted` uses 10 calls and 100 000 input tokens per minute with 25 000 output tokens per call (009, 034). Refused on every other command |
 | `--client <name>` | mcp config | — | `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for; `visualstudio` and `claude` name the same `.mcp.json` under different keys, and `vs` is accepted for `visualstudio`; refused on every other command, and required — `mcp config` without it exits `2` (013, 022) |
 | `--write` | mcp config, ide | — | Merge the block into the file `--client` names instead of printing it, keeping every other key, server and entry field; an entry that already matches is not written, and a file that cannot be merged exits `7` untouched; refused on every other command, `--client codex` included (022). On `ide`, write the profile or the task instead of printing it, replacing the profile only when the command wrote it and merging the task by label (024) |
