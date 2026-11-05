@@ -54,7 +54,7 @@ internal sealed class RobotsFile
                     break;
                 case "allow":
                 case "disallow":
-                    if (agents is null || rules is null)
+                    if (agents is null || rules is null || value.Length == 0)
                     {
                         break;
                     }
