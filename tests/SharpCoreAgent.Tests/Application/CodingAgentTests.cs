@@ -678,6 +678,31 @@ public sealed class CodingAgentTests
     }
 
     [Fact]
+    public async Task ARoslynDiagnosticsResultDoesNotCloseTheGate()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file")],
+            [ToolCallTurn(FileDiagnosticsTool.Name)],
+            [Completed("the file type-checks")]);
+        var session = Session(directory.Path);
+
+        // Roslyn is already here as file_diagnostics, and that is exactly why it is not the oracle: one file can
+        // type-check while the project does not build, because only the build restores, resolves and links. A clean
+        // front-end answer must not close a gate whose question is "does this build".
+        var report = await Agent(model, [EditingTool(), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "fix it", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("unverified", report.Detail!, StringComparison.Ordinal);
+        Assert.Equal(
+            CodingAgent.MaxVerificationNudges,
+            session.Messages.Count(message => message.Role == ChatRole.User && message.Content == PromptLibrary.VerifyNudge));
+    }
+
+    [Fact]
     public async Task ATurnThatEditsNoDotnetSourceIsNotGated()
     {
         using var directory = TempDirectory.Create();

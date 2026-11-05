@@ -345,13 +345,8 @@ public sealed class CodingAgent
                 if (_options.AutoVerify && !state.AutoVerified)
                 {
                     state.AutoVerified = true;
-                    foreach (var gap in gaps)
+                    foreach (var gap in gaps.Where(gap => _tools.Find(gap.ToolName) is not null))
                     {
-                        if (_tools.Find(gap.ToolName) is null)
-                        {
-                            continue;
-                        }
-
                         var call = new ToolCall(
                             "auto-verify",
                             gap.ToolName,
@@ -522,7 +517,7 @@ public sealed class CodingAgent
         public int ResultCount => _results.Count;
 
         /// <summary>Gets the profiles whose last edit has no later passing verifier result.</summary>
-        public IReadOnlyList<VerificationGap> UnverifiedGaps
+        public List<VerificationGap> UnverifiedGaps
         {
             get
             {

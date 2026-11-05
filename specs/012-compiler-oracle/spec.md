@@ -107,8 +107,10 @@ Acceptance:
 
 ## Non-goals (this round)
 
-- **Roslyn.** No syntax tree, no semantic model, no analyzer. The compiler is the oracle, and the compiler
-  is a process. `SCA0001` is likewise untouched: this feature reads .NET 11 code, it does not require it.
+- **Roslyn.** It is already here, behind `file_diagnostics`, and it stays there: one file can type-check while
+  the project does not build, because only the build restores, resolves and links. A clean front-end answer
+  must not close a gate whose question is "does this build". `SCA0001` is likewise untouched: this feature
+  reads .NET 11 code, it does not require it.
 - **A build server, a file watcher or an incremental cache.** `dotnet build` already does all three.
 - **Language detection.** The list of extensions is a constant, not a syntax-table lookup; a `.cs` file in a
   project that is not .NET is still a .NET edit, and the build says so.
