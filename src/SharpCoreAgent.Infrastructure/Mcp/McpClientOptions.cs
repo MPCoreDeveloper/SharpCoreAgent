@@ -42,6 +42,15 @@ public sealed record McpClientOptions
     /// </remarks>
     public int MaxToolPages { get; init; } = 10;
 
+    /// <summary>Gets how many times one connection may restart a server that stopped. Default three.</summary>
+    /// <remarks>
+    /// A restart happens before the next call, never inside the call that failed: an MCP tool may have
+    /// changed something before its server died, and replaying it would turn one side effect into two. The
+    /// ceiling is what stops a server that crashes on every start from becoming an infinite loop. Zero
+    /// turns supervision off for an embedder that wants the old behaviour.
+    /// </remarks>
+    public int MaxRestarts { get; init; } = 3;
+
     /// <summary>Gets the most characters one MCP result returns. Default 64 000.</summary>
     /// <remarks>
     /// The tool's own natural ceiling; the loop's <c>MaxToolResultChars</c> still applies on top. Both
@@ -96,6 +105,7 @@ public sealed record McpClientOptions
         Require(ControlTimeout, TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(5), nameof(ControlTimeout));
         Require(CallTimeout, TimeSpan.FromSeconds(1), TimeSpan.FromHours(1), nameof(CallTimeout));
         Require(MaxToolPages, 1, 100, nameof(MaxToolPages));
+        Require(MaxRestarts, 0, 100, nameof(MaxRestarts));
         Require(MaxResultChars, 1_000, 1_000_000, nameof(MaxResultChars));
         Require(MaxStderrLines, 1, 10_000, nameof(MaxStderrLines));
         Require(MaxArtefactBytes, 1024, 64L * 1024 * 1024, nameof(MaxArtefactBytes));

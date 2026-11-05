@@ -112,8 +112,10 @@ internal static class HelpText
           a write. A screenshot a server returns is written to .sharpcoreagent/artifacts/ and the answer
           names the file and its size, so the page the developer asked about is one they can open.
           The servers are started before the first turn and killed when the process exits, and none of
-          this is a setting: with no --mcp there is no client in the process at all. Search is not built
-          in: a server, such as @brave/brave-search-mcp-server with BRAVE_API_KEY set, is what the flag
+          this is a setting: with no --mcp there is no client in the process at all. A server that exits
+          later is restarted on the next call, at most three times, with a fresh handshake; the call that
+          saw the failure is not repeated. Search is not built in: a server, such as
+          @brave/brave-search-mcp-server with BRAVE_API_KEY set, is what the flag
           is for.
 
         Credentials

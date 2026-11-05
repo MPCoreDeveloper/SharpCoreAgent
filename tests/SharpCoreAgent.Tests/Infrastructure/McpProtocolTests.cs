@@ -171,6 +171,12 @@ public sealed class McpProtocolTests
 
         Assert.True(result.IsError);
         Assert.Contains("stopped answering", result.Text, StringComparison.Ordinal);
+        Assert.Contains("cannot be restarted", result.Text, StringComparison.Ordinal);
+        Assert.Equal(0, connection.RestartCount);
+
+        var again = await connection.CallAsync("search", Arguments("{}"), TimeSpan.FromSeconds(5), Token);
+        Assert.True(again.IsError);
+        Assert.Equal(0, connection.RestartCount);
     }
 
     [Fact]

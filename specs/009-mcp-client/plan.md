@@ -66,6 +66,8 @@ public sealed class McpServerConnection : IAsyncDisposable
     public Task StartAsync(CancellationToken ct);   // process, handshake, tools/list
     public Task<McpCallResult> CallAsync(string tool, JsonElement arguments, TimeSpan timeout, CancellationToken ct);
     public IReadOnlyList<McpToolInfo> Tools { get; }
+    public int RestartCount { get; }
+    public bool IsRunning { get; }
 }
 ```
 
@@ -73,6 +75,19 @@ The start sequence is the protocol's, in order: `initialize` (with `protocolVers
 `capabilities: {}`, `clientInfo: {name: "sharpcoreagent", version: <assembly>}`), read the answer,
 send `notifications/initialized`, then `tools/list` until `nextCursor` is absent — at most ten pages,
 because a server that pages forever must not hold startup open.
+
+## Supervision
+
+A server may die after it answered `tools/list`. The next call checks `IsRunning` before it writes:
+a closed pipe or an exited process moves into `RestartAsync`, which stops the old process, starts the
+command again and repeats the handshake and `tools/list`. `McpClientOptions.MaxRestarts` (default 3,
+0 disables) bounds that loop; a failed attempt consumes one slot and leaves the server stopped.
+
+The failure path is deliberately not a retry loop. If the request was already written, the call fails
+with the server's reason and a sentence saying whether the next call will restart it. Replaying a
+`tools/call` would turn a server crash into two writes, and no annotation in the protocol says a tool
+is idempotent. `tools/list` is refreshed for diagnostics, but the `McpTool` instances the turn was
+built with stay fixed: a renamed tool is a failed call, not a new tool halfway through a turn.
 
 ## The process
 

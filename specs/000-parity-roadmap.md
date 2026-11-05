@@ -225,6 +225,12 @@ cookies, page paging, a search tool and `robots.txt` — and T030 closed on 2026
 
 This closes `T040` in `specs/003-terminal-console-agent/tasks.md`, which has been open since 003.
 
+**T036 amendment (2026-11-05).** A server that exits after startup is now restarted on the next
+call, never during the failed call, at most `McpClientOptions.MaxRestarts` times (default three), with
+a fresh `initialize` and `tools/list`. The restart budget, the no-replay rule and the four cases a
+real child process can exercise are pinned in `McpProcessTests`; the old "a dead server stays dead"
+refusal is gone from `spec.md`.
+
 **As built.** `--mcp "<command>"` is repeatable and per-invocation; the command runs through the
 platform shell (`cmd /d /s /c` on Windows with the line built by hand, `/bin/sh -c` elsewhere with one
 argv element), because `npx`, `uvx` and `deno` are shims — the first process test found that passing a

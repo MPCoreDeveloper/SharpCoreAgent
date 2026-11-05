@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033; T034–T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033 and T036; T034, T035 and T037 deferred, listed in `tasks.md`)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -117,8 +117,15 @@ Acceptance:
 - **FR-012** Startup is atomic: `initialize`, then `tools/list` for every server, before the first
   turn. A server that cannot start, cannot complete the handshake, answers malformed JSON, or reports
   zero tools fails the process with exit 2 and a message naming the command and the reason.
-- **FR-013** A server that exits after startup is not restarted; its tools answer with a failure naming
-  the exit code until the process ends.
+- **FR-013** A server that exits after startup is restarted on the next tool call, at most
+  `McpClientOptions.MaxRestarts` times per connection (default three), with a fresh `initialize`,
+  `notifications/initialized` and `tools/list`. The call that saw the failure is never repeated: it
+  returns a failure saying the next call will restart the server, or that the restart budget is spent.
+  A connection handed its streams by an embedder cannot be restarted, and a restart that cannot start
+  the command leaves the server stopped rather than pretending the next call will work.
+- **FR-013a** A restart refreshes the connection's `tools/list`. The tool definitions a turn was
+  constructed with do not change: a renamed or removed tool is an ordinary failed call, not a new or
+  missing tool in the middle of a turn.
 - **FR-014** Server stderr is drained continuously into a bounded buffer and echoed to the developer,
   labelled `<server>: `, only when `--verbose` is in force. It never reaches the transcript.
 - **FR-015** Processes are killed as a tree on container disposal and on process exit.
@@ -144,9 +151,9 @@ Acceptance:
   ship `resources/*` next.
 - **Remote transports (HTTP+SSE, streamable HTTP).** A socket, a token and an OAuth flow are a
   different threat model from a child process the developer started.
-- **Server mode.** This product is a client. Being a server is a different product.
-- **Reconnection or supervision.** A dead server stays dead until the next invocation, which is the
-  behaviour a developer can predict.
+- **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five
+  read-only evidence tools for one workspace. Exposing the agent's write and process surface to another
+  process is a different product with a different approval boundary.
 - **A declarative server list (`.mcp.json`).** A file that starts processes on every run is exactly
   the authority-nobody-granted case `--web` and `--add-root` refuse; it belongs to a round that argues
   for it.

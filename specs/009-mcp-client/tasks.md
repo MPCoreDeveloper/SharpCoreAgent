@@ -104,6 +104,14 @@ next pass has a real list rather than a memory.
 
 - [ ] T034 MCP resources, prompts and sampling. Logging notifications are done in `046-mcp-log-notifications`.
 - [ ] T035 Remote transports (HTTP+SSE, streamable HTTP).
-- [ ] T036 Server mode, reconnection and supervision.
 - [ ] T037 A declarative server list read from a file.
+
+## Amendment — T036 supervision (2026-11-05)
+
+- [X] T036 Server mode, reconnection and supervision. **Closed.** Server mode is the `mcp serve` surface
+  `013` already ships; this amendment adds supervision to the client. A server that exits is restarted
+  on the next call (never during the failed call), at most `McpClientOptions.MaxRestarts` times
+  (default three), with a fresh handshake and `tools/list`. `McpServerConnection.RestartCount` and
+  `IsRunning` expose the state; `McpProcessTests` proves a kill between calls, a crash mid-call with no
+  replay, the restart ceiling, and the off switch. A stream-backed connection cannot restart and says so.
 

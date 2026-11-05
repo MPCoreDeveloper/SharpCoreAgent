@@ -11,6 +11,7 @@ using System.Text.Json.Nodes;
 
 var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
 var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+var exposeCrash = args.Contains("--crash-tool", StringComparer.Ordinal);
 
 Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"pid={Environment.ProcessId}"));
 Console.Error.WriteLine("test-mcp-server ready");
@@ -26,7 +27,7 @@ while (await input.ReadLineAsync(CancellationToken.None) is { } line)
     JsonObject? answer;
     using (var document = JsonDocument.Parse(line))
     {
-        answer = Answer(document.RootElement);
+        answer = Answer(document.RootElement, exposeCrash);
     }
 
     if (answer is not null)
@@ -35,7 +36,7 @@ while (await input.ReadLineAsync(CancellationToken.None) is { } line)
     }
 }
 
-static JsonObject? Answer(JsonElement request)
+static JsonObject? Answer(JsonElement request, bool exposeCrash)
 {
     if (!request.TryGetProperty("method", out var methodElement) || methodElement.GetString() is not { } method)
     {
@@ -58,31 +59,42 @@ static JsonObject? Answer(JsonElement request)
             });
 
         case "tools/list":
-            return Result(id, new JsonObject
+            var tools = new JsonArray
             {
-                ["tools"] = new JsonArray(
-                    new JsonObject
+                new JsonObject
+                {
+                    ["name"] = "echo",
+                    ["description"] = "Echo the text back, so a caller can prove the arguments arrived.",
+                    ["inputSchema"] = new JsonObject
                     {
-                        ["name"] = "echo",
-                        ["description"] = "Echo the text back, so a caller can prove the arguments arrived.",
-                        ["inputSchema"] = new JsonObject
-                        {
-                            ["type"] = "object",
-                            ["properties"] = new JsonObject { ["text"] = new JsonObject { ["type"] = "string" } },
-                            ["required"] = new JsonArray("text"),
-                        },
-                        ["annotations"] = new JsonObject { ["readOnlyHint"] = true },
+                        ["type"] = "object",
+                        ["properties"] = new JsonObject { ["text"] = new JsonObject { ["type"] = "string" } },
+                        ["required"] = new JsonArray("text"),
                     },
-                    new JsonObject
-                    {
-                        ["name"] = "fail",
-                        ["description"] = "Always fails, so a caller can prove an error is reported as one.",
-                        ["inputSchema"] = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
-                    }),
-            });
+                    ["annotations"] = new JsonObject { ["readOnlyHint"] = true },
+                },
+                new JsonObject
+                {
+                    ["name"] = "fail",
+                    ["description"] = "Always fails, so a caller can prove an error is reported as one.",
+                    ["inputSchema"] = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+                },
+            };
+
+            if (exposeCrash)
+            {
+                tools.Add(new JsonObject
+                {
+                    ["name"] = "crash",
+                    ["description"] = "Exits the server after recording one invocation, so a caller can prove a call is not replayed.",
+                    ["inputSchema"] = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+                });
+            }
+
+            return Result(id, new JsonObject { ["tools"] = tools });
 
         case "tools/call":
-            return Call(id, parameters);
+            return Call(id, parameters, exposeCrash);
 
         default:
             return new JsonObject
@@ -94,12 +106,19 @@ static JsonObject? Answer(JsonElement request)
     }
 }
 
-static JsonObject Call(long id, JsonElement parameters)
+static JsonObject Call(long id, JsonElement parameters, bool exposeCrash)
 {
     var name = parameters.ValueKind == JsonValueKind.Object &&
                parameters.TryGetProperty("name", out var nameElement)
         ? nameElement.GetString()
         : null;
+
+    if (name == "crash" && exposeCrash)
+    {
+        Console.Error.WriteLine("crash requested");
+        Console.Error.Flush();
+        Environment.Exit(17);
+    }
 
     if (name == "fail")
     {

@@ -609,9 +609,10 @@ unannotated server tool asks rather than assumes. Results are flattened from `co
 audio, non-image blobs and resource links described by type, size and URI, and an image described *and
 saved* (below) — bounded at 64 000 characters, and then by the turn's `MaxToolResultChars` on top. The
 servers start before the first turn and are a failure, not a silent omission, when one will not: `exit 2`
-naming the command line. Each child is killed with its process tree when the session ends, its stderr is
-kept for `--verbose` and never reaches the transcript, and there is no MCP client in a process that did
-not pass the flag.
+naming the command line. A server that exits later is restarted on the next call, at most three times,
+with a fresh handshake; the call that saw the failure is not repeated. Each child is killed with its
+process tree when the session ends, its stderr is kept for `--verbose` and never reaches the transcript,
+and there is no MCP client in a process that did not pass the flag.
 
 A browser is the one server where describing is not enough. A screenshot the model cannot see and the
 developer cannot open is a fact about a page nobody has, so the bytes are written once, under the
