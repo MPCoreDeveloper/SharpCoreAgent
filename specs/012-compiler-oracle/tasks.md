@@ -81,5 +81,4 @@ has a real list rather than a memory.
 - [X] T025 Automatic retry of a failed build without the model's involvement. **Done as opt-in `--auto-verify`:** the loop runs the bound verifier once before its first nudge; default behaviour is unchanged.
 - [ ] T026 A verification requirement for scripts, SQL or notebooks. Each needs its own oracle, and none of
   them has one in this repository yet.
-- [ ] T027 Gating `mcp serve`. The server publishes five read-only tools and has no turn loop; a gate there
-  would be dead code pretending to be a guarantee.
+- [X] T027 Gating `mcp serve`. **Closed as not applicable:** the server publishes five read-only index tools and runs no turn loop, so there is no edit or build for a gate to protect. A gate there would be dead code pretending to be a guarantee.
