@@ -85,8 +85,8 @@ has a real list rather than a memory.
 - [X] T028a **Resizing and re-encoding, on request.** `view_image` takes optional `max_dimension` (64–4096); it
       preserves aspect ratio, re-encodes PNG and names the result. Omitting it is byte-identical to the old answer.
       `ImageResize` refuses an undecodable file or an out-of-range value instead of guessing.
-- [ ] T028b **Rotating.** A caller that needs a rotated copy still gets the file as it is; rotation is a separate
-      transformation and is not silently inferred from `max_dimension`.
+- [X] T028b **Rotating.** `view_image` accepts optional `rotation` 90/180/270 and rotates clockwise after any
+      rendering or downscale; arbitrary angles are refused. The answer names the rotation and the resulting size.
 - [ ] T029 **Images in session files.** Deliberate, and documented in `JsonFileSessionStore`: a transcript people
       grep is not a blob store, and the file is one `view_image` call away.
 - [ ] T030 **Pasted, dragged or piped images.** Piping is shipped in two parts: `--image <path>` in `047-run-image-input` and `--image -` (stdin) in `050-stdin-image-input`. Dragging and a clipboard API remain open, because each is a UI concern rather than a file path.

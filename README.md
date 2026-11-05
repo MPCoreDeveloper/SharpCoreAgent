@@ -425,7 +425,8 @@ that prints an absolute path: naming the legal ones is its whole job.
 `.svg` from the workspace or an attached root, up to 4 MiB, and answers with the image itself attached to
 the message that follows — the tool role carries text only, because every OpenAI-compatible provider
 rejects an image there, so the loop hands the picture over on the next user message. An optional
-`max_dimension` (64–4096) asks for a smaller copy; without it the file is attached byte for byte. It refuses
+`max_dimension` (64–4096) asks for a smaller copy; without it the file is attached byte for byte. `rotation`
+(90/180/270) turns a sideways picture clockwise after that; without both the file is untouched. It refuses
 before reading a byte when the session's model is not declared to read images, and the refusal names the model,
 so a text-only turn says it cannot see the picture instead of describing one it never saw. `models` prints
 `images=yes` or `images=no` for every model this build knows. The output of the MCP client's browser

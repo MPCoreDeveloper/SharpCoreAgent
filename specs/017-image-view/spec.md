@@ -82,8 +82,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   the model was never shown. No flag adds or removes either the tool or the rule.
 - **FR-012** A caller MAY pass `max_dimension` (64–4096) to `view_image` to ask for a smaller copy. The tool then
   preserves the aspect ratio, re-encodes the result as PNG and says `resized <w> × <h> PNG` in its sentence; a file
-  that already fits is returned byte for byte. Omitting the argument shows the file unchanged, which is the default and
-  the reason there is no silent downscale. Rotation is not part of this option.
+  that already fits is returned byte for byte. A caller MAY also pass `rotation` (90, 180 or 270) to turn a sideways
+  picture clockwise after any rendering or downscale; the answer names both. Omitting both arguments shows the file
+  unchanged, which is the default and the reason there is no silent transformation. Arbitrary angles are refused.
 
 ## Edge cases
 
@@ -139,9 +140,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   binaries ship for Windows, Linux and macOS.
 - **Pasted, dragged or piped images**, and an `--image` flag on `run`. A picture enters a conversation the way any
   other evidence does: through a tool, with a path a report can name.
-- **Rotating.** A caller that needs a rotated copy still gets the file as it is; rotation is not inferred from
-  `max_dimension` and has no separate argument. `max_dimension` itself is explicit and opt-in (FR-012), so the file is
-  still shown byte for byte when nobody asks for a smaller copy.
+- **Rotating.** `view_image` accepts `rotation` 90/180/270 and applies it clockwise after any rendering or downscale;
+  arbitrary angles are refused. This is explicit and opt-in, like `max_dimension` (FR-012), so the file is still shown
+  byte for byte when neither argument is given.
 - **Images in session files.** Deliberate (FR-009): a transcript people grep is not a blob store.
 - **Deduplication.** Closed by `021` (round 12): a picture the conversation already carries is not attached a second
   time, by any of the three doors, and the answer is a success because the picture is exactly where the model asked for

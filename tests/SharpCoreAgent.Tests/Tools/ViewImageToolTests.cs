@@ -105,6 +105,27 @@ public sealed class ViewImageToolTests
     }
 
     [Fact]
+    public async Task ARequestedRotationRotatesTheAttachment()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/wide.png", Png(200, 100));
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/wide.png","rotation":90}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains("rotated 90° to 100 × 200", result.Content, StringComparison.Ordinal);
+
+        var image = Assert.Single(result.Images);
+        using var decoded = SKBitmap.Decode(Convert.FromBase64String(image.Base64))
+            ?? throw new InvalidOperationException("the attached image did not decode");
+        Assert.Equal(100, decoded.Width);
+        Assert.Equal(200, decoded.Height);
+    }
+
+    [Fact]
     public async Task AnSvgIsRenderedToPngAtItsOwnSize()
     {
         using var sandbox = ToolTestWorkspace.Create();

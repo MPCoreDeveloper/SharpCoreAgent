@@ -59,10 +59,10 @@ public sealed class ViewImageTool : ITool
     public ViewImageTool(bool allowWithoutModel) => _allowWithoutModel = allowWithoutModel;
 
     private const string Schema =
-        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."}},"required":["path"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."},"rotation":{"type":"integer","enum":[0,90,180,270],"description":"Rotate clockwise by this many degrees after any rendering or downscale; omit or 0 to show the file as it is."}},"required":["path"],"additionalProperties":false}""";
 
     private const string Description =
-        "Show an image file to the model: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size. Pass max_dimension only when the picture is too large to read at full size: it downscales to that largest width or height and re-encodes as PNG, while omitting it shows the file byte for byte. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
+        "Show an image file to the model: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size. Pass max_dimension only when the picture is too large to read at full size: it downscales to that largest width or height and re-encodes as PNG, while omitting it shows the file byte for byte. Pass rotation only to correct a sideways picture; it rotates clockwise by 90, 180 or 270 degrees after any rendering or downscale. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(Name, Description, Schema);
@@ -86,6 +86,14 @@ public sealed class ViewImageTool : ITool
             fallback: 0,
             minimum: ImageResize.MinimumDimension,
             maximum: ImageResize.MaximumDimension);
+        var rotation = arguments.GetOptionalInt("rotation", fallback: 0, minimum: 0, maximum: 270);
+        if (rotation is not (0 or 90 or 180 or 270))
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                $"rotation must be 0, 90, 180 or 270 degrees, not {rotation}.");
+        }
 
         if (!PathSafety.TryResolveRead(context.Workspace, path, out var fullPath, out var owner, out var error))
         {
@@ -206,6 +214,30 @@ public sealed class ViewImageTool : ITool
             }
         }
 
+        var rotated = false;
+        var rotatedWidth = 0;
+        var rotatedHeight = 0;
+        if (rotation > 0)
+        {
+            if (!ImageRotate.TryRotate(
+                    bytes,
+                    rotation,
+                    out var rotatedPng,
+                    out rotatedWidth,
+                    out rotatedHeight,
+                    out var rotateError))
+            {
+                return ToolResult.Failure(
+                    toolCall.Id,
+                    Name,
+                    $"'{relative}' ({sourceBytes.Length} bytes) could not be rotated: {rotateError}");
+            }
+
+            bytes = rotatedPng;
+            mediaType = "image/png";
+            rotated = true;
+        }
+
         if (bytes.Length > TextLimits.MaxImageBytes)
         {
             return ToolResult.Failure(
@@ -238,6 +270,13 @@ public sealed class ViewImageTool : ITool
         else
         {
             description = string.Create(CultureInfo.InvariantCulture, $"{displayType} · {sourceBytes.Length} bytes");
+        }
+
+        if (rotated)
+        {
+            description = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{description}, rotated {rotation}° to {rotatedWidth} × {rotatedHeight}");
         }
 
         // Before the budget, and after the read, and both are deliberate: a duplicate can only be recognised by its

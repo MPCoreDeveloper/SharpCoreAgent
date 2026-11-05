@@ -120,9 +120,9 @@ sniff and that is a different door.
 
 ## Resize amendment (T028)
 
-`view_image` now takes an optional `max_dimension` (64–4096). It is a request, not a policy: without it the bytes are
-the file's own, and with it `ImageResize` decodes through SkiaSharp, scales by the smaller ratio, re-encodes PNG and
-names the rendered size in the answer. A picture that already fits is returned untouched. An undecodable file or a
-number outside the range is a failed `ToolResult`. Rotation is deliberately not implied by this argument; it remains
-T028b.
+`view_image` now takes an optional `max_dimension` (64–4096) and an optional `rotation` (90/180/270). They are requests,
+not a policy: without them the bytes are the file's own; with them `ImageResize` and `ImageRotate` decode through
+SkiaSharp, apply the downscale and then the clockwise turn, re-encode PNG and name the rendered size in the answer. A
+picture that already fits is returned untouched when no transformation is asked for. An undecodable file or a number
+outside the range is a failed `ToolResult`. Arbitrary rotation angles are refused; only quarter turns are supported.
 
