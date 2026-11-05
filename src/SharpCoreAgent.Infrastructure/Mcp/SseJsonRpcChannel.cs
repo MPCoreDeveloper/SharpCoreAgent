@@ -25,6 +25,7 @@ internal sealed class SseJsonRpcChannel : IJsonRpcChannel
     private readonly Uri _endpoint;
     private readonly HttpClient _client;
     private readonly Action<string>? _log;
+    private readonly string? _accessToken;
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _waiters = new();
     private readonly TaskCompletionSource<Uri> _postEndpoint =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -40,10 +41,11 @@ internal sealed class SseJsonRpcChannel : IJsonRpcChannel
     /// <summary>Creates the production channel over an explicit SSE endpoint.</summary>
     /// <param name="endpoint">The URL that opens the event stream.</param>
     /// <param name="log">Receives diagnostics.</param>
+    /// <param name="accessToken">The OAuth bearer token, or null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> is null.</exception>
     /// <exception cref="ArgumentException">The endpoint is not an allowed http or https URL.</exception>
-    public SseJsonRpcChannel(Uri endpoint, Action<string>? log = null)
-        : this(endpoint, log, handler: null)
+    public SseJsonRpcChannel(Uri endpoint, Action<string>? log = null, string? accessToken = null)
+        : this(endpoint, log, handler: null, accessToken)
     {
     }
 
@@ -51,7 +53,12 @@ internal sealed class SseJsonRpcChannel : IJsonRpcChannel
     /// <param name="endpoint">The URL that opens the event stream.</param>
     /// <param name="log">Receives diagnostics.</param>
     /// <param name="handler">The handler, or null for the production socket handler.</param>
-    internal SseJsonRpcChannel(Uri endpoint, Action<string>? log, HttpMessageHandler? handler)
+    /// <param name="accessToken">The OAuth bearer token, or null.</param>
+    internal SseJsonRpcChannel(
+        Uri endpoint,
+        Action<string>? log,
+        HttpMessageHandler? handler,
+        string? accessToken = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         if (endpoint.Scheme != Uri.UriSchemeHttps &&
@@ -64,6 +71,7 @@ internal sealed class SseJsonRpcChannel : IJsonRpcChannel
 
         _endpoint = endpoint;
         _log = log;
+        _accessToken = accessToken;
         _client = handler is null
             ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true)
             : new HttpClient(handler, disposeHandler: true);
@@ -182,6 +190,11 @@ internal sealed class SseJsonRpcChannel : IJsonRpcChannel
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, _endpoint);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+            if (_accessToken is { Length: > 0 } token)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
+
             using var response = await _client
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _closed.Token)
                 .ConfigureAwait(false);
@@ -353,6 +366,11 @@ internal sealed class SseJsonRpcChannel : IJsonRpcChannel
             Content = new StringContent(message.ToJsonString(), new UTF8Encoding(false), "application/json"),
         };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (_accessToken is { Length: > 0 } token)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
 
         using var response = await _client
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)

@@ -230,5 +230,36 @@ public sealed class McpOptionTests
         Assert.Contains("--mcp-sse-url", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OAuthFlagsBuildAValidatedFlow()
+    {
+        var options = CliOptions.Parse(
+            [
+                "run", "hello",
+                "--mcp-url", "https://mcp.example/rpc",
+                "--mcp-oauth-client", "sharp",
+                "--mcp-oauth-auth", "https://id.example/authorize",
+                "--mcp-oauth-token", "https://id.example/token",
+                "--mcp-oauth-scope", "mcp.read",
+            ],
+            NoEnvironment);
+
+        var oauth = options.CreateMcpOAuth();
+        Assert.Equal("sharp", oauth.ClientId);
+        Assert.Equal("https://id.example/authorize", oauth.AuthorizationEndpoint.AbsoluteUri);
+        Assert.Equal("mcp.read", oauth.Scope);
+    }
+
+    [Fact]
+    public void APartialOAuthConfigurationIsRefused()
+    {
+        var options = CliOptions.Parse(
+            ["run", "hello", "--mcp-oauth-client", "sharp"],
+            NoEnvironment);
+
+        var error = Assert.Throws<CliUsageException>(() => options.CreateMcpOAuth());
+        Assert.Contains("client id, an authorization URL and a token URL", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 }

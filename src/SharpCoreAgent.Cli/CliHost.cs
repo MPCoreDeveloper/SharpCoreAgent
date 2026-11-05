@@ -117,9 +117,18 @@ internal static class CliHost
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(error);
 
-        if (options.McpServers.Count == 0 && options.McpUrls.Count == 0 && options.McpSseUrls.Count == 0 && !options.Browser)
+        if (options.McpServers.Count == 0 && options.McpUrls.Count == 0 && options.McpSseUrls.Count == 0 && !options.HasMcpOAuth && !options.Browser)
         {
             return true;
+        }
+
+        if (options.HasMcpOAuth && options.McpUrls.Count == 0 && options.McpSseUrls.Count == 0)
+        {
+            await error.WriteLineAsync(
+                "error: the MCP OAuth flags need --mcp-url or --mcp-sse-url; they do not apply to a stdio server."
+                    .AsMemory(),
+                cancellationToken).ConfigureAwait(false);
+            return false;
         }
 
         if (provider.GetService<McpToolHost>() is not { } host)
@@ -138,10 +147,24 @@ internal static class CliHost
 
         try
         {
+            if (options.HasMcpOAuth)
+            {
+                var oauth = options.CreateMcpOAuth();
+                var flow = new McpOAuth(oauth);
+                var token = await flow.AuthorizeAsync(
+                    url => error.WriteLine($"mcp oauth: open {url}"),
+                    cancellationToken).ConfigureAwait(false);
+                host.UseAccessToken(token);
+            }
+
             await host.StartAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch (McpStartupException ex)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is McpStartupException or McpOAuthException or CliUsageException or ArgumentException)
         {
             await error.WriteLineAsync($"error: {ex.Message}".AsMemory(), cancellationToken).ConfigureAwait(false);
             return false;

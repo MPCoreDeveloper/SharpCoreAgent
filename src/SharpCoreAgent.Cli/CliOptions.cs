@@ -324,6 +324,25 @@ internal sealed record CliOptions
     /// <summary>Gets the legacy HTTP+SSE MCP endpoints this invocation talks to.</summary>
     public IReadOnlyList<string> McpSseUrls { get; init; } = [];
 
+    /// <summary>Gets the public OAuth client identifier, when the remote MCP endpoints need one.</summary>
+    public string? McpOAuthClientId { get; init; }
+
+    /// <summary>Gets the OAuth authorization endpoint, when the remote MCP endpoints need one.</summary>
+    public string? McpOAuthAuthorizeUrl { get; init; }
+
+    /// <summary>Gets the OAuth token endpoint, when the remote MCP endpoints need one.</summary>
+    public string? McpOAuthTokenUrl { get; init; }
+
+    /// <summary>Gets the optional OAuth scopes.</summary>
+    public string? McpOAuthScope { get; init; }
+
+    /// <summary>Gets a value indicating whether any OAuth flag was named.</summary>
+    public bool HasMcpOAuth =>
+        McpOAuthClientId is not null ||
+        McpOAuthAuthorizeUrl is not null ||
+        McpOAuthTokenUrl is not null ||
+        McpOAuthScope is not null;
+
     /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
     public McpSamplingPolicy McpSampling { get; init; } = McpSamplingPolicy.Deny;
 
@@ -502,6 +521,46 @@ internal sealed record CliOptions
     /// walk when it is on, so the refresh cannot outlive a browser's patience.
     /// </remarks>
     public bool UiRefresh { get; init; }
+
+    /// <summary>
+    /// Builds the OAuth settings the remote MCP endpoints will use.
+    /// </summary>
+    /// <returns>The validated settings.</returns>
+    /// <exception cref="CliUsageException">A required flag is missing or an endpoint is invalid.</exception>
+    public McpOAuthOptions CreateMcpOAuth()
+    {
+        if (string.IsNullOrWhiteSpace(McpOAuthClientId) ||
+            string.IsNullOrWhiteSpace(McpOAuthAuthorizeUrl) ||
+            string.IsNullOrWhiteSpace(McpOAuthTokenUrl))
+        {
+            throw new CliUsageException(
+                "--mcp-oauth needs a client id, an authorization URL and a token URL.",
+                "For example: --mcp-oauth-client sharp --mcp-oauth-auth https://id.example/authorize --mcp-oauth-token https://id.example/token");
+        }
+
+        if (!Uri.TryCreate(McpOAuthAuthorizeUrl, UriKind.Absolute, out var authorize) ||
+            !Uri.TryCreate(McpOAuthTokenUrl, UriKind.Absolute, out var token))
+        {
+            throw new CliUsageException(
+                "the OAuth endpoints must be absolute URLs.",
+                "Use https, or http only for a loopback authorization server.");
+        }
+
+        try
+        {
+            return new McpOAuthOptions
+            {
+                ClientId = McpOAuthClientId,
+                AuthorizationEndpoint = authorize,
+                TokenEndpoint = token,
+                Scope = McpOAuthScope,
+            }.Validate();
+        }
+        catch (ArgumentException ex)
+        {
+            throw new CliUsageException(ex.Message, "Use https, or http only for a loopback authorization server.");
+        }
+    }
 
     /// <summary>Projects the command line onto the container's options.</summary>
     /// <returns>The options <c>AddSharpCoreAgent</c> consumes.</returns>
@@ -1953,10 +2012,10 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectMcpFlags(CliOptions options)
     {
-        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.McpSseUrls.Count > 0 || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
+        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.McpSseUrls.Count > 0 || options.HasMcpOAuth || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
         {
             throw new CliUsageException(
-                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too; --mcp-sse-url applies there too.",
+                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too; --mcp-sse-url applies there too; the --mcp-oauth flags apply there too.",
                 "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
         }
     }
@@ -2236,6 +2295,18 @@ internal sealed record CliOptions
                 }
 
                 return options with { McpSseUrls = [.. options.McpSseUrls, sseUrl] };
+
+            case "--mcp-oauth-client":
+                return options with { McpOAuthClientId = TakeValue(args, ref index, name) };
+
+            case "--mcp-oauth-auth":
+                return options with { McpOAuthAuthorizeUrl = TakeValue(args, ref index, name) };
+
+            case "--mcp-oauth-token":
+                return options with { McpOAuthTokenUrl = TakeValue(args, ref index, name) };
+
+            case "--mcp-oauth-scope":
+                return options with { McpOAuthScope = TakeValue(args, ref index, name) };
 
             case "--mcp-sampling":
                 var sampling = TakeValue(args, ref index, name);

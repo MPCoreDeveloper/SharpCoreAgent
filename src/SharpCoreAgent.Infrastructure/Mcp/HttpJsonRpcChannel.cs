@@ -23,6 +23,7 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
     private readonly Uri _endpoint;
     private readonly HttpClient _client;
     private readonly Action<string>? _log;
+    private readonly string? _accessToken;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private string? _sessionId;
     private long _nextId;
@@ -31,18 +32,19 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
     /// <summary>Creates the production channel over an explicit endpoint.</summary>
     /// <param name="endpoint">The MCP endpoint.</param>
     /// <param name="log">Receives diagnostics.</param>
+    /// <param name="accessToken">The OAuth bearer token, or null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> is null.</exception>
     /// <exception cref="ArgumentException">The endpoint is not an allowed http or https URL.</exception>
-    public HttpJsonRpcChannel(Uri endpoint, Action<string>? log = null)
-        : this(endpoint, log, handler: null)
+    public HttpJsonRpcChannel(Uri endpoint, Action<string>? log = null, string? accessToken = null)
+        : this(endpoint, log, handler: null, accessToken)
     {
     }
 
-    /// <summary>Creates a channel over a supplied handler, for tests and embedders.</summary>
-    /// <param name="endpoint">The MCP endpoint.</param>
-    /// <param name="log">Receives diagnostics.</param>
-    /// <param name="handler">The handler, or null for the production socket handler.</param>
-    internal HttpJsonRpcChannel(Uri endpoint, Action<string>? log, HttpMessageHandler? handler)
+    internal HttpJsonRpcChannel(
+        Uri endpoint,
+        Action<string>? log,
+        HttpMessageHandler? handler,
+        string? accessToken = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         if (endpoint.Scheme != Uri.UriSchemeHttps &&
@@ -55,6 +57,7 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
 
         _endpoint = endpoint;
         _log = log;
+        _accessToken = accessToken;
         _client = handler is null
             ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true)
             : new HttpClient(handler, disposeHandler: true);
@@ -194,6 +197,11 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        if (_accessToken is { Length: > 0 } token)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
         if (_sessionId is { Length: > 0 } session)
         {
             request.Headers.TryAddWithoutValidation("Mcp-Session-Id", session);

@@ -125,7 +125,13 @@ next pass has a real list rather than a memory.
   endpoint and carries every answer; the channel enforces the same https/loopback rule, no redirects, an
   8 MiB event ceiling, and a 20-second endpoint wait. `SseJsonRpcChannelTests` covers the answer and a
   full connection handshake; OAuth is not part of it.
-- [ ] T035c OAuth for remote transports. The two transport handshakes are done; delegated authorization remains.
+- [X] T035c OAuth 2.1 authorization code + PKCE. **Closed.** The `--mcp-oauth-*` flags name the client,
+  authorization endpoint, token endpoint and optional scope; `McpOAuth` binds a loopback callback, prints
+  the URL, verifies state, sends an S256 challenge, exchanges the code and returns an in-memory bearer
+  token that both remote channels send. `McpOAuthTests` covers the exchange and a state mismatch; no
+  browser is started and nothing is persisted.
+- [ ] T035d OAuth discovery, dynamic registration, refresh tokens and persistence. The explicit
+  authorization-code flow is done; these production-hardening pieces remain.
 - [ ] T037 A declarative server list read from a file.
 
 ## Amendment — T036 supervision (2026-11-05)

@@ -66,6 +66,10 @@ internal static class HelpText
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --mcp-url <url>          run, chat   none        talk streamable HTTP to this MCP endpoint; https, or http on loopback; repeatable
           --mcp-sse-url <url>      run, chat   none        talk legacy HTTP+SSE to this MCP endpoint; https, or http on loopback; repeatable
+          --mcp-oauth-client <id>  run, chat   —           public OAuth client id for the remote endpoints
+          --mcp-oauth-auth <url>   run, chat   —           OAuth authorization endpoint the browser opens
+          --mcp-oauth-token <url>  run, chat   —           OAuth token endpoint the code is exchanged at
+          --mcp-oauth-scope <s>    run, chat   —           space-separated scopes to request
           --mcp-sampling <policy>  run, chat   deny        deny, first or unrestricted; first answers one server sampling request per connection
           --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
@@ -130,6 +134,13 @@ internal static class HelpText
           the server names, and keeps answers on that stream. It has the same https/loopback rule, redirect
           refusal and tool naming as --mcp-url; use it only for a server that has not moved to streamable
           HTTP.
+
+          The --mcp-oauth flags add OAuth 2.1 authorization code with PKCE to a remote endpoint. The
+          client opens a loopback callback, prints the authorization URL for you to open, verifies state,
+          and exchanges the code at the token endpoint; the access token stays in memory for this process
+          and is sent as a bearer credential. Dynamic registration, discovery, refresh tokens and token
+          persistence are not implemented.
+
 
 
 

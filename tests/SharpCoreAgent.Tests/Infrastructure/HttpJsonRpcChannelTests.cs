@@ -100,6 +100,31 @@ public sealed class HttpJsonRpcChannelTests
     }
 
     [Fact]
+    public async Task AnAccessTokenIsSentAsABearerCredential()
+    {
+        string? authorization = null;
+        var handler = new ScriptedHandler(request =>
+        {
+            authorization = request.Headers.Authorization?.ToString();
+            return Json(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = Id(request),
+                ["result"] = new JsonObject(),
+            });
+        });
+
+        await using var channel = new HttpJsonRpcChannel(
+            new Uri("https://mcp.example/rpc"),
+            null,
+            handler,
+            "access-42");
+        await channel.RequestAsync("tools/list", null, TimeSpan.FromSeconds(5), Token);
+
+        Assert.Equal("Bearer access-42", authorization);
+    }
+
+    [Fact]
     public async Task AConnectionCompletesItsHandshakeOverHttp()
     {
         var handler = new ScriptedHandler(request =>

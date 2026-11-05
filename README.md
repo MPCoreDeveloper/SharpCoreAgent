@@ -257,6 +257,10 @@ keep working on the file that needs repairing.
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--mcp-url <url>` | run, chat | none — talk streamable HTTP to this explicit endpoint; `https`, or `http` on loopback; repeatable |
 | `--mcp-sse-url <url>` | run, chat | none — talk legacy HTTP+SSE to this explicit endpoint; `https`, or `http` on loopback; repeatable |
+| `--mcp-oauth-client <id>` | run, chat | none — public OAuth client id for the remote endpoints |
+| `--mcp-oauth-auth <url>` | run, chat | none — OAuth 2.1 authorization endpoint |
+| `--mcp-oauth-token <url>` | run, chat | none — OAuth token endpoint |
+| `--mcp-oauth-scope <scope>` | run, chat | none — optional space-separated scopes |
 | `--mcp-sampling <policy>` | run, chat | `deny` — `deny`, `first` (one request per connection) or `unrestricted` (rate-limited); a server may ask the session's model to sample |
 | `--browser` | run, chat | off — start the Playwright MCP server with Edge on Windows or Chromium elsewhere; adds `npx_browser_*` tools |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
@@ -639,6 +643,11 @@ prompts it advertises arrive under the same generated names as a stdio server.
 For a server that still speaks the older handshake, `--mcp-sse-url https://mcp.example/sse` opens the GET
 event stream, reads the POST endpoint from its `endpoint` event, and receives every answer on that same
 stream. The URL rule is identical; it is a compatibility path, not a fallback.
+
+For an endpoint that requires delegated authorization, the `--mcp-oauth-*` flags run OAuth 2.1 authorization
+code with PKCE. The client opens a loopback callback, prints an authorization URL for you to open, verifies
+the returned state, and exchanges the code at the token endpoint; the bearer token lives only in memory for
+that process. Discovery, dynamic registration, refresh tokens and persistence are deliberately not included.
 
 A server may also ask the client to sample, which spends the session's model budget without the model
 deciding to. That is off unless the developer says otherwise: `--mcp-sampling deny` (the default) answers

@@ -251,10 +251,11 @@ the tree kill — and the suite is 939 tests, all green with no compiler warning
 T034b, T035 and T037 open as the record of what the round refused: resources and prompts, remote
 transports, and a declarative server list. T034a sampling and T034b resources/prompts landed on 2026-11-05;
 sampling uses `--mcp-sampling deny|first|unrestricted`, and a server that advertises resources or prompts
-gains the read-only `<server>_resources` and `<server>_prompts` bridges. T035a streamable HTTP and T035b
-legacy HTTP+SSE landed the same day as `--mcp-url` and `--mcp-sse-url`, with `HttpJsonRpcChannelTests`,
-`SseJsonRpcChannelTests`, `McpSamplingTests`, `McpCatalogTests` and `McpProcessTests` for evidence; OAuth
-remains open.
+gains the read-only `<server>_resources` and `<server>_prompts` bridges. T035a streamable HTTP, T035b
+legacy HTTP+SSE and T035c OAuth authorization-code + PKCE landed the same day as `--mcp-url`,
+`--mcp-sse-url` and the `--mcp-oauth-*` flags, with `HttpJsonRpcChannelTests`, `SseJsonRpcChannelTests`,
+`McpOAuthTests`, `McpSamplingTests`, `McpCatalogTests` and `McpProcessTests` for evidence; discovery,
+registration, refresh and persistence remain open.
 
 ## Round 4 — `010-browser` (landed 2026-10-30 as `a447a4d`)
 

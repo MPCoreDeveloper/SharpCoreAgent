@@ -61,6 +61,24 @@ public sealed class McpTransportException : Exception
 }
 
 /// <summary>
+/// The OAuth flow could not produce an access token.
+/// </summary>
+/// <remarks>
+/// A refused authorization, a mismatched state, a callback timeout and a token endpoint that answers without an
+/// access token are all the same outcome to the calling command: the remote server cannot be used. The message is
+/// written for the developer who has to fix the authorization server, not for a model.
+/// </remarks>
+public sealed class McpOAuthException : Exception
+{
+    /// <summary>Creates the failure.</summary>
+    /// <param name="message">Why the flow could not finish.</param>
+    public McpOAuthException(string message)
+        : base(message)
+    {
+    }
+}
+
+/// <summary>
 /// A sampling request the client refuses, or cannot answer.
 /// </summary>
 /// <remarks>

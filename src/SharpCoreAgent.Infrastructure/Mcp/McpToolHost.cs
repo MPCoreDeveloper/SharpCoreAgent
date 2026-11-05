@@ -130,6 +130,20 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     public IReadOnlyList<ITool> Tools => _tools;
 
     /// <summary>
+    /// Supplies the OAuth access token the remote channels send as a bearer credential.
+    /// </summary>
+    /// <param name="accessToken">The token returned by <see cref="McpOAuth.AuthorizeAsync"/>.</param>
+    /// <exception cref="ArgumentException"><paramref name="accessToken"/> is blank.</exception>
+    public void UseAccessToken(string accessToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+        foreach (var connection in _connections)
+        {
+            connection.UseAccessToken(accessToken);
+        }
+    }
+
+    /// <summary>
     /// Sets where server stderr is echoed while <c>--verbose</c> is in force.
     /// </summary>
     /// <param name="sink">The writer, or null to discard.</param>

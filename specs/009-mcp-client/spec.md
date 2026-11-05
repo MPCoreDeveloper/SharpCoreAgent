@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033, T034a, T034b, T035a, T035b and T036; T035c and T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033, T034a, T034b, T035a, T035b, T035c and T036; T035d and T037 deferred, listed in `tasks.md`)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -150,6 +150,10 @@ Acceptance:
 - **FR-021** `--mcp-sse-url` talks the legacy HTTP+SSE handshake: a GET event stream supplies the POST
   endpoint and every answer, with the same URL rule, redirect refusal, 8 MiB event ceiling and
   supervision as `--mcp-url`. The two remote flags are explicit and never fall back to each other.
+- **FR-022** The `--mcp-oauth-*` flags run OAuth 2.1 authorization code with PKCE against explicit
+  endpoints: a loopback callback, printed authorization URL, S256 challenge, state check, token
+  exchange and an in-memory bearer token. No browser is started, no discovery or dynamic registration
+  happens, and no token is persisted. Missing pieces are a usage error and a stdio server refuses them.
 
 ## Non-functional requirements
 
@@ -164,9 +168,8 @@ Acceptance:
 
 - **MCP logging.** One more capability of the same protocol, and it is not a tool the model calls.
   Sampling, resources and prompts are now covered by T034a and T034b and `--mcp-sampling`.
-- **Remote transports beyond streamable HTTP and legacy SSE (OAuth).** T035a and T035b added the two
-  transport handshakes behind explicit flags; an OAuth flow is a different authority model and remains
-  open.
+- **Remote OAuth beyond explicit authorization code + PKCE.** T035c added the user-delegated flow behind
+  explicit endpoints; discovery, dynamic registration, refresh tokens and token persistence remain open.
 - **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five
   read-only evidence tools for one workspace. Exposing the agent's write and process surface to another
   process is a different product with a different approval boundary.
