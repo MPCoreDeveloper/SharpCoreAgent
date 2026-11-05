@@ -136,6 +136,11 @@ internal sealed class McpArtefactSink
             return Refuse(artefact, Ceiling);
         }
 
+        if (EnsureRoom(bytes.Length) is { } retention)
+        {
+            return Refuse(artefact, retention);
+        }
+
         if (!Extensions.TryGetValue(artefact.MimeType, out var extension))
         {
             return Refuse(
@@ -166,6 +171,84 @@ internal sealed class McpArtefactSink
         var reported = _workspace.ToRelative(fullPath);
         _written.Add(reported);
         return Saved(artefact.Description, reported, bytes.Length);
+    }
+
+    /// <summary>
+    /// Makes room for one new artefact by deleting the oldest files in the dedicated folder.
+    /// </summary>
+    /// <param name="incoming">The decoded size of the file about to be written.</param>
+    /// <returns>A refusal sentence when room could not be made, or <see langword="null"/> when it could.</returns>
+    /// <remarks>
+    /// The policy is deliberately simple: a 256 MiB ceiling, oldest first, no deduplication. A file that cannot be
+    /// deleted — locked by a reader, or owned by another account — stays, and the new artefact is refused with the
+    /// measured total rather than silently pushing the folder over its ceiling. Nothing outside the artefacts folder is
+    /// touched.
+    /// </remarks>
+    private string? EnsureRoom(long incoming)
+    {
+        var folder = Path.Combine(_workspace.Root, Folder.Replace('/', Path.DirectorySeparatorChar));
+        if (!Directory.Exists(folder))
+        {
+            return null;
+        }
+
+        List<FileInfo> files;
+        try
+        {
+            files = [.. new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.TopDirectoryOnly)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"the artefacts directory could not be read ({ex.Message})");
+        }
+
+        var total = 0L;
+        foreach (var file in files)
+        {
+            try
+            {
+                total += file.Length;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A file that vanished between the listing and the size read is not part of the total.
+            }
+        }
+
+        if (total + incoming <= _options.MaxArtefactDirectoryBytes)
+        {
+            return null;
+        }
+
+        foreach (var file in files
+            .Where(file => file.Exists)
+            .OrderBy(file => file.LastWriteTimeUtc)
+            .ThenBy(file => file.Name, StringComparer.Ordinal))
+        {
+            if (total + incoming <= _options.MaxArtefactDirectoryBytes)
+            {
+                break;
+            }
+
+            try
+            {
+                var length = file.Length;
+                file.Delete();
+                total -= length;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Keep going: one locked file must not stop the older ones behind it from being reclaimed.
+            }
+        }
+
+        return total + incoming <= _options.MaxArtefactDirectoryBytes
+            ? null
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"the artefacts directory is {CodeIndexFormat.Size(total)} and adding {CodeIndexFormat.Size(incoming)} would exceed its {CodeIndexFormat.Size(_options.MaxArtefactDirectoryBytes)} ceiling; the oldest files could not all be removed");
     }
 
     /// <summary>

@@ -161,10 +161,12 @@ Acceptance:
   `.bmp`. Any other `image/*` type is described with its type and not saved, because a file whose
   extension lies is worse than a sentence that tells the truth.
 - **FR-005** An existing file is never overwritten: if the name is taken, `<n>` advances until it is free.
-  Nothing is deleted, renamed or garbage-collected by this round.
+  The only deletion is the retention policy below, which removes the oldest files before a new one is written; it never
+  renames or overwrites a live file.
 - **FR-006** The ceilings are properties of the capability, on `McpClientOptions` beside the others and
-  validated like them: `MaxArtefactBytes` (decoded bytes, default 8 MiB, 1 KiB–64 MiB) and
-  `MaxArtefactsPerCall` (default 8, 1–64). Neither is a flag, for the reason the fetch ceilings are not.
+  validated like them: `MaxArtefactBytes` (decoded bytes, default 8 MiB, 1 KiB–64 MiB),
+  `MaxArtefactsPerCall` (default 8, 1–64) and `MaxArtefactDirectoryBytes` (default 256 MiB, 1 MiB–4 GiB, oldest-first
+  retention, no deduplication). None is a flag, for the reason the fetch ceilings are not.
 - **FR-007** A saved entry reads
   `[image: image/png · 48213 base64 characters → .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (36.4 KiB)]`,
   and an entry that was not saved keeps the description and names one reason:
@@ -212,8 +214,9 @@ Acceptance:
   looks, and the model reads the accessibility tree it already reads.
 - **Anything that is not an image file.** Video, audio, PDFs, HAR files, Playwright traces: described, not
   saved. A trace arrives as a link or a blob and this round does not become a download manager.
-- **Artefact lifetime.** No cleanup at session end, no retention policy, no `--artifacts` setting, no
-  `artifacts` subcommand, no `undo`. The directory grows; that is recorded, not hidden.
+- **Artefact lifetime.** A 256 MiB cap on the dedicated folder, oldest files deleted first, is the whole policy.
+  There is no session-end cleanup, no archive, no `--artifacts` setting, no `artifacts` subcommand, no `undo` and no
+  deduplication. The transcript keeps the path it recorded; a file that ages out is gone from disk.
 - **The server's own copies.** Its `--output-dir` is its business: we neither adopt, move nor delete what
   it wrote. Ours is the copy the transcript names.
 - **Re-encoding.** Bytes in, bytes out. No resizing, no thumbnailing, no format conversion, no metadata

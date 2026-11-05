@@ -162,8 +162,7 @@ temp workspace. Each test states the SC it answers.
   decision record stands and `--mcp` is the only door.
 - [ ] T032 PDF, video or audio artefacts, and any `application/*` type: the five image types are the whole
   table, and a format whose extension would lie is refused by name (FR-004).
-- [ ] T033 Retention, cleanup, deduplication or a size-bounded artefacts directory. Nothing is deleted,
-  renamed or collected by this round (FR-005).
+- [X] T033 Retention, cleanup, deduplication or a size-bounded artefacts directory. **Done in `049-artefact-retention`:** `MaxArtefactDirectoryBytes` defaults to 256 MiB, deletes the oldest files in `.sharpcoreagent/artifacts/` until the new one fits, and does no deduplication.
 - [ ] T034 An `artifacts` tool, a `/files` filter, or index visibility: `list_files` still cannot see
   `.sharpcoreagent` (FR-012).
 - [X] T035 Showing the image to the model as an image. Closed by `017-image-view` (`e69cbdc`), which is the round

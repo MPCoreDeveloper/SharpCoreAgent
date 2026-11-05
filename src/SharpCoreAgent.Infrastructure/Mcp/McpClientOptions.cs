@@ -67,6 +67,15 @@ public sealed record McpClientOptions
     /// </remarks>
     public int MaxArtefactsPerCall { get; init; } = 8;
 
+    /// <summary>Gets the maximum total size of the artefact directory. Default 256 MiB.</summary>
+    /// <remarks>
+    /// A browser server can run for days, and one screenshot per page is enough to fill a disk. The cap is enforced
+    /// before a new file is written: the oldest files in the dedicated artefacts folder are deleted until the new file
+    /// fits. There is no deduplication and no second copy: the folder is the record, and aging out its oldest entries is
+    /// cheaper than making the transcript unbounded.
+    /// </remarks>
+    public long MaxArtefactDirectoryBytes { get; init; } = 256L * 1024 * 1024;
+
     /// <summary>
     /// Checks every ceiling and returns this instance so it can be used inline.
     /// </summary>
@@ -91,6 +100,7 @@ public sealed record McpClientOptions
         Require(MaxStderrLines, 1, 10_000, nameof(MaxStderrLines));
         Require(MaxArtefactBytes, 1024, 64L * 1024 * 1024, nameof(MaxArtefactBytes));
         Require(MaxArtefactsPerCall, 1, 64, nameof(MaxArtefactsPerCall));
+        Require(MaxArtefactDirectoryBytes, 1024 * 1024, 4L * 1024 * 1024 * 1024, nameof(MaxArtefactDirectoryBytes));
         return this;
     }
 

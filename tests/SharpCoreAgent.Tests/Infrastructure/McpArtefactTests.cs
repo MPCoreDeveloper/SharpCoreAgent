@@ -217,6 +217,31 @@ public sealed class McpArtefactTests
             Path.GetFileName(Assert.Single(second.Files())));
     }
 
+    [Fact]
+    public async Task TheOldestArtefactsAreDeletedWhenTheFolderWouldExceedItsCeiling()
+    {
+        // T033: 256 MiB is the shipped default; this test uses 1 MiB so the policy is cheap to prove.
+        await using var harness = new Harness(
+            Content(Image("image/png", Png)),
+            new McpClientOptions { MaxArtefactDirectoryBytes = 1024 * 1024 });
+        Directory.CreateDirectory(harness.ArtefactFolder);
+
+        var oldest = Path.Combine(harness.ArtefactFolder, "oldest.png");
+        var newer = Path.Combine(harness.ArtefactFolder, "newer.png");
+        await File.WriteAllBytesAsync(oldest, new byte[600 * 1024], TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(newer, new byte[600 * 1024], TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(oldest, DateTime.UtcNow.AddMinutes(-10));
+        File.SetLastWriteTimeUtc(newer, DateTime.UtcNow.AddMinutes(-5));
+
+        var result = await harness.RunAsync(ApprovalMode.Ask);
+
+        Assert.False(result.IsError);
+        Assert.False(File.Exists(oldest), "the oldest file is the one the cap removes first");
+        Assert.True(File.Exists(newer), "the newer file stays");
+        Assert.Contains("→ ", result.Content, StringComparison.Ordinal);
+        Assert.Contains(harness.Files(), file => Path.GetFileName(file).EndsWith("-1.png", StringComparison.Ordinal));
+    }
+
     private static JsonObject Image(string mimeType, byte[] bytes) => new()
     {
         ["type"] = "image",
