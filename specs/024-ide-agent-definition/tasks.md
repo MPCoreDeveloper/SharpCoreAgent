@@ -51,6 +51,7 @@ the index with the same binary that wrote the file, so a stale index is one run 
 - [X] T022 `specs/000-parity-roadmap.md`: round 15, and the open-items table.
 - [X] T024 Read the VS Code task and custom-agent references and implement the formats. **Done in `056-ide-formats`:** `tasks.json` gains `type: "shell"`, `group: { kind: "build", isDefault: true }` and `problemMatcher: "$msCompile"`; `.github/agents/sharpcoreagent.agent.md` gains YAML `name`, `description` and `tools`, with `model` optional and omitted.
 - [X] T027 Add the repository-wide instructions file. **Done:** `ide instructions` prints or writes `.github/copilot-instructions.md` with the agent body and ownership marker.
+- [X] T028 Add the agent skill. **Done:** `ide skill` prints or writes `.github/skills/sharpcoreagent/SKILL.md` with YAML `name`/`description`, the agent body and ownership marker.
 - [X] T029 Add `mcp-servers` to the agent profile. **Done in this slice:** `mcp-servers: [sharpcoreagent]` is part of the YAML frontmatter as a list of server names.
   `tasks.json` gains `type: "shell"`, `group: { kind: "build", isDefault: true }` and `problemMatcher: "$msCompile"`;
   `.github/agents/sharpcoreagent.agent.md` gains YAML `name`, `description` and `tools`, with `model` optional and
