@@ -50,7 +50,7 @@ the index with the same binary that wrote the file, so a stale index is one run 
 - [X] T021 `dotnet build -c Release` at 0 warnings; `dotnet test -c Release --no-build`, with the delta recorded.
 - [X] T022 `specs/000-parity-roadmap.md`: round 15, and the open-items table.
 - [X] T024 Read the VS Code task and custom-agent references and implement the formats. **Done in `056-ide-formats`:** `tasks.json` gains `type: "shell"`, `group: { kind: "build", isDefault: true }` and `problemMatcher: "$msCompile"`; `.github/agents/sharpcoreagent.agent.md` gains YAML `name`, `description` and `tools`, with `model` optional and omitted.
-- [X] T025 Add `--force` to `ide --write` for profile and unmergeable task files. **Done in this slice:** `--force` is accepted on `ide` only; profile replacement and task-file replacement are explicit, and the normal no-marker/no-JSON refusals remain without it.
+- [X] T026 Add the reusable prompt file. **Done in this slice:** `ide prompt` prints or writes `.github/prompts/sharpcoreagent.prompt.md` with `mode: agent`, `description`, the existing agent body, and the ownership marker; `--force` follows the same explicit rule.
   `tasks.json` gains `type: "shell"`, `group: { kind: "build", isDefault: true }` and `problemMatcher: "$msCompile"`;
   `.github/agents/sharpcoreagent.agent.md` gains YAML `name`, `description` and `tools`, with `model` optional and
   omitted.

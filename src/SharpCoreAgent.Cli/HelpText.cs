@@ -37,6 +37,7 @@ internal static class HelpText
           sharpcoreagent mcp bench [options]           the twelve fixture questions, measured against the source
           sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
           sharpcoreagent ide agent [--write]           the agent profile that puts the index in an editor's picker
+          sharpcoreagent ide prompt [--write]          the reusable prompt for .github/prompts
           sharpcoreagent ide tasks [--write]           the task that rebuilds the index, in .vscode/tasks.json
           sharpcoreagent --help | --version
 
