@@ -477,6 +477,18 @@ public sealed class CliOptionsTests
         Assert.Throws<CliUsageException>(() => CliOptions.Parse(["models", "--no-verify"], NoEnvironment));
     }
 
+    [Fact]
+    public void AutoVerifyIsAnExplicitOptIn()
+    {
+        var on = CliOptions.Parse(["run", "build", "--auto-verify"], NoEnvironment);
+        var off = CliOptions.Parse(["run", "build"], NoEnvironment);
+
+        Assert.True(on.AutoVerify);
+        Assert.True(on.ToSharpCoreAgentOptions().ToAgentOptions().AutoVerify);
+        Assert.False(off.AutoVerify);
+        Assert.False(off.ToSharpCoreAgentOptions().ToAgentOptions().AutoVerify);
+    }
+
     private static string? NoEnvironment(string name) => null;
 
     private static bool NotInteractive() => false;

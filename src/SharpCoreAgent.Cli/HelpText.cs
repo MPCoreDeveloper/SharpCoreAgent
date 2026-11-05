@@ -60,7 +60,7 @@ internal static class HelpText
           --fsharp                 run, chat   off         also let file_diagnostics, uses_at and signature_at ask the F# type checker
           --no-csharp              run, chat   C# on       remove the C# compiler adapter and its three code-intelligence tools
           --no-git                 run, chat   Git on      remove the read-only git_status and git_diff evidence tools
-          --no-verify              run, chat   gate on     do not require dotnet_verify after a .NET edit for this run
+          --auto-verify            run, chat   off         run the verifier once automatically before asking the model to verify
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools

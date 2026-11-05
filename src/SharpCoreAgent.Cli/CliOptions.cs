@@ -352,6 +352,9 @@ internal sealed record CliOptions
     /// <summary>Gets a value indicating whether <c>--no-verify</c> disabled the edit-verification gate.</summary>
     public bool NoVerify { get; init; }
 
+    /// <summary>Gets a value indicating whether the loop may run a verifier automatically.</summary>
+    public bool AutoVerify { get; init; }
+
     /// <summary>Gets the per-request output ceiling.</summary>
     public int MaxOutputTokens { get; init; } = 8_000;
 
@@ -509,6 +512,7 @@ internal sealed record CliOptions
         MaxOutputTokensPerTurn = MaxOutputTokens,
         MaxTotalTokens = MaxTotalTokens,
         VerifyEdits = !NoVerify,
+        AutoVerify = AutoVerify,
         CompactAtContextFraction = CompactAtContextFraction,
         Temperature = Temperature,
         BaseUrl = BaseUrl,
@@ -2205,6 +2209,9 @@ internal sealed record CliOptions
 
             case "--max-total-tokens":
                 return options with { MaxTotalTokens = ParseLong(name, TakeValue(args, ref index, name)) };
+
+            case "--auto-verify":
+                return options with { AutoVerify = true };
 
             case "--no-verify":
                 return options with { NoVerify = true };

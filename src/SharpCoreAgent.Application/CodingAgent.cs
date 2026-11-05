@@ -342,6 +342,32 @@ public sealed class CodingAgent
             var gaps = state.UnverifiedGaps;
             if (_options.VerifyEdits && VerifyGate.IsRequired(session, gaps))
             {
+                if (_options.AutoVerify && !state.AutoVerified)
+                {
+                    state.AutoVerified = true;
+                    foreach (var gap in gaps)
+                    {
+                        if (_tools.Find(gap.ToolName) is null)
+                        {
+                            continue;
+                        }
+
+                        var call = new ToolCall(
+                            "auto-verify",
+                            gap.ToolName,
+                            "{}");
+                        var result = await InvokeAsync(session, call, state, sink, cancellationToken).ConfigureAwait(false);
+                        state.Add(result);
+                        session.Add(ChatMessage.FromToolResult(result));
+                    }
+
+                    if (state.UnverifiedGaps.Count == 0)
+                    {
+                        Log.TurnCompleted(_logger, state.Model.QualifiedName, state.Iterations, state.ResultCount, null);
+                        return state.Report(AgentOutcome.Completed, null, response.Message.Content);
+                    }
+                }
+
                 if (state.VerificationNudges < MaxVerificationNudges)
                 {
                     state.VerificationNudges++;
@@ -523,6 +549,9 @@ public sealed class CodingAgent
 
         /// <summary>Gets or sets how often the loop has asked the model to verify this turn.</summary>
         public int VerificationNudges { get; set; }
+
+        /// <summary>Gets or sets a value indicating whether this turn already used its automatic verifier attempt.</summary>
+        public bool AutoVerified { get; set; }
 
         /// <summary>
         /// Answers what the turn may still attach, for the one tool call about to run.

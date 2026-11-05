@@ -28,6 +28,9 @@ namespace SharpCoreAgent.Application;
 /// </remarks>
 public sealed record AgentOptions
 {
+    /// <summary>Gets a value indicating whether the loop may run a verifier automatically. Default false.</summary>
+    public bool AutoVerify { get; init; }
+
     /// <summary>Gets a value indicating whether the edit-verification gate is enabled. Default true.</summary>
     public bool VerifyEdits { get; init; } = true;
 

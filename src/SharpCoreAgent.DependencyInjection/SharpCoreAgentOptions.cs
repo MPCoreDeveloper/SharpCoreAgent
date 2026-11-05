@@ -82,6 +82,9 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets a value indicating whether the edit-verification gate is enabled. Default true.</summary>
     public bool VerifyEdits { get; init; } = true;
 
+    /// <summary>Gets a value indicating whether the loop may run a verifier automatically.</summary>
+    public bool AutoVerify { get; init; }
+
     /// <summary>Gets the per-request output token ceiling. Default 8 000.</summary>
     public int MaxOutputTokensPerTurn { get; init; } = 8_000;
 
@@ -214,7 +217,8 @@ public sealed record SharpCoreAgentOptions
             MaxIterations = MaxIterations,
             MaxOutputTokensPerTurn = MaxOutputTokensPerTurn,
             MaxTotalTokens = MaxTotalTokens,
-        VerifyEdits = VerifyEdits,
+            VerifyEdits = VerifyEdits,
+            AutoVerify = AutoVerify,
             CompactAtContextFraction = CompactAtContextFraction,
             MaxToolResultChars = MaxToolResultChars,
             Temperature = Temperature,
