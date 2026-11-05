@@ -39,6 +39,7 @@ internal static class IdeCommand
         return options.Ide switch
         {
             IdeAction.Tasks => await TasksAsync(options, output, error, cancellationToken).ConfigureAwait(false),
+            IdeAction.Prompt => await PromptAsync(options, output, error, cancellationToken).ConfigureAwait(false),
             _ => await AgentAsync(options, output, error, cancellationToken).ConfigureAwait(false),
         };
     }
@@ -73,6 +74,36 @@ internal static class IdeCommand
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"{AgentProfile.NotePrefix}{destination} (workspace scope: VS Code and the Copilot CLI read .github/agents; --write writes it there)"),
+            output,
+            error,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Prints or writes the reusable prompt.
+    /// </summary>
+    private static async Task<int> PromptAsync(
+        CliOptions options,
+        Stream output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        var destination = AgentPrompt.Destination(Path.GetFullPath(options.Workspace));
+
+        if (options.Write)
+        {
+            return await WriteAsync(
+                AgentPrompt.NotePrefix,
+                () => IdeFileWriter.WritePrompt(destination, AgentPrompt.Render(), options.Force),
+                error,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await PrintAsync(
+            AgentPrompt.Render(),
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{AgentPrompt.NotePrefix}{destination} (VS Code reads .github/prompts; --write writes it there)"),
             output,
             error,
             cancellationToken).ConfigureAwait(false);

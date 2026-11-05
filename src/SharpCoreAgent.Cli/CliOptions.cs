@@ -61,6 +61,9 @@ internal enum IdeAction
 
     /// <summary>The one task that rebuilds the index: <c>.vscode/tasks.json</c>.</summary>
     Tasks,
+
+    /// <summary>The reusable prompt: <c>.github/prompts/sharpcoreagent.prompt.md</c>.</summary>
+    Prompt,
 }
 
 /// <summary>What <c>mcp</c> was asked to do.</summary>
@@ -1458,16 +1461,17 @@ internal sealed record CliOptions
         {
             throw new CliUsageException(
                 "ide needs an action.",
-                "The actions are agent and tasks: sharpcoreagent ide agent --write");
+                "The actions are agent, prompt and tasks: sharpcoreagent ide agent --write");
         }
 
         var action = positionals[0].ToLowerInvariant() switch
         {
             "agent" => IdeAction.Agent,
             "tasks" => IdeAction.Tasks,
+            "prompt" => IdeAction.Prompt,
             _ => throw new CliUsageException(
                 $"'{positionals[0]}' is not an ide action.",
-                "The actions are agent and tasks."),
+                "The actions are agent, prompt and tasks."),
         };
 
         if (positionals.Count > 1)

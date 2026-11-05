@@ -66,6 +66,44 @@ internal static class IdeFileWriter
     }
 
     /// <summary>
+    /// Writes the reusable prompt, replacing a file this command wrote before.
+    /// </summary>
+    /// <param name="destination">The file, from <see cref="AgentPrompt.Destination"/>.</param>
+    /// <param name="content">The whole prompt, from <see cref="AgentPrompt.Render"/>.</param>
+    /// <param name="force">Whether a file not written by this command may be replaced.</param>
+    /// <returns>What was done and the note.</returns>
+    internal static (WriteOutcome Outcome, string Note) WritePrompt(string destination, string content, bool force = false)
+    {
+        if (!File.Exists(destination))
+        {
+            WorkspaceFileWriter.Save(destination, content);
+            return (WriteOutcome.Created, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{AgentPrompt.NotePrefix}wrote {destination} (created: a reusable prompt for this server's five tools)"));
+        }
+
+        var existing = WorkspaceFileWriter.ReadText(destination);
+        if (!force && !AgentPrompt.IsOurs(existing))
+        {
+            throw new WorkspaceWriteException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{destination} exists and was not written by this command, so it was left as it was; delete it, or move it aside, and run again."));
+        }
+
+        if (string.Equals(existing, content, StringComparison.Ordinal))
+        {
+            return (WriteOutcome.Unchanged, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{AgentPrompt.NotePrefix}{destination} already says this; nothing written"));
+        }
+
+        WorkspaceFileWriter.Save(destination, content);
+        return (WriteOutcome.Updated, string.Create(
+            CultureInfo.InvariantCulture,
+            $"{AgentPrompt.NotePrefix}wrote {destination} (updated: the prompt was there and its text changed)"));
+    }
+
+    /// <summary>
     /// Files the task into the workspace's task list, keeping every other task and every other key.
     /// </summary>
     /// <param name="destination">The file, from <see cref="WorkspaceTasks.Destination"/>.</param>
