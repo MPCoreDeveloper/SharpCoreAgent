@@ -57,13 +57,27 @@ public sealed class McpOAuth
     /// <exception cref="ArgumentNullException"><paramref name="showUrl"/> is null.</exception>
     /// <exception cref="McpOAuthException">The flow was refused, timed out or returned no token.</exception>
     /// <exception cref="OperationCanceledException">The caller cancelled.</exception>
-    public async Task<string> AuthorizeAsync(Action<string> showUrl, CancellationToken cancellationToken)
+    public async Task<string> AuthorizeAsync(Action<string> showUrl, CancellationToken cancellationToken) =>
+        (await AuthorizeTokenAsync(showUrl, cancellationToken).ConfigureAwait(false)).AccessToken;
+
+    /// <summary>
+    /// Runs the flow and returns the token record, including refresh material.
+    /// </summary>
+    /// <param name="showUrl">Receives the authorization URL the developer must open.</param>
+    /// <param name="cancellationToken">Cancels the wait for the callback.</param>
+    /// <returns>The access token and its refresh material.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="showUrl"/> is null.</exception>
+    /// <exception cref="McpOAuthException">The flow was refused, timed out or returned no token.</exception>
+    /// <exception cref="OperationCanceledException">The caller cancelled.</exception>
+    public async Task<McpOAuthToken> AuthorizeTokenAsync(
+        Action<string> showUrl,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(showUrl);
 
         if (await TryStoredTokenAsync(cancellationToken).ConfigureAwait(false) is { } stored)
         {
-            return stored.AccessToken;
+            return ToToken(stored);
         }
 
         await ResolveMetadataAsync(cancellationToken).ConfigureAwait(false);
@@ -91,12 +105,39 @@ public sealed class McpOAuth
             var code = await WaitForCodeAsync(listener, state, cancellationToken).ConfigureAwait(false);
             var token = await ExchangeAsync(code, verifier, redirectUri, cancellationToken).ConfigureAwait(false);
             await SaveTokenAsync(token, cancellationToken).ConfigureAwait(false);
-            return token.AccessToken;
+            return ToToken(token);
         }
         finally
         {
             listener.Close();
         }
+    }
+
+    /// <summary>
+    /// Refreshes one token, using the token endpoint the flow discovered or was configured with.
+    /// </summary>
+    /// <param name="token">The token whose refresh token should be used.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The fresh token.</returns>
+    /// <exception cref="McpOAuthException">The token has no refresh token or the endpoint refused it.</exception>
+    public async Task<McpOAuthToken> RefreshAsync(McpOAuthToken token, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        if (string.IsNullOrWhiteSpace(token.RefreshToken))
+        {
+            throw new McpOAuthException("the OAuth token has no refresh token");
+        }
+
+        if (_tokenEndpoint is null)
+        {
+            await ResolveMetadataAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var stored = await RefreshStoredAsync(
+            new McpStoredToken(token.AccessToken, token.RefreshToken, token.ExpiresAt, token.ClientId),
+            cancellationToken).ConfigureAwait(false);
+        await SaveTokenAsync(stored, cancellationToken).ConfigureAwait(false);
+        return ToToken(stored);
     }
  
     private async Task ResolveMetadataAsync(CancellationToken cancellationToken)
@@ -153,7 +194,7 @@ public sealed class McpOAuth
 
         try
         {
-            var refreshed = await RefreshAsync(stored, cancellationToken).ConfigureAwait(false);
+            var refreshed = await RefreshStoredAsync(stored, cancellationToken).ConfigureAwait(false);
             await SaveTokenAsync(refreshed, cancellationToken).ConfigureAwait(false);
             return refreshed;
         }
@@ -164,7 +205,7 @@ public sealed class McpOAuth
         }
     }
 
-    private async Task<McpStoredToken> RefreshAsync(McpStoredToken stored, CancellationToken cancellationToken)
+    private async Task<McpStoredToken> RefreshStoredAsync(McpStoredToken stored, CancellationToken cancellationToken)
     {
         using var client = _handler is null
             ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true)
@@ -198,6 +239,9 @@ public sealed class McpOAuth
 
         return ReadToken(body, stored.RefreshToken);
     }
+
+    private static McpOAuthToken ToToken(McpStoredToken token) =>
+        new(token.AccessToken, token.RefreshToken, token.ExpiresAt, token.ClientId);
 
     private async Task<string> RegisterAsync(Uri redirectUri, CancellationToken cancellationToken)
     {

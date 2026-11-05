@@ -136,8 +136,10 @@ next pass has a real list rather than a memory.
   registration endpoint; `--mcp-oauth-file` stores the access and refresh tokens with user-only Unix
   permissions and refreshes an expired token on the next invocation. Tests cover discovery, registration,
   refresh and a persisted token.
-- [ ] T035e Mid-turn OAuth refresh and OpenID-specific discovery. Startup refresh is done; a token that
-  expires during one long turn is not yet refreshed between remote calls.
+- [X] T035e Mid-turn OAuth refresh and OpenID discovery fallback. **Closed.** A token source refreshes
+  between remote calls when the access token is near expiry, and metadata discovery falls back from
+  `oauth-authorization-server` to `openid-configuration`. `McpOAuthTests` covers the source refresh and
+  the HTTP channel asks the provider for each request.
 - [ ] T037 A declarative server list read from a file.
 
 ## Amendment — T036 supervision (2026-11-05)

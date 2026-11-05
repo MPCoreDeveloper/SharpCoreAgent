@@ -14,7 +14,11 @@ internal sealed record McpStoredToken(
     [property: JsonPropertyName("access_token")] string AccessToken,
     [property: JsonPropertyName("refresh_token")] string? RefreshToken,
     [property: JsonPropertyName("expires_at")] DateTimeOffset? ExpiresAt,
-    [property: JsonPropertyName("client_id")] string? ClientId);
+    [property: JsonPropertyName("client_id")] string? ClientId)
+{
+    public static McpStoredToken FromToken(McpOAuthToken token) =>
+        new(token.AccessToken, token.RefreshToken, token.ExpiresAt, token.ClientId);
+}
 
 /// <summary>
 /// Reads and writes one OAuth token file without ever including it in a log line.

@@ -151,10 +151,11 @@ internal static class CliHost
             {
                 var oauth = options.CreateMcpOAuth();
                 var flow = new McpOAuth(oauth);
-                var token = await flow.AuthorizeAsync(
+                var token = await flow.AuthorizeTokenAsync(
                     url => error.WriteLine($"mcp oauth: open {url}"),
                     cancellationToken).ConfigureAwait(false);
-                host.UseAccessToken(token);
+                var source = new McpOAuthTokenSource(flow, token, oauth.TokenFile);
+                host.UseAccessTokenProvider(source.GetAccessTokenAsync);
             }
 
             await host.StartAsync(cancellationToken).ConfigureAwait(false);

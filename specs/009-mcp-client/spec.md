@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033, T034a, T034b, T035a, T035b, T035c, T035d and T036; T035e and T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033, T034a, T034b, T035a–T035e and T036; T037 deferred, listed in `tasks.md`)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -151,12 +151,12 @@ Acceptance:
   endpoint and every answer, with the same URL rule, redirect refusal, 8 MiB event ceiling and
   supervision as `--mcp-url`. The two remote flags are explicit and never fall back to each other.
 - **FR-022** The `--mcp-oauth-*` flags run OAuth 2.1 authorization code with PKCE: a loopback
-  callback, printed authorization URL, S256 challenge, state check, token exchange and an in-memory
-  bearer token. `--mcp-oauth-issuer` or the first remote URL enables protected-resource and
-  authorization-server discovery; a registration endpoint enables dynamic public-client registration;
-  `--mcp-oauth-file` persists the access and refresh tokens and refreshes an expired access token on
-  the next invocation. No browser is started. Missing pieces are a usage error and a stdio server
-  refuses them.
+  callback, printed authorization URL, S256 challenge, state check, token exchange and a bearer token.
+  `--mcp-oauth-issuer` or the first remote URL enables protected-resource and authorization-server
+  discovery (with an OpenID metadata fallback); a registration endpoint enables dynamic public-client
+  registration; `--mcp-oauth-file` persists the access and refresh tokens. A token source refreshes an
+  expired access token on the next invocation and between remote calls during a turn. No browser is
+  started. Missing pieces are a usage error and a stdio server refuses them.
 
 ## Non-functional requirements
 
@@ -171,8 +171,8 @@ Acceptance:
 
 - **MCP logging.** One more capability of the same protocol, and it is not a tool the model calls.
   Sampling, resources and prompts are now covered by T034a and T034b and `--mcp-sampling`.
-- **Remote OAuth beyond T035d.** Discovery, dynamic registration, startup refresh and an explicit token
-  file are implemented; refreshing a token mid-turn and OpenID-specific discovery remain open.
+- **Remote OAuth beyond T035e.** The explicit authorization-code + PKCE flow, discovery, registration,
+  startup and mid-turn refresh, persistence and the OpenID metadata fallback are implemented.
 - **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five
   read-only evidence tools for one workspace. Exposing the agent's write and process surface to another
   process is a different product with a different approval boundary.

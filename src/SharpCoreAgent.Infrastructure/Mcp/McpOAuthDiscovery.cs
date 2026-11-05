@@ -40,17 +40,31 @@ internal static class McpOAuthDiscovery
     {
         var issuer = options.Issuer ?? await IssuerForResourceAsync(options.Resource!, handler, cancellationToken)
             .ConfigureAwait(false);
-        var metadataUrl = new Uri(issuer.AbsoluteUri.TrimEnd('/') + "/.well-known/oauth-authorization-server");
-        using var document = await GetAsync(metadataUrl, handler, cancellationToken).ConfigureAwait(false);
-        var root = document.RootElement;
+        var baseUrl = issuer.AbsoluteUri.TrimEnd('/');
+        var oauthUrl = new Uri(baseUrl + "/.well-known/oauth-authorization-server");
+        JsonDocument document;
+        try
+        {
+            document = await GetAsync(oauthUrl, handler, cancellationToken).ConfigureAwait(false);
+        }
+        catch (McpOAuthException)
+        {
+            var openIdUrl = new Uri(baseUrl + "/.well-known/openid-configuration");
+            document = await GetAsync(openIdUrl, handler, cancellationToken).ConfigureAwait(false);
+        }
 
-        var authorization = ReadEndpoint(root, "authorization_endpoint")
-            ?? throw new McpOAuthException("the OAuth metadata names no authorization endpoint");
-        var token = ReadEndpoint(root, "token_endpoint")
-            ?? throw new McpOAuthException("the OAuth metadata names no token endpoint");
-        var registration = ReadEndpoint(root, "registration_endpoint");
+        using (document)
+        {
+            var root = document.RootElement;
 
-        return new McpOAuthMetadata(authorization, token, registration);
+            var authorization = ReadEndpoint(root, "authorization_endpoint")
+                ?? throw new McpOAuthException("the OAuth metadata names no authorization endpoint");
+            var token = ReadEndpoint(root, "token_endpoint")
+                ?? throw new McpOAuthException("the OAuth metadata names no token endpoint");
+            var registration = ReadEndpoint(root, "registration_endpoint");
+
+            return new McpOAuthMetadata(authorization, token, registration);
+        }
     }
 
     private static async Task<Uri> IssuerForResourceAsync(

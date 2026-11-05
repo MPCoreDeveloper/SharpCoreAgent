@@ -142,8 +142,8 @@ internal static class HelpText
           client opens a loopback callback, prints the authorization URL for you to open, verifies state,
           exchanges the code at the token endpoint and sends the bearer token. It can discover metadata
           from the remote resource or --mcp-oauth-issuer, register a public client when no client id is
-          given, refresh an expired token on the next invocation, and persist tokens only in the explicit
-          the --mcp-oauth-file.
+          given, refresh an expired token on the next invocation or between remote calls in a long turn,
+          and persist tokens only in the explicit --mcp-oauth-file.
 
 
 

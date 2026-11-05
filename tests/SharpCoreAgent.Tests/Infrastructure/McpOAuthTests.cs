@@ -214,6 +214,32 @@ public sealed class McpOAuthTests
             .Select(pair => Uri.UnescapeDataString(pair[1]))
             .FirstOrDefault();
 
+    [Fact]
+    public async Task ATokenSourceRefreshesBetweenCalls()
+    {
+        var handler = new TokenHandler(request =>
+        {
+            Assert.Equal("/token", request.RequestUri!.AbsolutePath);
+            return Json("""{"access_token":"mid-turn","refresh_token":"refresh-2","expires_in":3600,"token_type":"Bearer"}""");
+        });
+
+        var flow = new McpOAuth(
+            new McpOAuthOptions
+            {
+                ClientId = "sharp",
+                AuthorizationEndpoint = new Uri("https://id.example/authorize"),
+                TokenEndpoint = new Uri("https://id.example/token"),
+                Timeout = TimeSpan.FromSeconds(10),
+            },
+            handler);
+        var source = new McpOAuthTokenSource(
+            flow,
+            new McpOAuthToken("stale", "refresh-1", DateTimeOffset.UtcNow.AddMinutes(-1), "sharp"));
+
+        Assert.Equal("mid-turn", await source.GetAccessTokenAsync(Token));
+        Assert.Equal("mid-turn", await source.GetAccessTokenAsync(Token));
+    }
+
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(body, Encoding.UTF8, "application/json"),

@@ -125,6 +125,33 @@ public sealed class HttpJsonRpcChannelTests
     }
 
     [Fact]
+    public async Task ATokenProviderIsCalledForEachRequest()
+    {
+        var tokens = new Queue<string>(["first", "second"]);
+        var authorizations = new List<string?>();
+        var handler = new ScriptedHandler(request =>
+        {
+            authorizations.Add(request.Headers.Authorization?.Parameter);
+            return Json(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = Id(request),
+                ["result"] = new JsonObject(),
+            });
+        });
+
+        await using var channel = new HttpJsonRpcChannel(
+            new Uri("https://mcp.example/rpc"),
+            null,
+            handler,
+            _ => Task.FromResult<string?>(tokens.Dequeue()));
+        await channel.RequestAsync("one", null, TimeSpan.FromSeconds(5), Token);
+        await channel.RequestAsync("two", null, TimeSpan.FromSeconds(5), Token);
+
+        Assert.Equal(["first", "second"], authorizations);
+    }
+
+    [Fact]
     public async Task AConnectionCompletesItsHandshakeOverHttp()
     {
         var handler = new ScriptedHandler(request =>

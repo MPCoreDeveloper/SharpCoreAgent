@@ -252,10 +252,10 @@ T034b, T035 and T037 open as the record of what the round refused: resources and
 transports, and a declarative server list. T034a sampling and T034b resources/prompts landed on 2026-11-05;
 sampling uses `--mcp-sampling deny|first|unrestricted`, and a server that advertises resources or prompts
 gains the read-only `<server>_resources` and `<server>_prompts` bridges. T035a streamable HTTP, T035b
-legacy HTTP+SSE, T035c OAuth authorization-code + PKCE and T035d discovery/registration/startup-refresh/
-persistence landed the same day as `--mcp-url`, `--mcp-sse-url` and the `--mcp-oauth-*` flags, with
-`HttpJsonRpcChannelTests`, `SseJsonRpcChannelTests`, `McpOAuthTests`, `McpSamplingTests`,
-`McpCatalogTests` and `McpProcessTests` for evidence; mid-turn refresh remains open.
+legacy HTTP+SSE and T035c–T035e OAuth authorization-code/PKCE, discovery, registration, startup and
+mid-turn refresh, persistence and OpenID fallback landed the same day as `--mcp-url`, `--mcp-sse-url`
+and the `--mcp-oauth-*` flags, with `HttpJsonRpcChannelTests`, `SseJsonRpcChannelTests`, `McpOAuthTests`,
+`McpSamplingTests`, `McpCatalogTests` and `McpProcessTests` for evidence.
 
 ## Round 4 — `010-browser` (landed 2026-10-30 as `a447a4d`)
 

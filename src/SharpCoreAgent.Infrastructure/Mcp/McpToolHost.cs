@@ -143,6 +143,18 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>Supplies a token source that can refresh while a turn is running.</summary>
+    /// <param name="provider">The provider.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="provider"/> is null.</exception>
+    public void UseAccessTokenProvider(Func<CancellationToken, Task<string?>> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        foreach (var connection in _connections)
+        {
+            connection.UseAccessTokenProvider(provider);
+        }
+    }
+
     /// <summary>
     /// Sets where server stderr is echoed while <c>--verbose</c> is in force.
     /// </summary>

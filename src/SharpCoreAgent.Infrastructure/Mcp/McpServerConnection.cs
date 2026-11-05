@@ -47,7 +47,7 @@ public sealed class McpServerConnection : IAsyncDisposable
     private readonly Uri? _endpoint;
     private readonly HttpMessageHandler? _handler;
     private readonly bool _legacySse;
-    private string? _accessToken;
+    private Func<CancellationToken, Task<string?>>? _tokenProvider;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
     private IJsonRpcChannel? _pipe;
@@ -185,7 +185,15 @@ public sealed class McpServerConnection : IAsyncDisposable
 
     /// <summary>Supplies the OAuth access token remote channels send.</summary>
     /// <param name="accessToken">The bearer token, or null to clear it.</param>
-    internal void UseAccessToken(string? accessToken) => _accessToken = accessToken;
+    internal void UseAccessToken(string? accessToken) =>
+        _tokenProvider = accessToken is { Length: > 0 } token
+            ? _ => Task.FromResult<string?>(token)
+            : null;
+
+    /// <summary>Supplies a token source that can refresh while a turn is running.</summary>
+    /// <param name="provider">The provider, or null to clear it.</param>
+    internal void UseAccessTokenProvider(Func<CancellationToken, Task<string?>>? provider) =>
+        _tokenProvider = provider;
 
     /// <summary>Gets a value indicating whether the server this connection started still answers.</summary>
     /// <remarks>
@@ -808,8 +816,8 @@ public sealed class McpServerConnection : IAsyncDisposable
         if (_endpoint is not null)
         {
             _pipe = _legacySse
-                ? new SseJsonRpcChannel(_endpoint, _log, _handler, _accessToken)
-                : new HttpJsonRpcChannel(_endpoint, _log, _handler, _accessToken);
+                ? new SseJsonRpcChannel(_endpoint, _log, _handler, _tokenProvider)
+                : new HttpJsonRpcChannel(_endpoint, _log, _handler, _tokenProvider);
             return;
         }
 

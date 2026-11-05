@@ -652,7 +652,8 @@ code with PKCE. The client opens a loopback callback, prints an authorization UR
 the returned state, and exchanges the code at the token endpoint. It can discover the authorization server
 from the remote resource or `--mcp-oauth-issuer`, register a public client when none is supplied, persist
 the access and refresh tokens in an explicit `--mcp-oauth-file`, and refresh an expired access token on the
-next invocation. The bearer token stays out of the transcript and out of the command line.
+next invocation or between remote calls in a long turn. The bearer token stays out of the transcript and
+out of the command line.
 
 A server may also ask the client to sample, which spends the session's model budget without the model
 deciding to. That is off unless the developer says otherwise: `--mcp-sampling deny` (the default) answers

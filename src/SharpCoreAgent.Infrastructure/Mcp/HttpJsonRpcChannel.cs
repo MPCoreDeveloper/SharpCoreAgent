@@ -23,7 +23,7 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
     private readonly Uri _endpoint;
     private readonly HttpClient _client;
     private readonly Action<string>? _log;
-    private readonly string? _accessToken;
+    private readonly Func<CancellationToken, Task<string?>>? _tokenProvider;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private string? _sessionId;
     private long _nextId;
@@ -36,7 +36,7 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
     /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> is null.</exception>
     /// <exception cref="ArgumentException">The endpoint is not an allowed http or https URL.</exception>
     public HttpJsonRpcChannel(Uri endpoint, Action<string>? log = null, string? accessToken = null)
-        : this(endpoint, log, handler: null, accessToken)
+        : this(endpoint, log, handler: null, Constant(accessToken))
     {
     }
 
@@ -45,6 +45,15 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
         Action<string>? log,
         HttpMessageHandler? handler,
         string? accessToken = null)
+        : this(endpoint, log, handler, Constant(accessToken))
+    {
+    }
+
+    internal HttpJsonRpcChannel(
+        Uri endpoint,
+        Action<string>? log,
+        HttpMessageHandler? handler,
+        Func<CancellationToken, Task<string?>>? tokenProvider)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         if (endpoint.Scheme != Uri.UriSchemeHttps &&
@@ -57,12 +66,17 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
 
         _endpoint = endpoint;
         _log = log;
-        _accessToken = accessToken;
+        _tokenProvider = tokenProvider;
         _client = handler is null
             ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true)
             : new HttpClient(handler, disposeHandler: true);
         _client.Timeout = Timeout.InfiniteTimeSpan;
     }
+
+    private static Func<CancellationToken, Task<string?>>? Constant(string? accessToken) =>
+        accessToken is { Length: > 0 } token
+            ? _ => Task.FromResult<string?>(token)
+            : null;
 
     /// <inheritdoc />
     public bool IsClosed => _disposed;
@@ -85,9 +99,9 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
         {
             var id = Interlocked.Increment(ref _nextId);
             var message = Envelope(id, method, parameters);
-            using var request = BuildRequest(message);
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             budget.CancelAfter(timeout);
+            using var request = await BuildRequestAsync(message, budget.Token).ConfigureAwait(false);
 
             HttpResponseMessage response;
             try
@@ -134,7 +148,9 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            using var request = BuildRequest(Envelope(null, method, parameters));
+            using var request = await BuildRequestAsync(
+                Envelope(null, method, parameters),
+                cancellationToken).ConfigureAwait(false);
             using var response = await _client
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
@@ -188,8 +204,12 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
         return message;
     }
 
-    private HttpRequestMessage BuildRequest(JsonObject message)
+    private async Task<HttpRequestMessage> BuildRequestAsync(JsonObject message, CancellationToken cancellationToken)
     {
+        var token = _tokenProvider is null
+            ? null
+            : await _tokenProvider(cancellationToken).ConfigureAwait(false);
+
         var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
             Content = new StringContent(message.ToJsonString(), new UTF8Encoding(false), "application/json"),
@@ -197,7 +217,7 @@ internal sealed class HttpJsonRpcChannel : IJsonRpcChannel
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        if (_accessToken is { Length: > 0 } token)
+        if (token is { Length: > 0 })
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
