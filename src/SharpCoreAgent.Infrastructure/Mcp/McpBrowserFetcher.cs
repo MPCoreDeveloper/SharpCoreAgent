@@ -22,7 +22,21 @@ public sealed class McpBrowserFetcher : IBrowserFetcher
         _host = host ?? throw new ArgumentNullException(nameof(host));
 
     /// <inheritdoc />
-    public bool IsAvailable => _host.Servers.Count > 0;
+    public bool IsAvailable
+    {
+        get
+        {
+            try
+            {
+                return _host.Started().Tools.Any(tool =>
+                    tool.Definition.Name.EndsWith("_browser_navigate", StringComparison.Ordinal));
+            }
+            catch (McpStartupException)
+            {
+                return false;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public async ValueTask<BrowserFetchResult> FetchAsync(
