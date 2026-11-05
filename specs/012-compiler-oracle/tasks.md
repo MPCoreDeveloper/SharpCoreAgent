@@ -81,6 +81,8 @@ has a real list rather than a memory.
   restores, resolves and links. The process stays the oracle.
 - [X] T024 `--no-verify`, a settings key, or an environment variable that turns the gate off. **Done for the CLI opt-out in this slice:** `--no-verify` is accepted on `run` and `chat` only and sets `AgentOptions.VerifyEdits=false` for that invocation. It is still not a settings key or environment variable.
 - [X] T025 Automatic retry of a failed build without the model's involvement. **Done as opt-in `--auto-verify`:** the loop runs the bound verifier once before its first nudge; default behaviour is unchanged.
-- [ ] T026 A verification requirement for scripts, SQL or notebooks. Each needs its own oracle, and none of
-  them has one in this repository yet.
+- [X] T026 A verification requirement for scripts, SQL or notebooks. **Closed against, with a regression
+  test:** no oracle exists, and a syntax-only answer would be a weaker gate wearing the word "verified".
+  `AFileWithNoOracleIsNotGated` pins that `.ps1`, `.sql` and `.ipynb` edits stay ungated until a real
+  runtime is chosen.
 - [X] T027 Gating `mcp serve`. **Closed as not applicable:** the server publishes five read-only index tools and runs no turn loop, so there is no edit or build for a gate to protect. A gate there would be dead code pretending to be a guarantee.

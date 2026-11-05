@@ -116,6 +116,10 @@ Acceptance:
   project that is not .NET is still a .NET edit, and the build says so.
 - **A second `Process.Start`.** The tool goes through `ShellProcessRegistry`, the constitution's shell host,
   so the count in Principle III does not change.
+- **Scripts, SQL and notebooks.** Each needs its own oracle, and none is here: shell syntax checks do not
+  prove a script runs, SQLite would reject valid SQL written for another dialect, and a notebook is code plus
+  outputs plus a kernel. Until one of those runtimes is chosen and wired through the shared process host, an
+  edit to `.ps1`, `.sh`, `.sql` or `.ipynb` is not gated rather than gated by a weaker answer.
 - **A `--no-verify` flag.** The gate is the point of the round; a flag that turns it off would be the first
   thing in a script and the last thing anyone remembers. `--mode plan` is the existing, honest passthrough.
 - **Retrying the build automatically.** Two nudges, then the truth about what happened.

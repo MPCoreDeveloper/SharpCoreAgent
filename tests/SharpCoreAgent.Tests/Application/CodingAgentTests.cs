@@ -702,6 +702,28 @@ public sealed class CodingAgentTests
             session.Messages.Count(message => message.Role == ChatRole.User && message.Content == PromptLibrary.VerifyNudge));
     }
 
+    [Theory]
+    [InlineData("deploy.ps1")]
+    [InlineData("query.sql")]
+    [InlineData("analysis.ipynb")]
+    public async Task AFileWithNoOracleIsNotGated(string path)
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(Descriptor, [ToolCallTurn("write_file")], [Completed("noted")]);
+        var session = Session(directory.Path);
+
+        // T026 is refused rather than implemented: a shell, SQL or notebook file has no verifier tool here. The
+        // absence is pinned so a future tool has to declare a real profile rather than inheriting a gate nobody can
+        // satisfy.
+        var report = await Agent(model, [EditingTool(path), VerifyingTool(passed: true)])
+            .RunTurnAsync(session, "edit it", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.False(report.IsUnverified);
+        Assert.Null(report.Detail);
+        Assert.DoesNotContain(session.Messages, message => message.Content == PromptLibrary.VerifyNudge);
+    }
+
     [Fact]
     public async Task ATurnThatEditsNoDotnetSourceIsNotGated()
     {
