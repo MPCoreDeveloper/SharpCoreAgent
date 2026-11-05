@@ -633,6 +633,12 @@ deciding to. That is off unless the developer says otherwise: `--mcp-sampling de
 input tokens per minute, with 25 000 output tokens per call. Only text content is accepted, and the
 session's current model answers, so `/model` remains the developer's choice.
 
+A server that advertises `resources` or `prompts` gains one extra read-only tool for each. `<server>_resources`
+lists its catalog with no arguments and reads one URI with `uri`; `<server>_prompts` lists prompt names and
+their required arguments with no arguments and renders one with `name` plus an `arguments` object. Binary
+resources are described by type and size rather than written, and neither bridge exists for a server that did
+not advertise the capability.
+
 A browser is the one server where describing is not enough. A screenshot the model cannot see and the
 developer cannot open is a fact about a page nobody has, so the bytes are written once, under the
 workspace, and the model reads a path instead of 48 000 characters of base64:

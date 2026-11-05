@@ -98,6 +98,25 @@ public sealed class McpProcessTests
     }
 
     [Fact]
+    public async Task TheHostAddsCatalogBridgesOnlyWhenTheServerAdvertisesThem()
+    {
+        var host = new McpToolHost([CatalogCommandLine()], new McpClientOptions());
+        try
+        {
+            await host.StartAsync(Token);
+
+            var names = host.Tools.Select(tool => tool.Definition.Name).Order(StringComparer.Ordinal).ToArray();
+            Assert.Contains(names, name => name.EndsWith("_resources", StringComparison.Ordinal));
+            Assert.Contains(names, name => name.EndsWith("_prompts", StringComparison.Ordinal));
+            Assert.Equal(4, host.Tools.Count);
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task AServerKilledBetweenCallsIsRestartedForTheNextCall()
     {
         await using var connection = Connect();
@@ -210,6 +229,8 @@ public sealed class McpProcessTests
     private static string CommandLine() => $"\"{ServerPath()}\"";
 
     private static string CrashCommandLine() => $"\"{ServerPath()}\" --crash-tool";
+    private static string CatalogCommandLine() => $"\"{ServerPath()}\" --catalog";
+
 
     private static void KillServer(int pid)
     {

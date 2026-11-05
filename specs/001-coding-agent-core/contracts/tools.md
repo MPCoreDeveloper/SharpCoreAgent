@@ -164,6 +164,21 @@ whose schema this build does not write, and the only ones whose names are genera
 - **Lifetime** — one child per flag, started before the first turn and killed with its process tree when
   the process ends. A server that will not answer its handshake is a startup failure and `exit 2`.
 
+### Resources and prompts (009 T034b)
+
+A server that advertises `resources` or `prompts` in its `initialize` result gains one generated read-only
+tool for each, in addition to its own tools:
+
+- **`<server>_resources`** — no argument lists the catalog; `uri` reads one resource. The answer is text;
+  a binary resource is described by MIME type and base64 size rather than written to the workspace.
+- **`<server>_prompts`** — no argument lists prompt names, their descriptions and required arguments
+  (marked `*`); `name` plus an optional `arguments` object renders one. Messages are flattened to
+  `role: text`, with non-text parts named rather than dropped.
+
+Both tools are `ReadOnly`, absent when the capability was not advertised, and use the same supervision,
+timeout and result ceiling as an ordinary server tool. A generated name that collides with a server tool
+gets the same `_2` suffix as any other repeated name.
+
 ## Language-provided tools (015, 034)
 
 Three read-only tools answer from a compiler linked into the process rather than from the index. They are

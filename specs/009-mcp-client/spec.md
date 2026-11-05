@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033, T034a and T036; T034b, T035 and T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033, T034a, T034b and T036; T035 and T037 deferred, listed in `tasks.md`)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -138,6 +138,11 @@ Acceptance:
   `first` (one request per connection) or `unrestricted` (10 calls and 100 000 input tokens per
   minute, 25 000 output tokens per call). Only text content is accepted, the session's current model
   answers, and the limiter counts an admitted request even when that model call fails.
+- **FR-019** A server that advertises `resources` gains a read-only `<server>_resources` tool: no
+  argument lists the catalog, and `uri` reads one resource. A server that advertises `prompts` gains a
+  read-only `<server>_prompts` tool: no argument lists names and required arguments, and `name` plus an
+  optional `arguments` object renders one. Binary resources are described by type and size; neither
+  tool writes a file, and both are absent when the capability was not advertised.
 
 ## Non-functional requirements
 
@@ -150,9 +155,8 @@ Acceptance:
 
 ## Out of scope (recorded, not forgotten)
 
-- **MCP resources, prompts and logging.** Three more capabilities of the same protocol, and none of
-  them is a tool the model calls. A round that ships `tools/*` correctly is the one that can ship
-  `resources/*` next. Sampling is no longer out of scope: see T034a and `--mcp-sampling`.
+- **MCP logging.** One more capability of the same protocol, and it is not a tool the model calls.
+  Sampling, resources and prompts are now covered by T034a and T034b and `--mcp-sampling`.
 - **Remote transports (HTTP+SSE, streamable HTTP).** A socket, a token and an OAuth flow are a
   different threat model from a child process the developer started.
 - **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five

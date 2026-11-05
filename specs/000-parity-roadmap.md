@@ -249,8 +249,10 @@ stderr lines. The evidence is `JsonRpcPipeTests`, `McpProtocolTests`, `McpToolNa
 real server in `tests/SharpCoreAgent.TestMcpServer`, which proves the launch path, the stderr split and
 the tree kill — and the suite is 939 tests, all green with no compiler warnings. `tasks.md` keeps
 T034b, T035 and T037 open as the record of what the round refused: resources and prompts, remote
-transports, and a declarative server list. T034a sampling landed on 2026-11-05 as `--mcp-sampling
-deny|first|unrestricted`, with the limiter in `McpServerConnection` and `McpSamplingTests` for evidence.
+transports, and a declarative server list. T034a sampling and T034b resources/prompts landed on 2026-11-05;
+sampling uses `--mcp-sampling deny|first|unrestricted`, and a server that advertises resources or prompts
+gains the read-only `<server>_resources` and `<server>_prompts` bridges, with `McpSamplingTests`,
+`McpCatalogTests` and `McpProcessTests` for evidence.
 
 ## Round 4 — `010-browser` (landed 2026-10-30 as `a447a4d`)
 

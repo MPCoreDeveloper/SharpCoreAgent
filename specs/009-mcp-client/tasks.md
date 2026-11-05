@@ -109,7 +109,13 @@ next pass has a real list rather than a memory.
   accepted, the session's current model answers, and the limiter survives a restart. `McpSamplingTests`
   proves the policy, the ceiling and the text-only rule; `JsonRpcPipeTests` proves the result and refusal
   envelopes.
-- [ ] T034b MCP resources and prompts. Sampling is done; these two remain.
+- [X] T034b MCP resources and prompts. **Closed.** A server that advertises `resources` gets a
+  `<server>_resources` tool that lists its catalog with no argument and reads one URI with `uri`; a
+  server that advertises `prompts` gets `<server>_prompts`, which lists names and required arguments and
+  renders one with `name` plus an `arguments` object. Both are read-only, use the connection's
+  supervision and result ceiling, describe binary resources instead of writing them, and are absent
+  when the capability was not advertised. `McpCatalogTests` proves the bridges over a scripted server;
+  `McpProcessTests` proves the host adds exactly those two tools when a real server advertises them.
 - [ ] T035 Remote transports (HTTP+SSE, streamable HTTP).
 - [ ] T037 A declarative server list read from a file.
 

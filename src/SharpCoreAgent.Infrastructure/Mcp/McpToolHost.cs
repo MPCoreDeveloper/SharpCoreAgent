@@ -1,6 +1,7 @@
 namespace SharpCoreAgent.Infrastructure.Mcp;
 
 using SharpCoreAgent.Domain.Model;
+using SharpCoreAgent.Domain.Tools;
 
 /// <summary>
 /// Where a server's stderr goes, changing at most once while the process runs.
@@ -42,7 +43,7 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     private readonly IChatModelResolver? _models;
     private readonly McpLogSink _sink = new();
     private readonly List<McpServerConnection> _connections = [];
-    private readonly List<McpTool> _tools = [];
+    private readonly List<ITool> _tools = [];
     private readonly object _gate = new();
     private bool _started;
     private bool _disposed;
@@ -89,7 +90,7 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     public IReadOnlyList<McpServerConnection> Servers => _connections;
 
     /// <summary>Gets the tools the servers offered, in server order.</summary>
-    public IReadOnlyList<McpTool> Tools => _tools;
+    public IReadOnlyList<ITool> Tools => _tools;
 
     /// <summary>
     /// Sets where server stderr is echoed while <c>--verbose</c> is in force.
@@ -227,6 +228,36 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
             {
                 _tools.Add(new McpTool(unique, info, connection, _options, _models));
             }
+        }
+
+        if (connection.HasResources)
+        {
+            AddCatalogTool(connection, "resources", used, name => new McpResourceTool(name, connection, _options));
+        }
+
+        if (connection.HasPrompts)
+        {
+            AddCatalogTool(connection, "prompts", used, name => new McpPromptTool(name, connection, _options));
+        }
+    }
+
+    private void AddCatalogTool(
+        McpServerConnection connection,
+        string suffix,
+        HashSet<string> used,
+        Func<string, ITool> create)
+    {
+        var name = McpToolName.ForTool(connection.Name, suffix);
+        var unique = name;
+        var ordinal = 1;
+        while (!used.Add(unique))
+        {
+            unique = McpToolName.WithSuffix(name, ++ordinal);
+        }
+
+        lock (_gate)
+        {
+            _tools.Add(create(unique));
         }
     }
 }

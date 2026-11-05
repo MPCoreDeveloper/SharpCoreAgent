@@ -334,7 +334,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IToolRegistry>(provider =>
         {
             var host = provider.GetRequiredService<McpToolHost>();
-            return new ToolRegistry([.. provider.GetServices<ITool>(), .. host.Started().Tools.Cast<ITool>()]);
+            return new ToolRegistry([.. provider.GetServices<ITool>(), .. host.Started().Tools]);
         });
     }
 

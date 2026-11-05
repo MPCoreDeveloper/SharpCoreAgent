@@ -123,7 +123,10 @@ internal static class HelpText
           default) answers -32601, first answers one request per connection, and unrestricted answers
           within 10 calls and 100000 input tokens per minute, with 25000 output tokens per call. Only
           text content is accepted, and the current model answers, so /model remains the developer's
-          choice.
+          choice. A server that advertises resources or prompts gains one read-only bridge for each:
+          <server>_resources lists its catalog with no argument and reads one uri; <server>_prompts
+          lists names and required arguments and renders one with name plus an arguments object. Binary
+          resources are described by type and size, never written.
 
         Credentials
           sharpcoreagent credentials --check          each provider's key, and the file:line or environment

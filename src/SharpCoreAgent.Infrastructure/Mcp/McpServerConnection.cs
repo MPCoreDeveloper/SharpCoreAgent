@@ -38,6 +38,7 @@ public sealed class McpServerConnection : IAsyncDisposable
     private readonly Action<string>? _log;
     private readonly List<McpToolInfo> _tools = [];
     private readonly object _toolsGate = new();
+    private JsonElement _capabilities;
     private readonly Queue<string> _stderr = new();
     private readonly object _stderrGate = new();
     private readonly EventHandler _processExit;
@@ -127,6 +128,12 @@ public sealed class McpServerConnection : IAsyncDisposable
             }
         }
     }
+
+    /// <summary>Gets a value indicating whether the server advertised <c>resources</c> at the handshake.</summary>
+    public bool HasResources => HasCapability("resources");
+
+    /// <summary>Gets a value indicating whether the server advertised <c>prompts</c> at the handshake.</summary>
+    public bool HasPrompts => HasCapability("prompts");
 
     /// <summary>Gets how many times this connection has restarted its server.</summary>
     /// <remarks>
@@ -255,6 +262,12 @@ public sealed class McpServerConnection : IAsyncDisposable
             ProtocolVersion = answered;
         }
 
+        _capabilities = result.ValueKind == JsonValueKind.Object &&
+                        result.TryGetProperty("capabilities", out var capabilities) &&
+                        capabilities.ValueKind == JsonValueKind.Object
+            ? capabilities.Clone()
+            : default;
+
         await _pipe.NotifyAsync("notifications/initialized", null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -340,6 +353,66 @@ public sealed class McpServerConnection : IAsyncDisposable
         TimeSpan timeout,
         CancellationToken cancellationToken) =>
         CallAsync(tool, arguments, timeout, save: null, sampling: null, cancellationToken);
+
+    /// <summary>Lists the resources a started server advertised.</summary>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The server's <c>resources/list</c> result.</returns>
+    /// <exception cref="InvalidOperationException">The connection was never started.</exception>
+    /// <exception cref="McpTransportException">The server stopped answering.</exception>
+    /// <exception cref="JsonRpcException">The server answered with a JSON-RPC error.</exception>
+    public Task<JsonElement> ListResourcesAsync(CancellationToken cancellationToken) =>
+        RequestControlAsync("resources/list", new JsonObject(), cancellationToken);
+
+    /// <summary>Reads one resource by URI.</summary>
+    /// <param name="uri">The URI exactly as the server listed it.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The server's <c>resources/read</c> result.</returns>
+    /// <exception cref="ArgumentException"><paramref name="uri"/> is blank.</exception>
+    /// <exception cref="InvalidOperationException">The connection was never started.</exception>
+    /// <exception cref="McpTransportException">The server stopped answering.</exception>
+    /// <exception cref="JsonRpcException">The server answered with a JSON-RPC error.</exception>
+    public Task<JsonElement> ReadResourceAsync(string uri, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(uri);
+        return RequestControlAsync(
+            "resources/read",
+            new JsonObject { ["uri"] = uri },
+            cancellationToken);
+    }
+
+    /// <summary>Lists the prompts a started server advertised.</summary>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The server's <c>prompts/list</c> result.</returns>
+    /// <exception cref="InvalidOperationException">The connection was never started.</exception>
+    /// <exception cref="McpTransportException">The server stopped answering.</exception>
+    /// <exception cref="JsonRpcException">The server answered with a JSON-RPC error.</exception>
+    public Task<JsonElement> ListPromptsAsync(CancellationToken cancellationToken) =>
+        RequestControlAsync("prompts/list", new JsonObject(), cancellationToken);
+
+    /// <summary>Gets one prompt by name.</summary>
+    /// <param name="name">The prompt name exactly as the server listed it.</param>
+    /// <param name="arguments">The argument object, or null when the prompt needs none.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The server's <c>prompts/get</c> result.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is blank.</exception>
+    /// <exception cref="InvalidOperationException">The connection was never started.</exception>
+    /// <exception cref="McpTransportException">The server stopped answering.</exception>
+    /// <exception cref="JsonRpcException">The server answered with a JSON-RPC error.</exception>
+    public Task<JsonElement> GetPromptAsync(
+        string name,
+        JsonElement? arguments,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var parameters = new JsonObject { ["name"] = name };
+        if (arguments is { ValueKind: JsonValueKind.Object } given)
+        {
+            parameters["arguments"] = JsonNode.Parse(given.GetRawText());
+        }
+
+        return RequestControlAsync("prompts/get", parameters, cancellationToken);
+    }
 
     /// <summary>
     /// Calls one of the server's tools, offering its binary content to a sink.
@@ -439,6 +512,65 @@ public sealed class McpServerConnection : IAsyncDisposable
         }
     }
 
+    private async Task<JsonElement> RequestControlAsync(
+        string method,
+        JsonObject parameters,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_started)
+            {
+                throw new InvalidOperationException("the connection has not been started");
+            }
+
+            if (NeedsRestart())
+            {
+                await RestartAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            var pipe = _pipe ?? throw new InvalidOperationException("the connection has not been started");
+            try
+            {
+                return await pipe
+                    .RequestAsync(method, parameters, _options.CallTimeout, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (McpTransportException ex)
+            {
+                var restartable = MarkRestartPending(pipe);
+                string note;
+                if (restartable)
+                {
+                    note = RestartNote();
+                }
+                else if (!CanRestart)
+                {
+                    note = " This connection was given its streams, so it cannot be restarted.";
+                }
+                else
+                {
+                    note = string.Empty;
+                }
+
+                throw new McpTransportException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"the {Name} server stopped answering {method}: {ex.Message}{ExitNote()}{note}"),
+                    ex);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private async Task<McpCallResult> SendAsync(
         JsonRpcPipe pipe,
         JsonObject parameters,
@@ -474,6 +606,11 @@ public sealed class McpServerConnection : IAsyncDisposable
     }
 
     private bool CanRestart => _input is null && _output is null;
+
+    private bool HasCapability(string name) =>
+        _capabilities.ValueKind == JsonValueKind.Object &&
+        _capabilities.TryGetProperty(name, out var capability) &&
+        capability.ValueKind == JsonValueKind.Object;
 
     private int ToolCount
     {

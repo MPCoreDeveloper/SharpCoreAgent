@@ -12,6 +12,7 @@ using System.Text.Json.Nodes;
 var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
 var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
 var exposeCrash = args.Contains("--crash-tool", StringComparer.Ordinal);
+var exposeCatalog = args.Contains("--catalog", StringComparer.Ordinal);
 
 Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"pid={Environment.ProcessId}"));
 Console.Error.WriteLine("test-mcp-server ready");
@@ -27,7 +28,7 @@ while (await input.ReadLineAsync(CancellationToken.None) is { } line)
     JsonObject? answer;
     using (var document = JsonDocument.Parse(line))
     {
-        answer = Answer(document.RootElement, exposeCrash);
+        answer = Answer(document.RootElement, exposeCrash, exposeCatalog);
     }
 
     if (answer is not null)
@@ -36,7 +37,7 @@ while (await input.ReadLineAsync(CancellationToken.None) is { } line)
     }
 }
 
-static JsonObject? Answer(JsonElement request, bool exposeCrash)
+static JsonObject? Answer(JsonElement request, bool exposeCrash, bool exposeCatalog)
 {
     if (!request.TryGetProperty("method", out var methodElement) || methodElement.GetString() is not { } method)
     {
@@ -54,7 +55,14 @@ static JsonObject? Answer(JsonElement request, bool exposeCrash)
             return Result(id, new JsonObject
             {
                 ["protocolVersion"] = "2025-06-18",
-                ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
+                ["capabilities"] = exposeCatalog
+                    ? new JsonObject
+                    {
+                        ["tools"] = new JsonObject(),
+                        ["resources"] = new JsonObject(),
+                        ["prompts"] = new JsonObject(),
+                    }
+                    : new JsonObject { ["tools"] = new JsonObject() },
                 ["serverInfo"] = new JsonObject { ["name"] = "test-mcp-server", ["version"] = "1.0.0" },
             });
 
@@ -95,6 +103,49 @@ static JsonObject? Answer(JsonElement request, bool exposeCrash)
 
         case "tools/call":
             return Call(id, parameters, exposeCrash);
+
+        case "resources/list" when exposeCatalog:
+            return Result(id, new JsonObject
+            {
+                ["resources"] = new JsonArray(new JsonObject
+                {
+                    ["uri"] = "file:///test.txt",
+                    ["name"] = "test.txt",
+                    ["mimeType"] = "text/plain",
+                    ["description"] = "A test resource",
+                }),
+            });
+
+        case "resources/read" when exposeCatalog:
+            return Result(id, new JsonObject
+            {
+                ["contents"] = new JsonArray(new JsonObject
+                {
+                    ["uri"] = "file:///test.txt",
+                    ["mimeType"] = "text/plain",
+                    ["text"] = "catalog resource",
+                }),
+            });
+
+        case "prompts/list" when exposeCatalog:
+            return Result(id, new JsonObject
+            {
+                ["prompts"] = new JsonArray(new JsonObject
+                {
+                    ["name"] = "review",
+                    ["description"] = "Review a path",
+                }),
+            });
+
+        case "prompts/get" when exposeCatalog:
+            return Result(id, new JsonObject
+            {
+                ["messages"] = new JsonArray(new JsonObject
+                {
+                    ["role"] = "user",
+                    ["content"] = new JsonObject { ["type"] = "text", ["text"] = "catalog prompt" },
+                }),
+            });
 
         default:
             return new JsonObject
