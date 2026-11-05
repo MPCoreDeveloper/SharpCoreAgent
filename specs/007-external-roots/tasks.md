@@ -50,6 +50,6 @@ next pass has a real list rather than a memory.
 ## Deliberately not in this round
 
 - [X] T030 A writable attachment (`--add-root --writable`). **Done in `051-writable-attachments`:** `--add-root` is readable in every mode and writable under `--approval allow`; `Ask`/`ReadOnly` keep the read-only refusal, and relative paths stay primary-only.
-- [ ] T031 Indexing an attachment. Needs a second index or a composite one, a staleness story per root and a new meaning for `index verify`.
+- [X] T031 Indexing an attachment. **Done in this slice as a composite index:** attachment files are scanned with their own ignore rules and stored under their absolute path; primary files stay workspace-relative. `search_code` returns the absolute path, which `read_file` accepts. Index verify and prune use the same stored paths.
 - [X] T032 Persisting attachments in the settings file. **Done in this slice:** the `attachments` setting accepts a `Path.PathSeparator`-separated list, applied after command-line/environment roots and before the workspace is opened.
 

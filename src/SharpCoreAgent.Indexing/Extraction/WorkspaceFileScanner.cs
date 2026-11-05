@@ -37,12 +37,15 @@ internal sealed class WorkspaceFileScanner
     internal const int SniffBytes = 8 * 1024;
 
     private readonly Workspace _workspace;
-    private readonly GitIgnoreMatcher _ignored;
+    private readonly Dictionary<string, GitIgnoreMatcher> _ignored = new(StringComparer.OrdinalIgnoreCase);
 
     private WorkspaceFileScanner(Workspace workspace)
     {
         _workspace = workspace;
-        _ignored = GitIgnoreMatcher.For(workspace.Root);
+        foreach (var root in Roots(workspace).Select(root => root.Root))
+        {
+            _ignored[root] = GitIgnoreMatcher.For(root);
+        }
     }
 
     /// <summary>
@@ -70,18 +73,21 @@ internal sealed class WorkspaceFileScanner
         var visitedFiles = new HashSet<string>(StringComparer.FromComparison(comparison));
 
         var found = new List<ScannedFile>();
-        var pending = new Stack<string>();
-        pending.Push(_workspace.Root);
-        visitedDirectories.Add(_workspace.Root);
+        var pending = new Stack<(string Directory, Workspace Root, bool Primary)>();
+        foreach (var root in Roots(_workspace))
+        {
+            pending.Push((root.Root, root, string.Equals(root.Root, _workspace.Root, StringComparison.Ordinal)));
+            visitedDirectories.Add(root.Root);
+        }
 
         while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var directory = pending.Pop();
-            _ignored.LoadFrom(directory);
-            PushChildDirectories(directory, pending, visitedDirectories);
-            CollectFiles(directory, found, visitedFiles, cancellationToken);
+            var (directory, root, primary) = pending.Pop();
+            _ignored[root.Root].LoadFrom(directory);
+            PushChildDirectories(directory, root, pending, visitedDirectories);
+            CollectFiles(directory, root, primary, found, visitedFiles, cancellationToken);
         }
 
         found.Sort(static (left, right) => string.CompareOrdinal(left.Path, right.Path));
@@ -92,9 +98,14 @@ internal sealed class WorkspaceFileScanner
     /// Queues the subdirectories that may be walked.
     /// </summary>
     /// <param name="directory">The directory being visited.</param>
+    /// <param name="root">The root whose ignore file applies.</param>
     /// <param name="pending">The walk's stack.</param>
     /// <param name="visited">The directories already queued, so a link cannot loop the walk.</param>
-    private void PushChildDirectories(string directory, Stack<string> pending, HashSet<string> visited)
+    private void PushChildDirectories(
+        string directory,
+        Workspace root,
+        Stack<(string Directory, Workspace Root, bool Primary)> pending,
+        HashSet<string> visited)
     {
         foreach (var child in EnumerateDirectories(directory))
         {
@@ -103,25 +114,23 @@ internal sealed class WorkspaceFileScanner
                 continue;
             }
 
-            if (_ignored.IsIgnored(child, isDirectory: true))
+            if (_ignored[root.Root].IsIgnored(child, isDirectory: true))
             {
                 continue;
             }
 
             if (TryResolveLink(child, asDirectory: true, out _))
             {
-                // A linked directory is never walked under its link name. When the target is inside the
-                // workspace it is reached through its own name, and when it is outside it is out of bounds;
-                // either way walking it here would either duplicate the tree or index another repository.
+                // A linked directory is never walked under its link name.
                 continue;
             }
 
-            if (!_workspace.IsInside(child) || !visited.Add(child))
+            if (!_workspace.IsInsideAny(child) || !visited.Add(child))
             {
                 continue;
             }
 
-            pending.Push(child);
+            pending.Push((child, root, string.Equals(root.Root, _workspace.Root, StringComparison.Ordinal)));
         }
     }
 
@@ -129,10 +138,18 @@ internal sealed class WorkspaceFileScanner
     /// Adds the files of one directory, each under its real path.
     /// </summary>
     /// <param name="directory">The directory being visited.</param>
+    /// <param name="root">The root whose ignore file applies.</param>
+    /// <param name="primary">Whether the directory belongs to the primary workspace.</param>
     /// <param name="found">Where the files are collected.</param>
     /// <param name="visited">The files already collected, so two names for one file do not become two rows.</param>
     /// <param name="cancellationToken">Cancels between files.</param>
-    private void CollectFiles(string directory, List<ScannedFile> found, HashSet<string> visited, CancellationToken cancellationToken)
+    private void CollectFiles(
+        string directory,
+        Workspace root,
+        bool primary,
+        List<ScannedFile> found,
+        HashSet<string> visited,
+        CancellationToken cancellationToken)
     {
         foreach (var file in EnumerateFiles(directory))
         {
@@ -140,23 +157,21 @@ internal sealed class WorkspaceFileScanner
 
             _ = TryResolveLink(file, asDirectory: false, out var real);
 
-            if (_ignored.IsIgnored(file, isDirectory: false))
+            if (_ignored[root.Root].IsIgnored(file, isDirectory: false))
             {
                 continue;
             }
 
-            if (!_workspace.IsInside(real) || !visited.Add(real))
+            if (!_workspace.IsInsideAny(real) || !visited.Add(real))
             {
-                // A link that leaves the workspace is out of bounds, and the same bytes under two names are
-                // one row: the file is indexed once, under its real path.
                 continue;
             }
 
-            found.Add(Describe(real));
+            found.Add(Describe(real, primary));
         }
     }
 
-    private ScannedFile Describe(string fullPath)
+    private ScannedFile Describe(string fullPath, bool primary)
     {
         var language = LanguageFor(Path.GetExtension(fullPath));
 
@@ -166,12 +181,12 @@ internal sealed class WorkspaceFileScanner
             info = new FileInfo(fullPath);
             if (!info.Exists)
             {
-                return Skip(fullPath, language, 0, DateTimeOffset.MinValue, "missing");
+                return Skip(fullPath, primary, language, 0, DateTimeOffset.MinValue, "missing");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Skip(fullPath, language, 0, DateTimeOffset.MinValue, Describe(ex));
+            return Skip(fullPath, primary, language, 0, DateTimeOffset.MinValue, Describe(ex));
         }
 
         var modified = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
@@ -180,6 +195,7 @@ internal sealed class WorkspaceFileScanner
         {
             return Skip(
                 fullPath,
+                primary,
                 language,
                 info.Length,
                 modified,
@@ -190,17 +206,17 @@ internal sealed class WorkspaceFileScanner
         {
             if (LooksBinary(fullPath))
             {
-                return Skip(fullPath, language, info.Length, modified, "binary");
+                return Skip(fullPath, primary, language, info.Length, modified, "binary");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Skip(fullPath, language, info.Length, modified, Describe(ex));
+            return Skip(fullPath, primary, language, info.Length, modified, Describe(ex));
         }
 
         return new ScannedFile
         {
-            Path = _workspace.ToRelative(fullPath),
+            Path = primary ? _workspace.ToRelative(fullPath) : fullPath,
             FullPath = fullPath,
             Language = language,
             SizeBytes = info.Length,
@@ -208,16 +224,29 @@ internal sealed class WorkspaceFileScanner
         };
     }
 
-    private ScannedFile Skip(string fullPath, string language, long size, DateTimeOffset modified, string reason) =>
+    private ScannedFile Skip(
+        string fullPath,
+        bool primary,
+        string language,
+        long size,
+        DateTimeOffset modified,
+        string reason) =>
         new()
         {
-            Path = _workspace.ToRelative(fullPath),
+            Path = primary ? _workspace.ToRelative(fullPath) : fullPath,
             FullPath = fullPath,
             Language = language,
             SizeBytes = size,
             ModifiedUtc = modified,
             SkipReason = reason,
         };
+
+    private static List<Workspace> Roots(Workspace workspace)
+    {
+        var roots = new List<Workspace>(1 + workspace.Attachments.Count) { workspace };
+        roots.AddRange(workspace.Attachments);
+        return roots;
+    }
 
     private static bool LooksBinary(string fullPath)
     {
