@@ -200,7 +200,7 @@ internal static class McpContent
             images.Add(new McpImage(mime, payload));
         }
 
-        if (save is null || !IsImage(String(entry, "mimeType")) || String(entry, "data") is not { } data)
+        if (save is null || !IsSaveable(String(entry, "mimeType")) || String(entry, "data") is not { } data)
         {
             return Binary(type, entry);
         }
@@ -237,7 +237,7 @@ internal static class McpContent
         }
 
         var description = string.Create(CultureInfo.InvariantCulture, $"[resource: {uri} · {mime} · {DataSize(blob)}]");
-        if (save is null || !IsImage(String(resource, "mimeType")))
+        if (save is null || !IsSaveable(String(resource, "mimeType")))
         {
             return description;
         }
@@ -266,6 +266,12 @@ internal static class McpContent
         string.Create(CultureInfo.InvariantCulture, $"{base64.Length} base64 characters");
 
     private static bool IsImage(string? mimeType) => ImagePayload.IsImage(mimeType);
+
+    private static bool IsSaveable(string? mimeType) =>
+        IsImage(mimeType)
+        || string.Equals(mimeType, "application/pdf", StringComparison.OrdinalIgnoreCase)
+        || (mimeType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ?? false)
+        || (mimeType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ?? false);
 
     private static string? String(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

@@ -158,7 +158,8 @@ Acceptance:
   `npx_2…`, because that is what the model sees too.
 - **FR-004** The extension comes from the MIME type and only these are saved: `image/png` → `.png`,
   `image/jpeg` and `image/jpg` → `.jpg`, `image/gif` → `.gif`, `image/webp` → `.webp`, `image/bmp` →
-  `.bmp`. Any other `image/*` type is described with its type and not saved, because a file whose
+  `.bmp`, `application/pdf` → `.pdf`, `video/mp4` → `.mp4`, `video/webm` → `.webm`, `audio/mpeg` → `.mp3`,
+  `audio/wav` → `.wav`. Any other type is described with its type and not saved, because a file whose
   extension lies is worse than a sentence that tells the truth.
 - **FR-005** An existing file is never overwritten: if the name is taken, `<n>` advances until it is free.
   The only deletion is the retention policy below, which removes the oldest files before a new one is written; it never

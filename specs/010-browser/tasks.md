@@ -162,8 +162,9 @@ temp workspace. Each test states the SC it answers.
   `--browser` starts `npx -y @playwright/mcp@latest --browser msedge` on Windows and `--browser chromium`
   elsewhere. No bundled binary or driver; the tools arrive as `npx_browser_*` through the existing MCP client.
   The decision record is amended rather than erased: the old `--mcp` command still works.
-- [ ] T032 PDF, video or audio artefacts, and any `application/*` type: the five image types are the whole
-  table, and a format whose extension would lie is refused by name (FR-004).
+- [X] T032 PDF, video or audio artefacts, and any `application/*` type. **Done in `054-media-artefacts`:** the sink
+  saves `application/pdf`, `video/mp4`, `video/webm`, `audio/mpeg` and `audio/wav`; only the listed types, with the
+  existing ceilings and policy. Unknown `application/*` remains described rather than saved.
 - [X] T033 Retention, cleanup, deduplication or a size-bounded artefacts directory. **Done in `049-artefact-retention`:** `MaxArtefactDirectoryBytes` defaults to 256 MiB, deletes the oldest files in `.sharpcoreagent/artifacts/` until the new one fits, and does no deduplication.
 - [X] T034 An `artifacts` tool, a `/files` filter, or index visibility. **Closed by `053-artifacts-tool`
   as a read-only `list_artifacts` tool:** newest first, `limit` 1–500, path/size/UTC time, no index visibility.

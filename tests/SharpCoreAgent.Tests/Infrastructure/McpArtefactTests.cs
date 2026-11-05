@@ -27,6 +27,36 @@ public sealed class McpArtefactTests
     ];
 
     [Fact]
+    public async Task APdfResourceIsSavedAsAPdfFile()
+    {
+        var pdf = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D };
+        await using var harness = new Harness(Content(Resource("file:///report.pdf", "application/pdf", pdf)));
+
+        var result = await harness.RunAsync(ApprovalMode.Ask);
+
+        Assert.False(result.IsError);
+        var file = Assert.Single(harness.Files());
+        Assert.EndsWith(".pdf", file, StringComparison.Ordinal);
+        Assert.Equal(pdf, await File.ReadAllBytesAsync(file, TestContext.Current.CancellationToken));
+        Assert.Contains("→ ", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AudioAndVideoResourcesAreSavedToo()
+    {
+        await using var harness = new Harness(Content(
+            Resource("file:///clip.mp4", "video/mp4", [0, 1, 2]),
+            Resource("file:///clip.mp3", "audio/mpeg", [3, 4, 5])));
+
+        var result = await harness.RunAsync(ApprovalMode.Ask);
+
+        Assert.False(result.IsError);
+        Assert.Equal(2, harness.Files().Count);
+        Assert.Contains(harness.Files(), file => file.EndsWith(".mp4", StringComparison.Ordinal));
+        Assert.Contains(harness.Files(), file => file.EndsWith(".mp3", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AnImageEntryIsWrittenAndTheTextNamesIt()
     {
         // SC-001: a screenshot becomes a file in the workspace, and the model is told where.

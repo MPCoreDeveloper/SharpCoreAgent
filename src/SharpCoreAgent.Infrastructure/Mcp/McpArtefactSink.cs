@@ -48,6 +48,11 @@ internal sealed class McpArtefactSink
         ["image/gif"] = "gif",
         ["image/webp"] = "webp",
         ["image/bmp"] = "bmp",
+        ["application/pdf"] = "pdf",
+        ["video/mp4"] = "mp4",
+        ["video/webm"] = "webm",
+        ["audio/mpeg"] = "mp3",
+        ["audio/wav"] = "wav",
     };
 
     private readonly Workspace _workspace;

@@ -627,7 +627,8 @@ sharpcoreagent chat --mcp "npx -y @playwright/mcp@latest --browser msedge"
 the Playwright MCP server through the ordinary MCP client, so the tools are named `npx_browser_*` and the server owns
 the page, driver and schemas. A developer who wants a different
 channel can still type the whole `--mcp` command. An image entry (`image/png`, `image/jpeg` or `image/jpg`,
-`image/gif`, `image/webp`, `image/bmp` — up to 8 MiB each and eight per call) becomes
+`image/gif`, `image/webp`, `image/bmp`, `application/pdf`, `video/mp4`, `video/webm`, `audio/mpeg` or
+`audio/wav` — up to 8 MiB each and eight per call) becomes
 `<workspace>/.sharpcoreagent/artifacts/<server>-<tool>-<n>.<ext>`, and the entry reads
 `[image: image/png · 48213 base64 characters → .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (36.4 KiB)]`.
 The turn reports a `Created` effect for each file even though the server annotated its screenshot tool
