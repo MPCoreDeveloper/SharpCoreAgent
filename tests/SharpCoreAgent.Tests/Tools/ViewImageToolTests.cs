@@ -1,3 +1,4 @@
+using SkiaSharp;
 using SharpCoreAgent.Domain.Conversation;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
@@ -78,6 +79,29 @@ public sealed class ViewImageToolTests
         Assert.True(result.IsError);
         Assert.Empty(result.Images);
         Assert.Contains(".png, .jpg, .jpeg, .gif, .webp or .svg", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARequestedMaxDimensionResizesTheAttachment()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("shots/wide.png", Png(200, 100));
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"shots/wide.png","max_dimension":64}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains("resized 64 × 32 PNG", result.Content, StringComparison.Ordinal);
+
+        var image = Assert.Single(result.Images);
+        Assert.Equal("image/png", image.MediaType);
+
+        using var decoded = SKBitmap.Decode(Convert.FromBase64String(image.Base64))
+            ?? throw new InvalidOperationException("the attached image did not decode");
+        Assert.Equal(64, decoded.Width);
+        Assert.Equal(32, decoded.Height);
     }
 
     [Fact]
@@ -393,6 +417,17 @@ public sealed class ViewImageToolTests
 
     private static ToolInvocationContext ReadingImages(ToolTestWorkspace sandbox) =>
         new(sandbox.Workspace) { Model = new ModelDescriptor("grok", "grok-4", "Grok 4", SupportsImages: true) };
+
+    private static byte[] Png(int width, int height)
+    {
+        using var bitmap = new SKBitmap(width, height);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Green);
+        canvas.Flush();
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
 
     private const string Svg =
         """

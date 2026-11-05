@@ -118,3 +118,11 @@ Linux and macOS. `--image` uses the same `ImageFile` path, so a workspace SVG en
 PNG does; stdin still recognises only the four byte signatures, because an extensionless stream would need an XML
 sniff and that is a different door.
 
+## Resize amendment (T028)
+
+`view_image` now takes an optional `max_dimension` (64–4096). It is a request, not a policy: without it the bytes are
+the file's own, and with it `ImageResize` decodes through SkiaSharp, scales by the smaller ratio, re-encodes PNG and
+names the rendered size in the answer. A picture that already fits is returned untouched. An undecodable file or a
+number outside the range is a failed `ToolResult`. Rotation is deliberately not implied by this argument; it remains
+T028b.
+

@@ -32,6 +32,7 @@ internal static class SvgImage
     /// <param name="width">The rendered width in pixels, on success.</param>
     /// <param name="height">The rendered height in pixels, on success.</param>
     /// <param name="error">One sentence explaining a refusal, on failure.</param>
+    /// <param name="maxDimension">The largest width or height the caller asked for; defaults to <see cref="MaxDimension"/>.</param>
     /// <returns><see langword="true"/> when the document rendered inside the ceilings.</returns>
     public static bool TryRender(
         ReadOnlySpan<byte> svg,
@@ -39,7 +40,8 @@ internal static class SvgImage
         out byte[] png,
         out int width,
         out int height,
-        out string error)
+        out string error,
+        int maxDimension = MaxDimension)
     {
         png = [];
         width = 0;
@@ -74,7 +76,7 @@ internal static class SvgImage
                 return false;
             }
 
-            var scale = Math.Min(1d, MaxDimension / Math.Max(cull.Width, cull.Height));
+            var scale = Math.Min(1d, Math.Min(MaxDimension, maxDimension) / Math.Max(cull.Width, cull.Height));
             width = Math.Max(1, (int)Math.Ceiling(cull.Width * scale));
             height = Math.Max(1, (int)Math.Ceiling(cull.Height * scale));
 

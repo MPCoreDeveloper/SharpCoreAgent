@@ -37,7 +37,7 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 | `ChatMessage.Images` / `HasImages` / `User(text, images)` | `Domain.Conversation` | a user message carries pictures beside its text; no other role can |
 | `ToolResult.Images` / `ToolResult.Image(...)` | `Domain.Tools` | a tool answers with a picture and still describes it in text |
 | `ModelDescriptor.SupportsImages` | `Domain.Model` | declared per model, `false` by default |
-| `view_image` | `Infrastructure.Tools` | the tool: read-only, one `path`, six extensions, one ceiling; SVG is rendered to PNG |
+| `view_image` | `Infrastructure.Tools` | the tool: read-only, `path` plus optional `max_dimension`, six extensions, one ceiling; SVG is rendered to PNG |
 | the hand-over | `Application.CodingAgent` | after the tool message, a user message carrying `PromptLibrary.ImageAttached` and the image |
 | rule 9 and `ImageAttached` | `Application.PromptLibrary` | the guidance and the sentence, shipped with the tool |
 | `OpenAiContent.ImageDataUris` | `Infrastructure.Chat` | `image_url` parts with a `data:` URI; text-only messages stay strings |
@@ -80,6 +80,10 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 - **FR-011** The prompt ships with the tool or not at all: operating rule 9 of `PromptLibrary.SystemPrompt` names
   `view_image`, when to call it, and that a refusal is answered by saying so rather than by describing a picture
   the model was never shown. No flag adds or removes either the tool or the rule.
+- **FR-012** A caller MAY pass `max_dimension` (64–4096) to `view_image` to ask for a smaller copy. The tool then
+  preserves the aspect ratio, re-encodes the result as PNG and says `resized <w> × <h> PNG` in its sentence; a file
+  that already fits is returned byte for byte. Omitting the argument shows the file unchanged, which is the default and
+  the reason there is no silent downscale. Rotation is not part of this option.
 
 ## Edge cases
 
@@ -135,8 +139,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   binaries ship for Windows, Linux and macOS.
 - **Pasted, dragged or piped images**, and an `--image` flag on `run`. A picture enters a conversation the way any
   other evidence does: through a tool, with a path a report can name.
-- **Resizing, re-encoding, rotating or downscaling.** The developer's file is shown as it is, or refused with the
-  number that says why.
+- **Rotating.** A caller that needs a rotated copy still gets the file as it is; rotation is not inferred from
+  `max_dimension` and has no separate argument. `max_dimension` itself is explicit and opt-in (FR-012), so the file is
+  still shown byte for byte when nobody asks for a smaller copy.
 - **Images in session files.** Deliberate (FR-009): a transcript people grep is not a blob store.
 - **Deduplication.** Closed by `021` (round 12): a picture the conversation already carries is not attached a second
   time, by any of the three doors, and the answer is a success because the picture is exactly where the model asked for

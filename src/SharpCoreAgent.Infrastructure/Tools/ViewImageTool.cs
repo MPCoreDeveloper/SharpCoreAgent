@@ -59,10 +59,10 @@ public sealed class ViewImageTool : ITool
     public ViewImageTool(bool allowWithoutModel) => _allowWithoutModel = allowWithoutModel;
 
     private const string Schema =
-        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."}},"required":["path"],"additionalProperties":false}""";
 
     private const string Description =
-        "Show an image file to the model: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
+        "Show an image file to the model: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size. Pass max_dimension only when the picture is too large to read at full size: it downscales to that largest width or height and re-encodes as PNG, while omitting it shows the file byte for byte. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(Name, Description, Schema);
@@ -81,6 +81,11 @@ public sealed class ViewImageTool : ITool
 
         using var arguments = ToolArgumentReader.Parse(Name, toolCall.ArgumentsJson);
         var path = arguments.GetRequiredString("path");
+        var maxDimension = arguments.GetOptionalInt(
+            "max_dimension",
+            fallback: 0,
+            minimum: ImageResize.MinimumDimension,
+            maximum: ImageResize.MaximumDimension);
 
         if (!PathSafety.TryResolveRead(context.Workspace, path, out var fullPath, out var owner, out var error))
         {
@@ -156,9 +161,17 @@ public sealed class ViewImageTool : ITool
         var displayType = mediaType ?? "image/svg+xml";
         var renderedWidth = 0;
         var renderedHeight = 0;
+        var resized = false;
         if (isSvg)
         {
-            if (!SvgImage.TryRender(sourceBytes, TextLimits.MaxImageBytes, out var png, out renderedWidth, out renderedHeight, out var renderError))
+            if (!SvgImage.TryRender(
+                    sourceBytes,
+                    TextLimits.MaxImageBytes,
+                    out var svgPng,
+                    out renderedWidth,
+                    out renderedHeight,
+                    out var renderError,
+                    maxDimension == 0 ? SvgImage.MaxDimension : maxDimension))
             {
                 return ToolResult.Failure(
                     toolCall.Id,
@@ -166,8 +179,41 @@ public sealed class ViewImageTool : ITool
                     $"'{relative}' ({sourceBytes.Length} bytes) could not be rendered: {renderError}");
             }
 
-            bytes = png;
+            bytes = svgPng;
             mediaType = "image/png";
+        }
+        else if (maxDimension > 0)
+        {
+            if (!ImageResize.TryResize(
+                    sourceBytes,
+                    maxDimension,
+                    out var resizedPng,
+                    out renderedWidth,
+                    out renderedHeight,
+                    out resized,
+                    out var resizeError))
+            {
+                return ToolResult.Failure(
+                    toolCall.Id,
+                    Name,
+                    $"'{relative}' ({sourceBytes.Length} bytes) could not be resized: {resizeError}");
+            }
+
+            if (resized)
+            {
+                bytes = resizedPng;
+                mediaType = "image/png";
+            }
+        }
+
+        if (bytes.Length > TextLimits.MaxImageBytes)
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{relative}' produced {bytes.Length} bytes after processing; view_image attaches at most {TextLimits.MaxImageBytes} bytes (4 MiB). Ask for a smaller max_dimension."));
         }
 
         var image = new ImageContent
@@ -176,11 +222,23 @@ public sealed class ViewImageTool : ITool
             Base64 = Convert.ToBase64String(bytes),
         };
 
-        var description = isSvg
-            ? string.Create(
+        string description;
+        if (isSvg)
+        {
+            description = string.Create(
                 CultureInfo.InvariantCulture,
-                $"{displayType} · {sourceBytes.Length} bytes, rendered {renderedWidth} × {renderedHeight} PNG")
-            : string.Create(CultureInfo.InvariantCulture, $"{displayType} · {sourceBytes.Length} bytes");
+                $"{displayType} · {sourceBytes.Length} bytes, rendered {renderedWidth} × {renderedHeight} PNG");
+        }
+        else if (resized)
+        {
+            description = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{displayType} · {sourceBytes.Length} bytes, resized {renderedWidth} × {renderedHeight} PNG");
+        }
+        else
+        {
+            description = string.Create(CultureInfo.InvariantCulture, $"{displayType} · {sourceBytes.Length} bytes");
+        }
 
         // Before the budget, and after the read, and both are deliberate: a duplicate can only be recognised by its
         // bytes, and once it is recognised there is nothing left to spend — the picture the turn would have paid for is

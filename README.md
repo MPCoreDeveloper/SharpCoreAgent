@@ -424,9 +424,10 @@ that prints an absolute path: naming the legal ones is its whole job.
 `view_image` is how a picture enters the conversation. It reads a `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or
 `.svg` from the workspace or an attached root, up to 4 MiB, and answers with the image itself attached to
 the message that follows — the tool role carries text only, because every OpenAI-compatible provider
-rejects an image there, so the loop hands the picture over on the next user message. It refuses before
-reading a byte when the session's model is not declared to read images, and the refusal names the model, so
-a text-only turn says it cannot see the picture instead of describing one it never saw. `models` prints
+rejects an image there, so the loop hands the picture over on the next user message. An optional
+`max_dimension` (64–4096) asks for a smaller copy; without it the file is attached byte for byte. It refuses
+before reading a byte when the session's model is not declared to read images, and the refusal names the model,
+so a text-only turn says it cannot see the picture instead of describing one it never saw. `models` prints
 `images=yes` or `images=no` for every model this build knows. The output of the MCP client's browser
 screenshot is already a file under `.sharpcoreagent/artifacts/`, which is the commonest path in:
 
@@ -437,6 +438,7 @@ view_image · .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (image
 An SVG is the one extension that is not sent as itself: no provider accepts `image/svg+xml`, so Svg.Skia renders it
 to PNG at the document's own size (at most 4096 pixels on either side) and the answer names the source and the
 rendering: `'diagram.svg' (image/svg+xml · 812 bytes, rendered 120 × 40 PNG) is attached to the next message.`
+When a caller asks for `max_dimension`, the same renderer caps the PNG at that size.
 
 A session file keeps the transcript's text and not its images: a screenshot is megabytes of base64 on one
 line of a document people grep, and the file it came from is still on disk and one `view_image` call away —
