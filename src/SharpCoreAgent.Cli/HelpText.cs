@@ -39,6 +39,7 @@ internal static class HelpText
           sharpcoreagent ide agent [--write]           the agent profile that puts the index in an editor's picker
           sharpcoreagent ide prompt [--write]          the reusable prompt for .github/prompts
           sharpcoreagent ide instructions [--write]    the repository-wide instructions for .github/copilot-instructions.md
+          sharpcoreagent ide skill [--write]           the agent skill for .github/skills/sharpcoreagent/SKILL.md
           sharpcoreagent ide tasks [--write]           the task that rebuilds the index, in .vscode/tasks.json
           sharpcoreagent --help | --version
 

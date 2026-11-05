@@ -137,6 +137,38 @@ internal static class IdeFileWriter
             $"{AgentInstructions.NotePrefix}wrote {destination} (updated: the instructions were there and their text changed)"));
     }
 
+    /// <summary>Writes the agent skill, replacing one this command wrote before.</summary>
+    internal static (WriteOutcome Outcome, string Note) WriteSkill(string destination, string content, bool force = false)
+    {
+        if (!File.Exists(destination))
+        {
+            WorkspaceFileWriter.Save(destination, content);
+            return (WriteOutcome.Created, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{AgentSkill.NotePrefix}wrote {destination} (created: a discoverable agent skill)"));
+        }
+
+        var existing = WorkspaceFileWriter.ReadText(destination);
+        if (!force && !AgentSkill.IsOurs(existing))
+        {
+            throw new WorkspaceWriteException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{destination} exists and was not written by this command, so it was left as it was; delete it, or move it aside, and run again."));
+        }
+
+        if (string.Equals(existing, content, StringComparison.Ordinal))
+        {
+            return (WriteOutcome.Unchanged, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{AgentSkill.NotePrefix}{destination} already says this; nothing written"));
+        }
+
+        WorkspaceFileWriter.Save(destination, content);
+        return (WriteOutcome.Updated, string.Create(
+            CultureInfo.InvariantCulture,
+            $"{AgentSkill.NotePrefix}wrote {destination} (updated: the skill was there and its text changed)"));
+    }
+
     /// <summary>
     /// Files the task into the workspace's task list, keeping every other task and every other key.
     /// </summary>

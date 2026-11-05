@@ -41,6 +41,7 @@ internal static class IdeCommand
             IdeAction.Tasks => await TasksAsync(options, output, error, cancellationToken).ConfigureAwait(false),
             IdeAction.Prompt => await PromptAsync(options, output, error, cancellationToken).ConfigureAwait(false),
             IdeAction.Instructions => await InstructionsAsync(options, output, error, cancellationToken).ConfigureAwait(false),
+            IdeAction.Skill => await SkillAsync(options, output, error, cancellationToken).ConfigureAwait(false),
             _ => await AgentAsync(options, output, error, cancellationToken).ConfigureAwait(false),
         };
     }
@@ -135,6 +136,34 @@ internal static class IdeCommand
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"{AgentInstructions.NotePrefix}{destination} (VS Code/Copilot reads .github/copilot-instructions.md; --write writes it there)"),
+            output,
+            error,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Prints or writes the agent skill.</summary>
+    private static async Task<int> SkillAsync(
+        CliOptions options,
+        Stream output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        var destination = AgentSkill.Destination(Path.GetFullPath(options.Workspace));
+
+        if (options.Write)
+        {
+            return await WriteAsync(
+                AgentSkill.NotePrefix,
+                () => IdeFileWriter.WriteSkill(destination, AgentSkill.Render(), options.Force),
+                error,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await PrintAsync(
+            AgentSkill.Render(),
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{AgentSkill.NotePrefix}{destination} (VS Code/Copilot reads .github/skills; --write writes it there)"),
             output,
             error,
             cancellationToken).ConfigureAwait(false);

@@ -19,6 +19,7 @@ public sealed class IdeCommandParsingTests
     [InlineData("tasks", "Tasks")]
     [InlineData("prompt", "Prompt")]
     [InlineData("instructions", "Instructions")]
+    [InlineData("skill", "Skill")]
     [InlineData("AGENT", "Agent")]
     [InlineData("Tasks", "Tasks")]
     public void TheActionIsParsedAndTheWriteFlagDefaultsOff(string operand, string expected)
@@ -50,7 +51,7 @@ public sealed class IdeCommandParsingTests
         var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["ide"], NoEnvironment));
 
         Assert.Equal("ide needs an action.", error.Message);
-        Assert.Contains("agent, prompt, instructions and tasks", error.Hint, StringComparison.Ordinal);
+        Assert.Contains("agent, prompt, instructions, skill and tasks", error.Hint, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -59,7 +60,7 @@ public sealed class IdeCommandParsingTests
         var error = Assert.Throws<CliUsageException>(() => CliOptions.Parse(["ide", "serve"], NoEnvironment));
 
         Assert.Equal("'serve' is not an ide action.", error.Message);
-        Assert.Contains("agent, prompt, instructions and tasks", error.Hint, StringComparison.Ordinal);
+        Assert.Contains("agent, prompt, instructions, skill and tasks", error.Hint, StringComparison.Ordinal);
     }
 
     [Fact]

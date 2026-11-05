@@ -67,6 +67,9 @@ internal enum IdeAction
 
     /// <summary>The repository-wide instructions: <c>.github/copilot-instructions.md</c>.</summary>
     Instructions,
+
+    /// <summary>The agent skill: <c>.github/skills/sharpcoreagent/SKILL.md</c>.</summary>
+    Skill,
 }
 
 /// <summary>What <c>mcp</c> was asked to do.</summary>
@@ -1464,7 +1467,7 @@ internal sealed record CliOptions
         {
             throw new CliUsageException(
                 "ide needs an action.",
-                "The actions are agent, prompt, instructions and tasks: sharpcoreagent ide agent --write");
+                "The actions are agent, prompt, instructions, skill and tasks: sharpcoreagent ide agent --write");
         }
 
         var action = positionals[0].ToLowerInvariant() switch
@@ -1473,9 +1476,10 @@ internal sealed record CliOptions
             "tasks" => IdeAction.Tasks,
             "prompt" => IdeAction.Prompt,
             "instructions" => IdeAction.Instructions,
+            "skill" => IdeAction.Skill,
             _ => throw new CliUsageException(
                 $"'{positionals[0]}' is not an ide action.",
-                "The actions are agent, prompt, instructions and tasks."),
+                "The actions are agent, prompt, instructions, skill and tasks."),
         };
 
         if (positionals.Count > 1)
