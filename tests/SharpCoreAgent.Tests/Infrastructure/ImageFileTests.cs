@@ -1,5 +1,8 @@
 using SharpCoreAgent.Infrastructure.Images;
 using SharpCoreAgent.Tests.Tools;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
 using Xunit;
 
 namespace SharpCoreAgent.Tests.Infrastructure;
@@ -68,6 +71,23 @@ public sealed class ImageFileTests
             """);
 
         Assert.True(ImageFile.TryLoad(sandbox.Workspace, "diagram.svg", out var image, out var error), error);
+        Assert.Equal("image/png", image.MediaType);
+
+        var bytes = Convert.FromBase64String(image.Base64);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], bytes[..8]);
+    }
+
+    [Fact]
+    public void APdfInsideTheWorkspaceIsRenderedToPng()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var page = builder.AddPage(200, 200);
+        page.AddText("PDF", 18, new PdfPoint(20, 100), font);
+        File.WriteAllBytes(Path.Combine(sandbox.Root, "report.pdf"), builder.Build());
+
+        Assert.True(ImageFile.TryLoad(sandbox.Workspace, "report.pdf", out var image, out var error), error);
         Assert.Equal("image/png", image.MediaType);
 
         var bytes = Convert.FromBase64String(image.Base64);

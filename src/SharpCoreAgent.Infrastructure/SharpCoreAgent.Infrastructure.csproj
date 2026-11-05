@@ -17,6 +17,8 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" />
+    <PackageReference Include="PdfPig" />
+    <PackageReference Include="PdfPig.Rendering.Skia" />
     <!--
       Logging abstractions come from the net11.0 shared framework; an explicit package reference only
       earns NU1510.

@@ -1,5 +1,8 @@
 using SkiaSharp;
 using SharpCoreAgent.Domain.Conversation;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
 using SharpCoreAgent.Domain.Model;
 using SharpCoreAgent.Domain.Tools;
 using SharpCoreAgent.Infrastructure.Tools;
@@ -78,7 +81,7 @@ public sealed class ViewImageToolTests
 
         Assert.True(result.IsError);
         Assert.Empty(result.Images);
-        Assert.Contains(".png, .jpg, .jpeg, .gif, .webp or .svg", result.Content, StringComparison.Ordinal);
+        Assert.Contains(".png, .jpg, .jpeg, .gif, .webp, .svg or .pdf", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -123,6 +126,45 @@ public sealed class ViewImageToolTests
             ?? throw new InvalidOperationException("the attached image did not decode");
         Assert.Equal(100, decoded.Width);
         Assert.Equal(200, decoded.Height);
+    }
+
+    [Fact]
+    public async Task APdfPageIsRenderedToPng()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("docs/report.pdf", Pdf("Hello PDF"));
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"docs/report.pdf"}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains("application/pdf", result.Content, StringComparison.Ordinal);
+        Assert.Contains("page 1 rendered", result.Content, StringComparison.Ordinal);
+
+        var image = Assert.Single(result.Images);
+        Assert.Equal("image/png", image.MediaType);
+        using var decoded = SKBitmap.Decode(Convert.FromBase64String(image.Base64))
+            ?? throw new InvalidOperationException("the PDF render did not decode");
+        Assert.True(decoded.Width > 0);
+        Assert.True(decoded.Height > 0);
+    }
+
+    [Fact]
+    public async Task APdfPageOutsideTheDocumentIsRefused()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        sandbox.WriteBytes("docs/report.pdf", Pdf("one page"));
+
+        var result = await new ViewImageTool().ExecuteAsync(
+            ToolTestWorkspace.Call("view_image", """{"path":"docs/report.pdf","page":2}"""),
+            ReadingImages(sandbox),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Empty(result.Images);
+        Assert.Contains("1 page(s)", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -448,6 +490,15 @@ public sealed class ViewImageToolTests
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
+    }
+
+    private static byte[] Pdf(string text)
+    {
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var page = builder.AddPage(595, 842);
+        page.AddText(text, 24, new PdfPoint(50, 750), font);
+        return builder.Build();
     }
 
     private const string Svg =

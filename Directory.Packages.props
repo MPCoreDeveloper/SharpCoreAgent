@@ -101,6 +101,17 @@
     <PackageVersion Include="SkiaSharp.NativeAssets.macOS" Version="4.148.0" />
 
     <!--
+      PDF page rendering (spec 017 T027b).
+
+      PdfPig parses the document and PdfPig.Rendering.Skia draws a page through SkiaSharp, so a PDF becomes a PNG
+      without a native PDFium/Ghostscript process. Both packages are Apache-2.0. The rendering package asks for
+      SkiaSharp 3.119.4, but this repository already pins 4.148.0; the probe rendered a page through that combination
+      before the dependency was added.
+    -->
+    <PackageVersion Include="PdfPig" Version="0.1.16" />
+    <PackageVersion Include="PdfPig.Rendering.Skia" Version="0.1.16.7" />
+
+    <!--
       The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
       PrivateAssets="all" keeps it out of every package and out of a consumer's build.
     -->

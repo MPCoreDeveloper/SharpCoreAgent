@@ -17,7 +17,7 @@ namespace SharpCoreAgent.Infrastructure.Images;
 public static class ImageFile
 {
     /// <summary>Gets the file extensions this helper accepts.</summary>
-    public static IReadOnlyList<string> Extensions { get; } = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
+    public static IReadOnlyList<string> Extensions { get; } = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf"];
 
     /// <summary>Loads one image file.</summary>
     /// <param name="workspace">The workspace and its read-only attachments.</param>
@@ -43,11 +43,12 @@ public static class ImageFile
 
         var mediaType = MediaTypeFor(fullPath);
         var isSvg = IsSvg(fullPath);
-        if (mediaType is null && !isSvg)
+        var isPdf = IsPdf(fullPath);
+        if (mediaType is null && !isSvg && !isPdf)
         {
             error = string.Create(
                 CultureInfo.InvariantCulture,
-                $"'{workspace.ToRelative(fullPath)}' is not one of the picture types a provider accepts ({string.Join(", ", Extensions)}); SVG is rendered to PNG before it is attached");
+                $"'{workspace.ToRelative(fullPath)}' is not one of the picture types a provider accepts ({string.Join(", ", Extensions)}); SVG and PDF are rendered to PNG before they are attached");
             return false;
         }
 
@@ -84,6 +85,30 @@ public static class ImageFile
         if (isSvg)
         {
             if (!SvgImage.TryRender(bytes, TextLimits.MaxImageBytes, out var png, out _, out _, out error))
+            {
+                image = null!;
+                return false;
+            }
+
+            return ImagePayload.TryCreate(
+                "image/png",
+                Convert.ToBase64String(png),
+                TextLimits.MaxImageBytes,
+                out image,
+                out error);
+        }
+
+        if (isPdf)
+        {
+            if (!PdfImage.TryRender(
+                    bytes,
+                    1,
+                    TextLimits.MaxImageBytes,
+                    SvgImage.MaxDimension,
+                    out var png,
+                    out _,
+                    out _,
+                    out error))
             {
                 image = null!;
                 return false;
@@ -188,6 +213,9 @@ public static class ImageFile
 
     private static bool IsSvg(string fullPath) =>
         string.Equals(Path.GetExtension(fullPath), ".svg", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPdf(string fullPath) =>
+        string.Equals(Path.GetExtension(fullPath), ".pdf", StringComparison.OrdinalIgnoreCase);
 
     private static string? MediaTypeFor(string fullPath) =>
         Path.GetExtension(fullPath).ToLowerInvariant() switch

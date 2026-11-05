@@ -39,7 +39,7 @@ Obligations:
 | `read_file` | ReadOnly | `Read` | `path` (required), `start_line?`, `line_count?` (default 2000) | Numbered lines `  12│text` plus a truncation marker |
 | `search_text` | ReadOnly | `Read` | `pattern` (required, regex-free literal), `glob?` (default `*`), `path?` (default `.`, a file searches that file), `max_matches?` (default 100) | `relative/path:line: text` |
 | `list_roots` | ReadOnly | `Read` | none | `primary` and `read-only` lines with absolute paths (007) |
-| `view_image` | ReadOnly | `Read` | `path` (required), `max_dimension?` (64–4096), `rotation?` (90/180/270) | `'<path>' (<media type> · <n> bytes[, resized <w> × <h> PNG][, rotated <d>° to <w> × <h>]) is attached to the next message.` and the image itself, on the user message that follows (017) |
+| `view_image` | ReadOnly | `Read` | `path` (required), `max_dimension?` (64–4096), `rotation?` (90/180/270), `page?` (PDF, default 1) | `'<path>' (<media type> · <n> bytes[, page <n> rendered <w> × <h> PNG][, resized <w> × <h> PNG][, rotated <d>° to <w> × <h>]) is attached to the next message.` and the image itself, on the user message that follows (017) |
 | `write_file` | Destructive | `Created`/`Modified` | `path` (required), `content` (required), `overwrite?` (default `true`) | `wrote N bytes to <path> (<created|overwritten>)` |
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |
 | `run_shell` | Destructive | `CommandRun` | `command` (required), `timeout_seconds?` (default 120, max 600), `working_directory?` | `$ <command>` + exit code + captured output |
@@ -84,7 +84,7 @@ and `task` in [`specs/011-subagent-task`](../../011-subagent-task/contracts/task
 
 `view_image` (017)
 ```json
-{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."},"rotation":{"type":"integer","enum":[0,90,180,270],"description":"Rotate clockwise by this many degrees after any rendering or downscale; omit or 0 to show the file as it is."}},"required":["path"],"additionalProperties":false}
+{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."},"rotation":{"type":"integer","enum":[0,90,180,270],"description":"Rotate clockwise by this many degrees after any rendering or downscale; omit or 0 to show the file as it is."},"page":{"type":"integer","minimum":1,"description":"PDF page to render, one-based. Default 1; ignored for non-PDF files."}},"required":["path"],"additionalProperties":false}
 ```
 Note: the extension alone decides the media type (`.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`), the file is read only
 under 4 MiB, and the model's own `SupportsImages` decides whether the bytes are read at all — a text-only session is
@@ -254,9 +254,9 @@ catalogue needs is where the tool sits among the others:
 
 - **Safety** — `ReadOnly`, and the only effect is `Read`, on the file, workspace-relative (or relative to the attached
   root that owns it). A plan turn and a `readonly` session call it and no prompt appears.
-- **Arguments** — `path`, an optional `max_dimension` (64–4096) that asks for a smaller copy, and an optional
-  `rotation` (90/180/270) applied after it. There is no crop, no page and no URL; without either transformation the
-  developer's file is shown as it is, or refused with the number that says why.
+- **Arguments** — `path`, an optional `max_dimension` (64–4096) that asks for a smaller copy, an optional
+  `rotation` (90/180/270) applied after it, and `page` for a PDF. There is no crop and no URL; without a
+  transformation the developer's file is shown as it is, or refused with the number that says why.
 - **Result** — one sentence naming the file, its media type and its size, plus one `ImageContent` in
   `ToolResult.Images`. The text is what a model that cannot see, and a person reading the transcript, get instead.
 - **Where the bytes go** — not on the tool role. `CodingAgent` appends a user message carrying

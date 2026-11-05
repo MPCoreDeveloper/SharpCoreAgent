@@ -118,7 +118,17 @@ Linux and macOS. `--image` uses the same `ImageFile` path, so a workspace SVG en
 PNG does; stdin still recognises only the four byte signatures, because an extensionless stream would need an XML
 sniff and that is a different door.
 
-## Resize amendment (T028)
+## PDF amendment (T027b)
+
+`view_image` accepts `.pdf`. `PdfImage` opens the bytes with PdfPig, adds its Skia page factory and renders one page —
+page 1 by default, `page` selects another — to PNG. The page keeps its own dimensions at scale 1 and is reduced only
+when either side would exceed 4096 pixels; the PNG then goes through the same 4 MiB, duplicate and budget rules as
+every other picture. There is no PDFium or Ghostscript child process.
+
+`--image` uses the same path for page 1. Audio and video remain refused: extracting frames or audio needs a separate
+runtime and a contract of its own.
+
+## Resize and rotate amendment (T028)
 
 `view_image` now takes an optional `max_dimension` (64–4096) and an optional `rotation` (90/180/270). They are requests,
 not a policy: without them the bytes are the file's own; with them `ImageResize` and `ImageRotate` decode through

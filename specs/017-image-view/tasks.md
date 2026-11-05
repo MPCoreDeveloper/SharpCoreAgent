@@ -80,8 +80,11 @@ has a real list rather than a memory.
 - [X] T027 **SVG.** `view_image` and `--image` accept `.svg` and `SvgImage` renders it to PNG at its own size (at
       most 4096 px on either side) through Svg.Skia; the answer names the source and the rendering. PDF, audio and
       video remain refused: their extensions would lie about what a provider can read.
-- [ ] T027b **PDF, audio and video.** A PDF, a video or an audio file named as a picture would be a provider
-      rejection; extracting text or frames needs a separate runtime and a round that argues for it.
+- [X] T027b **PDF.** `view_image` accepts `.pdf` and `PdfImage` renders one page (page 1 by default, `page` selects
+      another) through PdfPig and SkiaSharp; no PDFium or Ghostscript process. Audio and video remain refused: their
+      extensions would lie about what a provider can read and each needs a separate runtime.
+- [ ] T027c **Audio and video.** Extracting frames or audio is a separate runtime and a separate contract; a video
+      named as a picture is still refused.
 - [X] T028a **Resizing and re-encoding, on request.** `view_image` takes optional `max_dimension` (64–4096); it
       preserves aspect ratio, re-encodes PNG and names the result. Omitting it is byte-identical to the old answer.
       `ImageResize` refuses an undecodable file or an out-of-range value instead of guessing.

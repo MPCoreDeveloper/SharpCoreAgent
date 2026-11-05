@@ -59,10 +59,10 @@ public sealed class ViewImageTool : ITool
     public ViewImageTool(bool allowWithoutModel) => _allowWithoutModel = allowWithoutModel;
 
     private const string Schema =
-        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."},"rotation":{"type":"integer","enum":[0,90,180,270],"description":"Rotate clockwise by this many degrees after any rendering or downscale; omit or 0 to show the file as it is."}},"required":["path"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."},"max_dimension":{"type":"integer","minimum":64,"maximum":4096,"description":"Downscale the picture to this largest width or height, preserving its aspect ratio; omit to show the file byte for byte."},"rotation":{"type":"integer","enum":[0,90,180,270],"description":"Rotate clockwise by this many degrees after any rendering or downscale; omit or 0 to show the file as it is."},"page":{"type":"integer","minimum":1,"description":"PDF page to render, one-based. Default 1; ignored for non-PDF files."}},"required":["path"],"additionalProperties":false}""";
 
     private const string Description =
-        "Show an image file to the model: a PNG, JPEG, GIF, WebP or SVG from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size. Pass max_dimension only when the picture is too large to read at full size: it downscales to that largest width or height and re-encodes as PNG, while omitting it shows the file byte for byte. Pass rotation only to correct a sideways picture; it rotates clockwise by 90, 180 or 270 degrees after any rendering or downscale. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
+        "Show an image file to the model: a PNG, JPEG, GIF, WebP, SVG or PDF from the workspace or a read-only attachment, up to 4 MiB. An SVG is rendered to PNG at its own size; a PDF is rendered one page at a time, page 1 by default. Pass max_dimension only when the picture is too large to read at full size: it downscales to that largest width or height and re-encodes as PNG, while omitting it shows the file byte for byte. Pass rotation only to correct a sideways picture; it rotates clockwise by 90, 180 or 270 degrees after any rendering or downscale. Use it when the answer depends on what the picture contains — a screenshot, a diagram, a chart, a photograph — instead of guessing from its name or the text around it. The image arrives attached to the next message; the file itself is never modified. A turn has one budget for the pictures it shows, so a picture refused for it is one to ask for again in a new turn. A picture the conversation already carries is not attached a second time: the answer says so, and the earlier message is the copy to read.";
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(Name, Description, Schema);
@@ -95,6 +95,8 @@ public sealed class ViewImageTool : ITool
                 $"rotation must be 0, 90, 180 or 270 degrees, not {rotation}.");
         }
 
+        var page = arguments.GetOptionalInt("page", fallback: 1, minimum: 1);
+
         if (!PathSafety.TryResolveRead(context.Workspace, path, out var fullPath, out var owner, out var error))
         {
             return ToolResult.Refused(toolCall.Id, Name, error!);
@@ -117,12 +119,21 @@ public sealed class ViewImageTool : ITool
 
         var mediaType = MediaTypeFor(fullPath);
         var isSvg = string.Equals(Path.GetExtension(fullPath), ".svg", StringComparison.OrdinalIgnoreCase);
-        if (mediaType is null && !isSvg)
+        var isPdf = string.Equals(Path.GetExtension(fullPath), ".pdf", StringComparison.OrdinalIgnoreCase);
+        if (mediaType is null && !isSvg && !isPdf)
         {
             return ToolResult.Failure(
                 toolCall.Id,
                 Name,
-                $"'{relative}' is not an image this tool can show. It reads files named .png, .jpg, .jpeg, .gif, .webp or .svg; use read_file for text.");
+                $"'{relative}' is not an image this tool can show. It reads files named .png, .jpg, .jpeg, .gif, .webp, .svg or .pdf; use read_file for text.");
+        }
+
+        if (page != 1 && !isPdf)
+        {
+            return ToolResult.Failure(
+                toolCall.Id,
+                Name,
+                "the page argument applies only to PDF files.");
         }
 
         var length = new FileInfo(fullPath).Length;
@@ -166,7 +177,7 @@ public sealed class ViewImageTool : ITool
         }
 
         var sourceBytes = bytes;
-        var displayType = mediaType ?? "image/svg+xml";
+        var displayType = isPdf ? "application/pdf" : mediaType ?? "image/svg+xml";
         var renderedWidth = 0;
         var renderedHeight = 0;
         var resized = false;
@@ -188,6 +199,27 @@ public sealed class ViewImageTool : ITool
             }
 
             bytes = svgPng;
+            mediaType = "image/png";
+        }
+        else if (isPdf)
+        {
+            if (!PdfImage.TryRender(
+                    sourceBytes,
+                    page,
+                    TextLimits.MaxImageBytes,
+                    maxDimension == 0 ? SvgImage.MaxDimension : maxDimension,
+                    out var pdfPng,
+                    out renderedWidth,
+                    out renderedHeight,
+                    out var pdfError))
+            {
+                return ToolResult.Failure(
+                    toolCall.Id,
+                    Name,
+                    $"'{relative}' ({sourceBytes.Length} bytes) could not be rendered: {pdfError}");
+            }
+
+            bytes = pdfPng;
             mediaType = "image/png";
         }
         else if (maxDimension > 0)
@@ -260,6 +292,12 @@ public sealed class ViewImageTool : ITool
             description = string.Create(
                 CultureInfo.InvariantCulture,
                 $"{displayType} · {sourceBytes.Length} bytes, rendered {renderedWidth} × {renderedHeight} PNG");
+        }
+        else if (isPdf)
+        {
+            description = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{displayType} · {sourceBytes.Length} bytes, page {page} rendered {renderedWidth} × {renderedHeight} PNG");
         }
         else if (resized)
         {
