@@ -133,6 +133,22 @@ public sealed class IdeTasksWriteTests
         Assert.True(File.Exists(tasks[1].GetProperty("command").GetString()));
     }
 
+    [Fact]
+    public async Task ForceReplacesAnUnmergeableTaskFile()
+    {
+        using var directory = TempDirectory.Create();
+        var path = WorkspaceTasks.Destination(directory.Path);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "not json", TestContext.Current.CancellationToken);
+
+        var (exit, _, note) = await RunAsync(directory.Path, ["--write", "--force"]);
+
+        Assert.Equal(0, exit);
+        Assert.Contains("--force", note, StringComparison.Ordinal);
+        using var document = Read(path);
+        Assert.Single(document.RootElement.GetProperty("tasks").EnumerateArray().ToArray());
+    }
+
     [Theory]
     [InlineData("{ \"tasks\": ")]
     [InlineData("// a comment VS Code accepts and this build does not\n{ \"version\": \"2.0.0\", \"tasks\": [] }")]

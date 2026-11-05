@@ -169,6 +169,9 @@ internal sealed record CliOptions
     /// </remarks>
     public bool Write { get; init; }
 
+    /// <summary>Gets a value indicating whether <c>ide --write</c> may replace a file this command did not write.</summary>
+    public bool Force { get; init; }
+
     /// <summary>Gets the editor file <c>ide</c> was asked for.</summary>
     public IdeAction Ide { get; init; }
 
@@ -905,6 +908,11 @@ internal sealed record CliOptions
         if (options.CredentialsCheck && command != CliCommand.Credentials)
         {
             throw new CliUsageException("--check is only valid with the credentials command.");
+        }
+
+        if (options.Force && command != CliCommand.Ide)
+        {
+            throw new CliUsageException("--force applies to ide only.");
         }
 
         // `--no-refresh` belongs to the command that keeps an index open between requests. Everywhere else a
@@ -2142,6 +2150,9 @@ internal sealed record CliOptions
 
             case "--write":
                 return options with { Write = true };
+
+            case "--force":
+                return options with { Force = true };
 
             case "--approval":
                 var approval = TakeValue(args, ref index, name);

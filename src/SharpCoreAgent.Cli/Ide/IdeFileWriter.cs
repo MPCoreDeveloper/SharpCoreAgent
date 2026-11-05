@@ -26,11 +26,12 @@ internal static class IdeFileWriter
     /// </summary>
     /// <param name="destination">The file, from <see cref="AgentProfile.Destination"/>.</param>
     /// <param name="content">The whole profile, from <see cref="AgentProfile.Render"/>.</param>
+    /// <param name="force">Whether an existing file not written by this command may be replaced.</param>
     /// <returns>What was done, and the one line that goes to stderr.</returns>
     /// <exception cref="WorkspaceWriteException">
     /// The file exists and was not written by this command, or it could not be read or written.
     /// </exception>
-    internal static (WriteOutcome Outcome, string Note) WriteProfile(string destination, string content)
+    internal static (WriteOutcome Outcome, string Note) WriteProfile(string destination, string content, bool force = false)
     {
         if (!File.Exists(destination))
         {
@@ -43,7 +44,7 @@ internal static class IdeFileWriter
 
         var existing = WorkspaceFileWriter.ReadText(destination);
 
-        if (!AgentProfile.IsOurs(existing))
+        if (!force && !AgentProfile.IsOurs(existing))
         {
             throw new WorkspaceWriteException(string.Create(
                 CultureInfo.InvariantCulture,
@@ -69,12 +70,13 @@ internal static class IdeFileWriter
     /// </summary>
     /// <param name="destination">The file, from <see cref="WorkspaceTasks.Destination"/>.</param>
     /// <param name="task">The entry, from <see cref="WorkspaceTasks.Task"/>.</param>
+    /// <param name="force">Whether an unmergeable existing file may be replaced.</param>
     /// <returns>What was done, and the one line that goes to stderr.</returns>
     /// <exception cref="WorkspaceWriteException">
     /// The file is not JSON, is not an object, holds <c>tasks</c> as something that is not an array, or could not be read
     /// or written.
     /// </exception>
-    internal static (WriteOutcome Outcome, string Note) WriteTasks(string destination, JsonObject task)
+    internal static (WriteOutcome Outcome, string Note) WriteTasks(string destination, JsonObject task, bool force = false)
     {
         if (!File.Exists(destination))
         {
@@ -84,7 +86,20 @@ internal static class IdeFileWriter
         }
 
         var text = WorkspaceFileWriter.ReadText(destination);
-        var document = Parse(text, destination);
+
+        JsonObject document;
+        try
+        {
+            document = Parse(text, destination);
+        }
+        catch (WorkspaceWriteException) when (force)
+        {
+            WorkspaceFileWriter.Save(destination, WorkspaceTasks.Render());
+            return (WriteOutcome.Updated, string.Create(
+                CultureInfo.InvariantCulture,
+                $"{WorkspaceTasks.NotePrefix}replaced {destination} (--force: it was not a task document this command could merge)"));
+        }
+
         var tasks = Tasks(document, destination);
 
         var index = IndexOf(tasks, WorkspaceTasks.Label);

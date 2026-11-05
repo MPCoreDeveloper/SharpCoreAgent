@@ -63,7 +63,7 @@ internal static class IdeCommand
         {
             return await WriteAsync(
                 AgentProfile.NotePrefix,
-                () => IdeFileWriter.WriteProfile(destination, AgentProfile.Render()),
+                () => IdeFileWriter.WriteProfile(destination, AgentProfile.Render(), options.Force),
                 error,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -98,7 +98,7 @@ internal static class IdeCommand
         {
             return await WriteAsync(
                 WorkspaceTasks.NotePrefix,
-                () => IdeFileWriter.WriteTasks(destination, WorkspaceTasks.Task()),
+                () => IdeFileWriter.WriteTasks(destination, WorkspaceTasks.Task(), options.Force),
                 error,
                 cancellationToken).ConfigureAwait(false);
         }
