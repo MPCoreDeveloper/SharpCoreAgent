@@ -102,7 +102,8 @@ Four things a reader of the spec above would otherwise have to rediscover:
    exactly the test that exists to notice.
 4. **Nothing in `mcp serve` moved.** The published set is a compile-time allow-list of five read-only index tools,
    so `view_image` is reachable from a normal session and not from a served one; the test that pins it says so in
-   one `InlineData`, and a later round that wants to serve images has to change that line on purpose.
+   one `InlineData`, and a later round that wants to serve images has to change that line on purpose. **T033 did**:
+   the allow-list now holds six names and `AnswerBody` writes an `image` part.
 
 ## SVG amendment (T027)
 

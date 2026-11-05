@@ -428,6 +428,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, FindReferencesTool>();
         services.AddSingleton<ITool, CodeContextTool>();
         services.AddSingleton<ITool, IndexStatusTool>();
+        services.AddSingleton<ITool>(new ViewImageTool(allowWithoutModel: true));
         services.AddSingleton<IToolRegistry>(provider => new ToolRegistry(provider.GetServices<ITool>()));
 
         services.TryAddSingleton(provider => new McpServerSession(

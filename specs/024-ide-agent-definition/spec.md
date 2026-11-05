@@ -5,7 +5,7 @@ Spec number `024`: `023` is the last round, and `018` is still released by the r
 taken here. The two document formats this round writes were read from Microsoft's published references on 2026-11-02 and
 are quoted in `plan.md` under "The facts this round is built on".
 
-**Depends on**: `013` (the five tools `mcp serve` publishes, which are the profile's whole tool list), `022` (`mcp config`
+**Depends on**: `013` (the six tools `mcp serve` publishes, which are the profile's whole tool list), `022` (`mcp config`
 and the `--write` flag this round widens from one command to two), and nothing else. No new domain type, no new tool, no
 new setting, no dependency.
 
@@ -35,7 +35,7 @@ then `index` — is one `mcp config` already knows how to work out and one a dev
 | `AgentProfile` | `Cli` | the profile's text: frontmatter (`description`, `tools`) plus the prompt |
 | `WorkspaceTasks` | `Cli` | the one task: `sharpcoreagent: index` |
 | `WorkspaceFileWriter` / `WorkspaceWriteException` | `Cli` | the save and the refusal both writers share; the type `022` introduced, widened |
-| `McpServerCatalog` | `Infrastructure` | the five published names, made public because the profile lists exactly them |
+| `McpServerCatalog` | `Infrastructure` | the six published names, made public because the profile lists exactly them |
 | exit `7` on a file that cannot be read, merged or written | `Cli` | the same code `022` chose for a client's file |
 
 ## Requirements
@@ -47,11 +47,11 @@ then `index` — is one `mcp config` already knows how to work out and one a dev
   and nothing else. `description` is one line. `name` is omitted because the file's name is the name the picker shows;
   `model` because the model a developer's editor runs on is theirs, not this command's; `target` because an unset value
   is documented to mean both environments; `mcp-servers` because the reference says IDE agents do not use it.
-- **FR-003** `tools` lists exactly the five names `mcp serve` publishes — `code_context`, `find_references`, `find_symbol`,
-  `index_status`, `search_code` — each prefixed with the server's name (`sharpcoreagent/`), in the order the contract
+- **FR-003** `tools` lists exactly the six names `mcp serve` publishes — `code_context`, `find_references`, `find_symbol`,
+  `index_status`, `search_code`, `view_image` — each prefixed with the server's name (`sharpcoreagent/`), in the order the contract
   documents. The list is derived from `McpServerCatalog.PublishedToolNames`, the same array `McpServerPublishedSet`
-  filters by, so a sixth tool appears in the profile and the server together or in neither.
-- **FR-004** The body names each of the five tools with what it answers, says in one sentence that all five are
+  filters by, so a seventh tool appears in the profile and the server together or in neither.
+- **FR-004** The body names each of the six tools with what it answers, says in one sentence that all six are
   read-only, tells the reader to quote the `path:start-end` a tool returned rather than invent one, and tells it to
   report `missing`, `stale` or `partial` from `index_status` instead of guessing. It is well under the documented
   30,000-character cap on a profile's prompt.
@@ -117,7 +117,7 @@ then `index` — is one `mcp config` already knows how to work out and one a dev
   destroy somebody's edits is one this build does not have.
 - **A Visual Studio agent definition.** Visual Studio 2026's agent picker has its own file format and its own location,
   and this round read neither.
-- **Anything published over `mcp serve`, any setting, any environment variable.** The published set is still five
+- **Anything published over `mcp serve`, any setting, any environment variable.** The published set is still six
   read-only tools, and neither action appears in the settings file or the settings table.
 
 ## What makes this round done

@@ -161,10 +161,11 @@ internal static class HelpText
           sharpcoreagent mcp serve [options]          the same shape the --mcp flag speaks, served
           sharpcoreagent mcp config --client <name>   the block that adds it to claude, vscode, visualstudio or codex
           sharpcoreagent mcp bench                    the twelve fixture questions, asked twice and measured
-          Answers the Model Context Protocol on stdin and stdout for one workspace: the five read-only
-          evidence tools — search_code, find_symbol, find_references, code_context and index_status —
-          and nothing else. No key, no chat model, no network and no tool that writes or starts a
-          process is in the process at all.
+          Answers the Model Context Protocol on stdin and stdout for one workspace: the six read-only
+          evidence tools — search_code, find_symbol, find_references, code_context, index_status and
+          view_image — and nothing else. No key, no chat model, no network and no tool that writes or starts
+          a process is in the process at all. A picture is returned as an image part; the client decides
+          whether its model can read it.
 
           Before a tool call answers, the index is brought up to date at most once every five seconds
           and never for longer than three. A refresh that cannot run — no index yet, another writer,
@@ -227,7 +228,7 @@ internal static class HelpText
           Two files, and neither is per-client: an agent profile is read by whatever editor the developer
           uses, and a task list belongs to this workspace. 'ide agent' writes
           .github/agents/sharpcoreagent.agent.md — YAML frontmatter with a description and a tools list, then
-          a prompt. The tools are the five 'mcp serve' publishes, each named sharpcoreagent/<tool>, so the
+          a prompt. The tools are the six 'mcp serve' publishes, each named sharpcoreagent/<tool>, so the
           profile and the server cannot list different tools. No name: the file's name is the name the picker
           shows. No model and no target: the model is the developer's choice, and unset target means both
           environments.

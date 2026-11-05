@@ -17,7 +17,7 @@ and repeatable operations available to GitHub Copilot, Codex, or Claude Code …
 `002-code-evidence-index` built the thing all of this is about: a per-workspace index that answers
 "where is the passage that matches this intent", "what is this symbol and who calls it", and "what else
 belongs to this cluster", and answers with evidence rather than prose — a path, a line range and a content
-hash the caller can quote. Five read-only tools sit on top of it. `002` also drew one line around it:
+hash the caller can quote. Six read-only tools sit on top of it. `002` also drew one line around it:
 
 > Out of scope: an MCP server (the index is in-process). — `002/spec.md:43`
 
@@ -42,7 +42,7 @@ schemas they already carry.
 | Piece | Where | Used as |
 |---|---|---|
 | Index build, storage, retrieval, ranking | `SharpCoreAgent.Indexing` (SharpCoreDb single file; lexical + vector legs fused by RRF; symbol graph and communities; incremental refresh; verify and prune) | unchanged |
-| Five read-only tools | `SearchCodeTool`, `FindSymbolTool`, `FindReferencesTool`, `CodeContextTool`, `IndexStatusTool` | published verbatim |
+| Six read-only tools | `SearchCodeTool`, `FindSymbolTool`, `FindReferencesTool`, `CodeContextTool`, `IndexStatusTool`, `ViewImageTool` | published verbatim; `view_image` answers with an MCP `image` part |
 | Tool declaration | `ITool.Definition` — name, description, `ParametersSchemaJson` | becomes `tools/list` `inputSchema`, byte for byte |
 | Tool set and lookup | `ToolRegistry` / `IToolRegistry` | the published set is a filtered view of it |
 | Protocol shapes | `JsonRpcPipe`, `McpToolInfo`, `McpContent` (client side), `tests/SharpCoreAgent.TestMcpServer` (a stdio server proving the shapes) | read as the contract to satisfy, not copied |
@@ -77,7 +77,7 @@ expected `path:start-end` heading. No API key, no network, no model.
 1. **Given** an indexed workspace and a server started with `mcp serve`, **When** the client sends
    `initialize`, **Then** the answer names a protocol version, `capabilities.tools`, and a `serverInfo`
    whose name is `sharpcoreagent`.
-2. **Given** the same, **When** the client sends `tools/list`, **Then** exactly the five documented tool
+2. **Given** the same, **When** the client sends `tools/list`, **Then** exactly the six documented tool
    names come back, each with the `inputSchema` text `ToolDefinition.ParametersSchemaJson` holds and
    `annotations.readOnlyHint: true`.
 3. **Given** the same, **When** the client calls `search_code` with `{"query":"trim tool result"}`, **Then**
@@ -241,7 +241,7 @@ TOML-shaped for the third) and names the running binary.
 
 ### Key Entities
 
-- **Published set**: the five read-only evidence tools, the allow-list, and the reason each name is on it.
+- **Published set**: the six read-only evidence tools, the allow-list, and the reason each name is on it.
 - **Invocation**: one `tools/call` — id, tool name, argument object, cancellation token, `ToolResult`.
 - **Ready line**: the single stderr line a client may log, naming the workspace, the index state and how
   many tools are published. Never a substitute for a protocol answer.
@@ -251,7 +251,7 @@ TOML-shaped for the third) and names the running binary.
 ### Measurable Outcomes
 
 - **SC-001**: From a clean checkout, `index` then `mcp serve`, a client completes `initialize` and
-  `tools/list` in under 2 seconds on this repository, and the list holds exactly five names.
+  `tools/list` in under 2 seconds on this repository, and the list holds exactly six names.
 - **SC-002**: For the same query and the same index, `tools/call search_code` over stdio returns text
   **byte-identical** to the in-process `SearchCodeTool` result. Parity is asserted, not claimed.
 - **SC-003**: No tool outside the allow-list is reachable: a test enumerates the registry, filters by

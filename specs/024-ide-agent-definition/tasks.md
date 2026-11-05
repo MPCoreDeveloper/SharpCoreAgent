@@ -11,7 +11,7 @@ the index with the same binary that wrote the file, so a stale index is one run 
 ## Phase 1 — the shared pieces
 
 - [X] T001 Write `spec.md`, `plan.md` and this file.
-- [X] T002 `McpServerCatalog`: the five published names, public and read-only, with `McpServerPublishedSet.AllowList`
+- [X] T002 `McpServerCatalog`: the six published names, public and read-only, with `McpServerPublishedSet.AllowList`
       delegating to it. The set keeps enforcing; only the array moves.
 - [X] T003 `WorkspaceFileWriter` (read text, save text, no BOM, create the directory) and `WorkspaceWriteException`;
       `WriteOutcome` moves beside them and `McpConfigWriter` is re-pointed at all three. Existing behaviour and messages
@@ -23,7 +23,7 @@ the index with the same binary that wrote the file, so a stale index is one run 
 ## Phase 2 — US1, the profile
 
 - [X] T006 `AgentProfile`: the destination, the marker, the frontmatter (`description`, `tools` from
-      `McpServerCatalog`), and the prompt body naming all five tools.
+      `McpServerCatalog`), and the prompt body naming all six tools.
 - [X] T007 `IdeFileWriter.WriteProfile`: created, updated, unchanged, and the refusal for a file without the marker.
 - [X] T008 `IdeCommand`'s `agent` action (print, or `--write`) and the `Program` dispatch.
 

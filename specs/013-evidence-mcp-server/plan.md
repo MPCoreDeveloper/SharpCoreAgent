@@ -11,7 +11,7 @@ below are the plan of record. `tasks.md` carries the task boundaries.
 
 ## Summary
 
-Publish the five read-only evidence tools over stdio MCP so an agent that is not SharpAgent — Copilot agent
+Publish the six read-only evidence tools over stdio MCP so an agent that is not SharpAgent — Copilot agent
 mode, Claude Code, Codex CLI — can ask this repository's index where something is. No new retrieval
 behaviour, no new tool, no model, no network, no write path: one command, one protocol loop, one filtered
 tool set, one measurement.
@@ -130,7 +130,7 @@ sharpcoreagent mcp config --client <claude|vscode|codex>
 
 `AddMcpServer(workspace, options)` registers, in order: `SharpCoreAgentIndex.Open(workspace)` as itself,
 `ICodeIndex` and `ICodeIndexMaintainer` (the same three lines `AddSharpCoreAgentIndex` writes today), then
-the five tools — each of which already takes `ICodeIndex?` — then `McpServerSession`.
+the six tools — five index tools plus `ViewImageTool` — then `McpServerSession`.
 
 It registers **no** `IChatModel`, no `ICredentialStore`, no `IChatModelResolver` and no `HttpClient`. That is
 FR-001 and it is testable: a test resolves the session from a container with no key in the environment and

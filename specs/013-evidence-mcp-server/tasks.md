@@ -4,7 +4,7 @@ Legend: `[X]` implemented and covered by tests in this change; `[ ]` not started
 has a real list rather than a memory.
 
 The phases below are the six phases of [plan.md](plan.md), and each closes with the gate that plan names. The
-published set is `search_code`, `find_symbol`, `find_references`, `code_context`, `index_status` — five names,
+published set is `search_code`, `find_symbol`, `find_references`, `code_context`, `index_status`, `view_image` — six names,
 one allow-list, no flag (FR-009, FR-010).
 
 ## Phase 1 — the protocol, before any tool
@@ -36,7 +36,7 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
 
 ## Phase 2 — the published set
 
-- [X] T006 `McpServerPublishedSet`: the five names in a fixed order, resolved against the registry as
+- [X] T006 `McpServerPublishedSet`: the six names in a fixed order, resolved against the registry as
   `Safety == ToolSafety.ReadOnly` ∩ allow-list. A name on the list that is absent from the registry is skipped,
   not published from a stale schema (FR-009).
 - [X] T007 `tools/list`: one page, no `nextCursor`, `name` + `Description` + `ParametersSchemaJson` byte for
@@ -56,7 +56,7 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
 ## Phase 3 — the process
 
 - [X] T012 `AddMcpServer` in `ServiceCollectionExtensions`, constructing the server from the workspace alone —
-  no chat model, no key, no HTTP handler (FR-001). As built: the five tools are registered here rather than
+  no chat model, no key, no HTTP handler (FR-001). As built: the six tools are registered here rather than
   borrowed from `AddSharpCoreAgent`, because that surface includes the ones that write and start processes, and
   the absence has to be a property of the registration rather than of a code path. `McpServerCompositionTests`
   asserts the container, not the flag: no `IChatModel`, no `IChatModelResolver`, no `HttpClient`, no `McpToolHost`.
@@ -129,7 +129,7 @@ Closes with: `dotnet build` and the fourteen session tests green on a zero-warni
   `sharpcoreagent_search_code`, calls it, and gets the same text the in-process tool returns — no key, no network
   (FR-017). As built: `Infrastructure/McpServerDogfoodTests` (2) starts the real CLI — a new `CopyProductCli`
   target in the test project copies the CLI's whole output to `$(OutDir)Cli`, so the child is the binary this
-  build produced and the launch is one a user could type. The first test reads the five names off `McpToolHost`
+  build produced and the launch is one a user could type. The first test reads the six names off `McpToolHost`
   and asserts `sharpcoreagent_<tool>`; the prefix is the executable's stem, which is why the snippet names the
   apphost and not `dotnet <dll>`. It also asserts the server's own `mcp serve:` line arrived on stderr, so the
   child is the command rather than a stand-in. The second test compares `servers[0].CallAsync("search_code")`

@@ -90,6 +90,7 @@ has a real list rather than a memory.
 - [X] T031 **Transcript trimming.** Closed by `042-context-fraction-compaction`: `CompactAtContextFraction` defaults to 0.8, compacts before the request when the estimated prompt exceeds that fraction of the model window, keeps system prompts and the newest message, and never splits a tool round. `/compact [n]` remains the manual override. The per-turn image ceiling (`020`) and duplicate suppression (`021`) still bound what a turn adds.
 - [ ] T032 **An image token estimate before the request.** A provider bills the pixels it decodes; the number
       arrives in `Usage` after the call or not at all, and inventing one would make `/cost` a guess.
-- [ ] T033 **Serving `view_image` over `mcp serve`.** The published set is a compile-time allow-list of the five
-      read-only index tools. Serving a picture is serving a file's bytes to a process the developer named, which is
-      a different argument from serving the index's evidence — and one nobody has made yet.
+- [X] T033 **Serving `view_image` over `mcp serve`. Closed by this amendment.** The published set now includes
+      `view_image`: read-only, the same `PathSafety` and 4 MiB ceiling as a turn, and an `image` part in the MCP
+      result rather than a server-side description. A model-free server context is the one case the tool's
+      capability gate allows, because the client — not the server — chooses the model that reads the picture.

@@ -555,17 +555,27 @@ public sealed class McpServerSession : IAsyncDisposable
     /// Renders a result as the <c>CallToolResult</c> the specification describes.
     /// </summary>
     /// <param name="result">What the tool returned.</param>
-    /// <returns>One text content block, plus <c>isError</c> when the tool failed.</returns>
+    /// <returns>One text content block, an <c>image</c> block per attached picture, and <c>isError</c> when the tool failed.</returns>
     /// <remarks>
-    /// One text block holding the tool's content unchanged. A structured result would be a second rendering of text the
-    /// tool already wrote for a model, and the client this server is built for is a model.
+    /// The text block holds the tool's content unchanged. A picture the tool returned becomes an MCP <c>image</c>
+    /// part — base64 with its media type — because the client this server is built for is a model, and a path it
+    /// cannot open is not a picture. <c>view_image</c> is the one tool that produces one; the server never captions or
+    /// describes it.
     /// </remarks>
     private static JsonObject AnswerBody(ToolResult result)
     {
-        var body = new JsonObject
+        var content = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = result.Content });
+        foreach (var image in result.Images)
         {
-            ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = result.Content }),
-        };
+            content.Add(new JsonObject
+            {
+                ["type"] = "image",
+                ["data"] = image.Base64,
+                ["mimeType"] = image.MediaType,
+            });
+        }
+
+        var body = new JsonObject { ["content"] = content };
 
         // Present only when true: the specification's default is false, and a client that reads the absence and a
         // client that reads false must agree.

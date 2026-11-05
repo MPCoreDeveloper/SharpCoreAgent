@@ -137,7 +137,7 @@ untouched.
 
 - **That VS Code resolves a `<server>/<tool>` entry against the server names in `.vscode/mcp.json`.** The syntax is
   documented, the prefix is documented as an MCP server's name, and both files this build writes name the same server —
-  but nobody here opened the agents dropdown in VS Code and saw the five tools listed. What a test can pin is narrower,
+  but nobody here opened the agents dropdown in VS Code and saw the six tools listed. What a test can pin is narrower,
   and was pinned: the profile's prefix is the same constant `mcp config` writes.
 - **That a profile without `target` appears in both environments.** The table says "If unset, defaults to both
   environments"; this round takes it at its word and sets nothing.

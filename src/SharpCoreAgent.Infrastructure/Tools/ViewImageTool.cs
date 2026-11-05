@@ -41,6 +41,23 @@ public sealed class ViewImageTool : ITool
     /// <summary>Gets the tool name.</summary>
     public const string Name = "view_image";
 
+    private readonly bool _allowWithoutModel;
+
+    /// <summary>Initializes a new instance for a turn whose model is known.</summary>
+    public ViewImageTool()
+        : this(allowWithoutModel: false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance, optionally allowing a caller with no model descriptor.
+    /// </summary>
+    /// <param name="allowWithoutModel">
+    /// <see langword="true"/> only for an MCP server, which is a conduit rather than the model that reads the picture:
+    /// it returns the image and lets the client decide. A normal turn keeps the capability gate.
+    /// </param>
+    public ViewImageTool(bool allowWithoutModel) => _allowWithoutModel = allowWithoutModel;
+
     private const string Schema =
         """{"type":"object","properties":{"path":{"type":"string","description":"Image path relative to the workspace root."}},"required":["path"],"additionalProperties":false}""";
 
@@ -114,7 +131,7 @@ public sealed class ViewImageTool : ITool
                     $"'{relative}' is {length} bytes; view_image shows at most {TextLimits.MaxImageBytes} bytes (4 MiB). Ask the developer to shrink it, or to save a smaller copy."));
         }
 
-        if (context.Model is not { SupportsImages: true })
+        if (!_allowWithoutModel && context.Model is not { SupportsImages: true })
         {
             // Refused before a byte is read, and phrased so the model has nothing to fill in by guessing: a model
             // that cannot see an image will describe one anyway if the only thing it was told is that a file exists.

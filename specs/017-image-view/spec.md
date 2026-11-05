@@ -74,8 +74,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   live endpoint and none needs a key.
 - **FR-009** A session file keeps the transcript's text and not its images. The `ImageAttached` sentence is what
   survives a reload, and it says that the way to see the picture again is one more `view_image` call.
-- **FR-010** `mcp serve` publishes none of this. The allow-list stays the five read-only index tools, and
-  `view_image` is asserted registered-but-not-served, so a later round that wants to serve it has to say so.
+- **FR-010** `mcp serve` publishes `view_image` from T033 onward: the allow-list holds six read-only tools, the server
+  answers with an `image` part, and the tool accepts a model-free server context because the client chooses the model.
+  The other image doors — MCP `image` parts, `fetch_url` and session files — remain outside the server.
 - **FR-011** The prompt ships with the tool or not at all: operating rule 9 of `PromptLibrary.SystemPrompt` names
   `view_image`, when to call it, and that a refusal is answered by saying so rather than by describing a picture
   the model was never shown. No flag adds or removes either the tool or the rule.

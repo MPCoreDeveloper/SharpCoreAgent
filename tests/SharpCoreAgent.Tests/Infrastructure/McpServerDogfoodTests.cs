@@ -89,6 +89,7 @@ public sealed class McpServerDogfoodTests : IDisposable
                 "sharpcoreagent_find_symbol",
                 "sharpcoreagent_index_status",
                 "sharpcoreagent_search_code",
+                "sharpcoreagent_view_image",
             ],
             host.Tools.Select(tool => tool.Definition.Name).Order(StringComparer.Ordinal));
 

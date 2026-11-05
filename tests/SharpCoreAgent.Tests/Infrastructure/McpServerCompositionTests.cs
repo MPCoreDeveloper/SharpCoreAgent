@@ -12,7 +12,7 @@ using Xunit;
 namespace SharpCoreAgent.Tests.Infrastructure;
 
 /// <summary>
-/// The container <c>mcp serve</c> builds: five read-only tools over a leased index, and nothing that could spend a
+/// The container <c>mcp serve</c> builds: six read-only tools over a leased index, and nothing that could spend a
 /// key, open a socket or write a file.
 /// </summary>
 /// <remarks>
@@ -55,14 +55,14 @@ public sealed class McpServerCompositionTests : IDisposable
     }
 
     [Fact]
-    public void TheRegistryHoldsTheFiveEvidenceToolsAndNothingThatWrites()
+    public void TheRegistryHoldsTheSixEvidenceToolsAndNothingThatWrites()
     {
         using var provider = Build();
 
         var definitions = provider.GetRequiredService<IToolRegistry>().Definitions;
 
         Assert.Equal(
-            ["code_context", "find_references", "find_symbol", "index_status", "search_code"],
+            ["code_context", "find_references", "find_symbol", "index_status", "search_code", "view_image"],
             definitions.Select(definition => definition.Name).Order(StringComparer.Ordinal));
 
         Assert.All(definitions, definition => Assert.DoesNotContain("shell", definition.Name, StringComparison.Ordinal));
@@ -98,7 +98,7 @@ public sealed class McpServerCompositionTests : IDisposable
         await using var session = provider.GetRequiredService<McpServerSession>();
 
         Assert.Equal(0, await session.RunAsync(TestContext.Current.CancellationToken));
-        Assert.Equal(5, session.PublishedToolCount);
+        Assert.Equal(6, session.PublishedToolCount);
 
         var answer = Assert.Single(Encoding.UTF8.GetString(output.ToArray()).Split('\n', StringSplitOptions.RemoveEmptyEntries));
         Assert.Contains("\"id\":9", answer, StringComparison.Ordinal);

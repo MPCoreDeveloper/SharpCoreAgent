@@ -262,13 +262,16 @@ catalogue needs is where the tool sits among the others:
   `PromptLibrary.ImageAttached` and the image after the tool message, because every compatible provider accepts image
   parts on the user role and none accepts them on a tool result. The loop reads `ToolResult.Images`, so this is a
   property of any tool that answers with a picture rather than of this one.
-- **Refusals** — a text-only model, and a context that named no model, are refused before the file is opened, and the
-  refusal forbids describing a picture the model never received. Wrong extension, zero bytes and over 4 MiB are
-  refused with their own numbers. Every one is a failed `ToolResult` the model can act on, never an exception.
+- **Refusals** — a text-only model, and a normal turn whose context named no model, are refused before the file is
+  opened, and the refusal forbids describing a picture the model never received. An MCP server is the one
+  model-free caller allowed: it returns the image and lets the client choose the model. Wrong extension, zero bytes
+  and over 4 MiB are refused with their own numbers. Every one is a failed `ToolResult` the model can act on, never an
+  exception.
 - **Prompt** — operating rule 9 of `PromptLibrary.SystemPrompt` ships with it: call `view_image` when the answer
   depends on what a picture contains, and say so when the session's model cannot see it.
-- **Not served** — `mcp serve` still publishes the five read-only index tools only. `view_image` is registered and not
-  published, which `McpServerPublishedSetTests` asserts.
+- **Served** — `mcp serve` publishes `view_image` as its sixth read-only tool (T033). The server answers with an MCP
+  `image` part; the client decides whether its model can read it. `McpServerPublishedSetTests` pins the six-name
+  allow-list.
 
 ## Delegation (011)
 

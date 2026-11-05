@@ -43,7 +43,8 @@ Each entry is (the `properties` object elided — it is the tool's own schema, v
 same schema the provider receives, including `enum`, `minimum` and `additionalProperties`.
 
 Published names, in this order: `code_context`, `find_references`, `find_symbol`, `index_status`,
-`search_code` (ordinal, which is also `ToolRegistry`'s order).
+`search_code`, `view_image` (ordinal, which is also `ToolRegistry`'s order). `view_image` returns its picture as
+an `image` content part beside the sentence, not as a path the client would have to open.
 
 Never published, whatever the flags: `delete_file`, `fetch_url`, `list_directory`, `list_roots`, `read_file`,
 `replace_in_file`, `run_shell`, `search_text`, `shell_output`, `shell_stop`, `write_file`, and every

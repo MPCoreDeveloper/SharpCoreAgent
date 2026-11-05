@@ -14,7 +14,7 @@ namespace SharpCoreAgent.Tests.Infrastructure;
 /// What the server is willing to publish, asserted against the container the CLI actually builds.
 /// </summary>
 /// <remarks>
-/// The subject is the filter, not the five tools: a registry holding every workspace tool — including, with
+/// The subject is the filter, not the six tools: a registry holding every workspace tool — including, with
 /// <c>--web</c>, the one that reaches the network — must yield exactly the allow-list. The registry comes from the
 /// composition root rather than from a list written here, because a list in a test cannot drift out of step with the
 /// product and therefore cannot catch the drift that matters.
@@ -45,7 +45,8 @@ public sealed class McpServerPublishedSetTests : IDisposable
         var published = Publish();
 
         Assert.Equal(McpServerPublishedSet.AllowList, published.Tools.Select(tool => tool.Tool.Definition.Name));
-        Assert.Equal(5, published.Count);
+        Assert.Equal(6, published.Count);
+        Assert.Contains("view_image", published.Tools.Select(tool => tool.Tool.Definition.Name));
     }
 
     [Fact]
@@ -67,7 +68,6 @@ public sealed class McpServerPublishedSetTests : IDisposable
     [InlineData("search_text")]
     [InlineData("shell_output")]
     [InlineData("shell_stop")]
-    [InlineData("view_image")]
     [InlineData("write_file")]
     public void AToolTheRegistryHoldsIsStillNotPublishedUnlessItIsOnTheList(string name)
     {

@@ -1,7 +1,7 @@
 namespace SharpCoreAgent.Infrastructure.McpServer;
 
 /// <summary>
-/// The five tool names this server publishes, stated once — as a contract rather than as a private list.
+/// The six tool names this server publishes, stated once — as a contract rather than as a private list.
 /// </summary>
 /// <remarks>
 /// <see cref="McpServerPublishedSet"/> still decides what is served: a name here that the registry does not hold, or
@@ -17,7 +17,7 @@ public static class McpServerCatalog
     /// Gets the published names, in the order the contract documents them.
     /// </summary>
     /// <remarks>
-    /// Ordinal order, like the registry's, so <c>tools/list</c> and an agent profile list the same five tools in the
+    /// Ordinal order, like the registry's, so <c>tools/list</c> and an agent profile list the same six tools in the
     /// same order. Nothing outside <see cref="McpServerPublishedSet"/> may widen this: it is an allow-list, and the
     /// filter that intersects it with the registry is the requirement rather than an optimisation.
     /// </remarks>
@@ -28,5 +28,6 @@ public static class McpServerCatalog
         Tools.FindSymbolTool.Name,
         Tools.IndexStatusTool.Name,
         Tools.SearchCodeTool.Name,
+        Tools.ViewImageTool.Name,
     ];
 }

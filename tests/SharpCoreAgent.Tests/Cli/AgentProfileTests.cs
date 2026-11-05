@@ -52,7 +52,7 @@ public sealed class AgentProfileTests
             McpServerCatalog.PublishedToolNames.Select(name => $"\"{McpClientSnippets.ServerName}/{name}\""));
 
         Assert.Contains($"tools: [{expected}]", AgentProfile.Render(), StringComparison.Ordinal);
-        Assert.Equal(5, McpServerCatalog.PublishedToolNames.Count);
+        Assert.Equal(6, McpServerCatalog.PublishedToolNames.Count);
     }
 
     [Fact]

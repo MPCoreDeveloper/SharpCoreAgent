@@ -49,7 +49,7 @@ public sealed class McpServerToolsTests : IDisposable
     }
 
     [Fact]
-    public async Task ToolsListAdvertisesTheFiveToolsInOnePage()
+    public async Task ToolsListAdvertisesTheSixToolsInOnePage()
     {
         using var provider = Build();
 
@@ -61,9 +61,9 @@ public sealed class McpServerToolsTests : IDisposable
         var result = Root(Assert.Single(answers)).GetProperty("result");
         var tools = result.GetProperty("tools");
 
-        Assert.Equal(5, tools.GetArrayLength());
+        Assert.Equal(6, tools.GetArrayLength());
         Assert.Equal(
-            ["code_context", "find_references", "find_symbol", "index_status", "search_code"],
+            ["code_context", "find_references", "find_symbol", "index_status", "search_code", "view_image"],
             tools.EnumerateArray().Select(tool => tool.GetProperty("name").GetString()));
 
         // No nextCursor, because one page holds the set: a client that paged anyway would ask for a page that does
@@ -89,7 +89,7 @@ public sealed class McpServerToolsTests : IDisposable
         var (answers, _, log) = await ServeAsync(provider.GetRequiredService<IToolRegistry>(), Paged);
 
         var result = Root(Assert.Single(answers)).GetProperty("result");
-        Assert.Equal(5, result.GetProperty("tools").GetArrayLength());
+        Assert.Equal(6, result.GetProperty("tools").GetArrayLength());
         Assert.False(result.TryGetProperty("nextCursor", out _));
         Assert.Contains(log, line => line.Contains("cursor was ignored", StringComparison.Ordinal));
     }
@@ -152,6 +152,31 @@ public sealed class McpServerToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task AnImageToolAnswerCarriesAnImagePart()
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        await File.WriteAllBytesAsync(
+            Path.Combine(_workspace, "shot.png"),
+            bytes,
+            TestContext.Current.CancellationToken);
+
+        var (answers, _, _) = await ServeAsync(
+            new ToolRegistry([new ViewImageTool(allowWithoutModel: true)]),
+            Call(48, ViewImageTool.Name, """{"path":"shot.png"}"""));
+
+        var result = Root(Assert.Single(answers)).GetProperty("result");
+        var content = result.GetProperty("content");
+
+        Assert.Equal(2, content.GetArrayLength());
+        Assert.Equal("text", content[0].GetProperty("type").GetString());
+
+        var image = content[1];
+        Assert.Equal("image", image.GetProperty("type").GetString());
+        Assert.Equal("image/png", image.GetProperty("mimeType").GetString());
+        Assert.Equal(Convert.ToBase64String(bytes), image.GetProperty("data").GetString());
+    }
+
+    [Fact]
     public async Task AToolOutsideTheAllowListIsInvalidParametersAndTheLoopSurvives()
     {
         using var provider = Build();
@@ -165,7 +190,7 @@ public sealed class McpServerToolsTests : IDisposable
         Assert.Equal(44, refused.GetProperty("id").GetInt64());
         Assert.Equal(-32602, refused.GetProperty("error").GetProperty("code").GetInt32());
         Assert.Equal(
-            "unknown tool 'write_file'; this server publishes 5 evidence tools",
+            "unknown tool 'write_file'; this server publishes 6 evidence tools",
             refused.GetProperty("error").GetProperty("message").GetString());
 
         Assert.Equal(45, Root(answers[1]).GetProperty("id").GetInt64());

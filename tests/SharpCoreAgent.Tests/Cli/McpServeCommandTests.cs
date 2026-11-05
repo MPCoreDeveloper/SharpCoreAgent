@@ -49,7 +49,7 @@ public sealed class McpServeCommandTests
         var line = Assert.Single(Lines(diagnostics));
         Assert.StartsWith("sharpcoreagent mcp serve: ", line, StringComparison.Ordinal);
         Assert.Contains("index missing", line, StringComparison.Ordinal);
-        Assert.Contains("· 5 tools", line, StringComparison.Ordinal);
+        Assert.Contains("· 6 tools", line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class McpServeCommandTests
 
         Assert.Equal(0, exit);
         Assert.Equal([1L, 2L, 3L], answers.Select(answer => Root(answer).GetProperty("id").GetInt64()));
-        Assert.Equal(5, Root(answers[1]).GetProperty("result").GetProperty("tools").GetArrayLength());
+        Assert.Equal(6, Root(answers[1]).GetProperty("result").GetProperty("tools").GetArrayLength());
     }
 
     [Fact]

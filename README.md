@@ -814,9 +814,10 @@ sharpcoreagent index                     # once, after cloning: nothing here bui
 sharpcoreagent mcp serve --workspace .    # then the agent starts this
 ```
 
-It speaks JSON-RPC 2.0 on stdin and stdout, one object per line, and offers the five read-only evidence
-tools — `search_code`, `find_symbol`, `find_references`, `code_context` and `index_status` — with the
-schemas they already carry. Nothing that writes, starts a process or reaches the network is in that
+It speaks JSON-RPC 2.0 on stdin and stdout, one object per line, and offers the six read-only evidence
+tools — `search_code`, `find_symbol`, `find_references`, `code_context`, `index_status` and `view_image` — with the
+schemas they already carry. `view_image` returns a picture as an MCP `image` part; the client decides whether its
+model can read it. Nothing that writes, starts a process or reaches the network is in that
 process: no key, no chat model, no `fetch_url`, no shell. The whole surface is
 `specs/013-evidence-mcp-server/contracts/mcp-server.md`.
 
@@ -893,7 +894,7 @@ you.
 ### In the picker
 
 A configured server is a set of tools; an agent is the thing that decides to use them. One command puts this
-workspace's index into the editor's agent picker, with those five tools and nothing else:
+workspace's index into the editor's agent picker, with those six tools and nothing else:
 
 ```powershell
 sharpcoreagent ide agent --write         # .github/agents/sharpcoreagent.agent.md

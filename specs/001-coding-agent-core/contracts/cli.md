@@ -125,7 +125,7 @@ the index, builds a container, reads a credential, starts a process or touches t
 
 | Action | File | What it carries |
 |---|---|---|
-| `agent` | `<workspace>/.github/agents/sharpcoreagent.agent.md` | YAML frontmatter — `description`, and `tools` naming the five published tools as `sharpcoreagent/<tool>` — then the prompt |
+| `agent` | `<workspace>/.github/agents/sharpcoreagent.agent.md` | YAML frontmatter — `description`, and `tools` naming the six published tools as `sharpcoreagent/<tool>` — then the prompt |
 | `tasks` | `<workspace>/.vscode/tasks.json` | `"version": "2.0.0"` and one task, `sharpcoreagent: index`, whose `command` is this binary's absolute path |
 
 The profile's tool list is built from the same array `mcp serve` filters by, so the two cannot disagree; it
