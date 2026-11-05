@@ -210,6 +210,8 @@ Acceptance:
   browser the developer already has.
 - **Images in the transcript.** Nothing adds an `image` content part to a `ChatMessage`, sends base64 to a
   model, or asks a provider to look at anything. The bytes go to disk; the model gets a path.
+- **A catalogue of what was captured.** `list_artifacts` (spec `053`) reports the folder newest first; it does not
+  make `.sharpcoreagent` part of the code index or ordinary `list_directory`.
 - **Looking at the picture.** No OCR, no captioning, no "describe this screenshot" fallback: the developer
   looks, and the model reads the accessibility tree it already reads.
 - **Anything that is not an image file.** Video, audio, PDFs, HAR files, Playwright traces: described, not

@@ -182,6 +182,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, ViewImageTool>();
         services.AddSingleton<ITool, SearchTextTool>();
         services.AddSingleton<ITool, ListRootsTool>();
+        services.AddSingleton<ITool, ListArtifactsTool>();
         services.AddSingleton<ITool, WriteFileTool>();
         services.AddSingleton<ITool, ReplaceInFileTool>();
         services.AddSingleton<ITool, DeleteFileTool>();

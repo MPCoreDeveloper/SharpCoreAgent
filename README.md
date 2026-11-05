@@ -375,7 +375,7 @@ session: a standing approval belongs to the conversation that earned it.
 
 ## Tools
 
-`list_directory`, `read_file`, `view_image`, `search_text`, `list_roots`, `write_file`, `replace_in_file`,
+`list_directory`, `read_file`, `view_image`, `search_text`, `list_roots`, `list_artifacts`, `write_file`, `replace_in_file`,
 `delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `python_verify`, `node_verify`,
 `git_status`, `git_diff`, `task`, `file_diagnostics`, `uses_at`, `signature_at`.
 
@@ -631,9 +631,9 @@ channel can still type the whole `--mcp` command. An image entry (`image/png`, `
 `<workspace>/.sharpcoreagent/artifacts/<server>-<tool>-<n>.<ext>`, and the entry reads
 `[image: image/png · 48213 base64 characters → .sharpcoreagent/artifacts/npx-browser_take_screenshot-1.png (36.4 KiB)]`.
 The turn reports a `Created` effect for each file even though the server annotated its screenshot tool
-read-only, so `/files` and `--json` name what was written. Nothing is overwritten — a second capture is
-`-2` — nothing is indexed, listed or searched, and a session that may not write (`--approval readonly`, or
-a sub-agent under it) keeps the sentence it writes today and adds
+read-only, so `/files` and `--json` name what was written. A later `list_artifacts` call lists the folder newest first.
+Nothing is overwritten — a second capture is `-2` — nothing is indexed, listed or searched by `list_directory`, and a
+session that may not write (`--approval readonly`, or a sub-agent under it) keeps the sentence it writes today and adds
 `· not saved: this session may not write`. The browser still comes from Playwright and the developer's installed
 Edge/Chromium: this repository ships no driver or browser binary. `npx -y @playwright/mcp@latest --version` measured
 0.0.84 here on 2026-11-04, and the client's earlier live run used `--browser msedge` because Playwright's default

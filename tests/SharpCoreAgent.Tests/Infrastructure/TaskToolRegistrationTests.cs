@@ -32,6 +32,7 @@ public sealed class TaskToolRegistrationTests
         "git_diff",
         "git_status",
         "index_status",
+        "list_artifacts",
         "list_directory",
         "list_roots",
         "node_verify",

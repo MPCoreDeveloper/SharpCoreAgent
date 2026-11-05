@@ -165,8 +165,8 @@ temp workspace. Each test states the SC it answers.
 - [ ] T032 PDF, video or audio artefacts, and any `application/*` type: the five image types are the whole
   table, and a format whose extension would lie is refused by name (FR-004).
 - [X] T033 Retention, cleanup, deduplication or a size-bounded artefacts directory. **Done in `049-artefact-retention`:** `MaxArtefactDirectoryBytes` defaults to 256 MiB, deletes the oldest files in `.sharpcoreagent/artifacts/` until the new one fits, and does no deduplication.
-- [ ] T034 An `artifacts` tool, a `/files` filter, or index visibility: `list_files` still cannot see
-  `.sharpcoreagent` (FR-012).
+- [X] T034 An `artifacts` tool, a `/files` filter, or index visibility. **Closed by `053-artifacts-tool`
+  as a read-only `list_artifacts` tool:** newest first, `limit` 1–500, path/size/UTC time, no index visibility.
 - [X] T035 Showing the image to the model as an image. Closed by `017-image-view` (`e69cbdc`), which is the round
   this line predicted: `ImageContent` and `ChatMessage.Images` are the content-block change, and `view_image` fills
   them from a file in the workspace or a read-only attachment. What is still absent from *images* is the list in
