@@ -60,6 +60,7 @@ internal static class AgentProfile
             "---",
             "name: sharpcoreagent",
             "description: Answers questions about this workspace from its code index, through the sharpcoreagent MCP server.",
+            "mcp-servers: [sharpcoreagent]",
             string.Create(CultureInfo.InvariantCulture, $"tools: [{tools}]"),
             "---",
             string.Empty,

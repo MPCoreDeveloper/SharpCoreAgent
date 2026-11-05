@@ -21,9 +21,8 @@ public sealed class AgentProfileTests
 
         Assert.Equal("---", lines[0]);
 
-        // Closed on the fifth line: name, description, tools, close. A sixth key would mean the round added one without a
-        // paragraph in the plan saying which.
-        Assert.Equal("---", lines[4]);
+        // Closed on the sixth line: name, description, mcp-servers, tools, close.
+        Assert.Equal("---", lines[5]);
         Assert.Equal(2, lines.Count(line => line == "---"));
     }
 
@@ -33,14 +32,14 @@ public sealed class AgentProfileTests
         var lines = Lines(AgentProfile.Render());
 
         Assert.StartsWith("description: ", lines[2], StringComparison.Ordinal);
-        Assert.StartsWith("tools: [", lines[3], StringComparison.Ordinal);
+        Assert.StartsWith("mcp-servers: ", lines[3], StringComparison.Ordinal);
+        Assert.StartsWith("tools: [", lines[4], StringComparison.Ordinal);
 
-        // The keys this round deliberately leaves to the editor: model belongs to the developer, unset target means both
-        // environments, and IDE agents ignore mcp-servers.
+        // The keys this round deliberately leaves to the editor: model belongs to the developer and target is omitted so
+        // the profile applies everywhere.
         Assert.StartsWith("name: ", lines[1], StringComparison.Ordinal);
-        Assert.DoesNotContain(lines[1..4], line => line.StartsWith("model:", StringComparison.Ordinal));
-        Assert.DoesNotContain(lines[1..4], line => line.StartsWith("target:", StringComparison.Ordinal));
-        Assert.DoesNotContain(lines[1..4], line => line.Contains("mcp-servers", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines[1..5], line => line.StartsWith("model:", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines[1..5], line => line.StartsWith("target:", StringComparison.Ordinal));
     }
 
     [Fact]
