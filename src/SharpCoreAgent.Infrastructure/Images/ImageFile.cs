@@ -41,14 +41,7 @@ public static class ImageFile
             return false;
         }
 
-        var mediaType = Path.GetExtension(fullPath).ToLowerInvariant() switch
-        {
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            _ => null,
-        };
+        var mediaType = MediaTypeFor(fullPath);
         if (mediaType is null)
         {
             error = string.Create(
@@ -94,4 +87,96 @@ public static class ImageFile
             out image,
             out error);
     }
+
+    /// <summary>Loads one image from a stream, for <c>--image -</c>.</summary>
+    /// <param name="input">The stream, normally standard input.</param>
+    /// <param name="image">The attachable image, on success.</param>
+    /// <param name="error">One sentence explaining a refusal, on failure.</param>
+    /// <returns><see langword="true"/> when the bytes are an accepted picture type.</returns>
+    /// <remarks>
+    /// There is no path to read an extension from, so the four signatures identify the type: PNG, JPEG, GIF and WebP.
+    /// The read is bounded to one byte over the per-file ceiling, so a pipeline cannot make the process allocate an
+    /// unbounded buffer before the refusal is known.
+    /// </remarks>
+    public static bool TryLoadStdin(Stream input, out ImageContent image, out string error)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        image = null!;
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        while (true)
+        {
+            var read = input.Read(chunk, 0, chunk.Length);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > TextLimits.MaxImageBytes)
+            {
+                error = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"the image on stdin is over the {TextLimits.MaxImageBytes}-byte (4 MiB) ceiling");
+                return false;
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        var bytes = buffer.ToArray();
+        var mediaType = Sniff(bytes);
+        if (mediaType is null)
+        {
+            error = "the bytes on stdin are not a PNG, JPEG, GIF or WebP image";
+            return false;
+        }
+
+        return ImagePayload.TryCreate(
+            mediaType,
+            Convert.ToBase64String(bytes),
+            TextLimits.MaxImageBytes,
+            out image,
+            out error);
+    }
+
+    private static string? Sniff(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length >= 8
+            && bytes[..8].SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }))
+        {
+            return "image/png";
+        }
+
+        if (bytes.Length >= 3 && bytes[..3].SequenceEqual(new byte[] { 0xFF, 0xD8, 0xFF }))
+        {
+            return "image/jpeg";
+        }
+
+        if (bytes.Length >= 6
+            && (bytes[..6].SequenceEqual("GIF87a"u8) || bytes[..6].SequenceEqual("GIF89a"u8)))
+        {
+            return "image/gif";
+        }
+
+        if (bytes.Length >= 12
+            && bytes[..4].SequenceEqual("RIFF"u8)
+            && bytes.Slice(8, 4).SequenceEqual("WEBP"u8))
+        {
+            return "image/webp";
+        }
+
+        return null;
+    }
+
+    private static string? MediaTypeFor(string fullPath) =>
+        Path.GetExtension(fullPath).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => null,
+        };
 }
+

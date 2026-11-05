@@ -67,8 +67,39 @@ internal static class RunCommand
         var agent = provider.GetRequiredService<CodingAgent>();
 
         var images = new List<ImageContent>();
+        var stdinImage = false;
         foreach (var path in cli.Images)
         {
+            if (string.Equals(path, "-", StringComparison.Ordinal))
+            {
+                if (stdinImage)
+                {
+                    await Console.Error.WriteLineAsync(
+                        "error: --image - may be used once; stdin can only be read once.".AsMemory(),
+                        cancellationToken).ConfigureAwait(false);
+                    return ExitCodes.Usage;
+                }
+
+                if (!Console.IsInputRedirected)
+                {
+                    await Console.Error.WriteLineAsync(
+                        "error: --image - needs an image piped or pasted into stdin, but stdin is a terminal.".AsMemory(),
+                        cancellationToken).ConfigureAwait(false);
+                    return ExitCodes.Usage;
+                }
+
+                stdinImage = true;
+                using var stdin = Console.OpenStandardInput();
+                if (!ImageFile.TryLoadStdin(stdin, out var piped, out var pipedError))
+                {
+                    await Console.Error.WriteLineAsync($"error: {pipedError}".AsMemory(), cancellationToken).ConfigureAwait(false);
+                    return ExitCodes.Usage;
+                }
+
+                images.Add(piped);
+                continue;
+            }
+
             if (!ImageFile.TryLoad(workspace!, path, out var image, out var error))
             {
                 await Console.Error.WriteLineAsync($"error: {error}".AsMemory(), cancellationToken).ConfigureAwait(false);

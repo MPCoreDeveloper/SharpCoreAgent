@@ -10,6 +10,40 @@ namespace SharpCoreAgent.Tests.Infrastructure;
 public sealed class ImageFileTests
 {
     [Fact]
+    public void StdinWithAPngSignatureBecomesAnImage()
+    {
+        var bytes = new byte[]
+        {
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        };
+
+        Assert.True(ImageFile.TryLoadStdin(new MemoryStream(bytes), out var image, out var error), error);
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal(Convert.ToBase64String(bytes), image.Base64);
+    }
+
+    [Fact]
+    public void StdinWithNoKnownSignatureIsRefused()
+    {
+        Assert.False(ImageFile.TryLoadStdin(new MemoryStream("not a picture"u8.ToArray()), out _, out var error));
+        Assert.Contains("not a PNG, JPEG, GIF or WebP", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StdinOverThePerFileCeilingIsRefused()
+    {
+        var bytes = new byte[4 * 1024 * 1024 + 1];
+        bytes[0] = 0x89;
+        bytes[1] = 0x50;
+        bytes[2] = 0x4E;
+        bytes[3] = 0x47;
+
+        Assert.False(ImageFile.TryLoadStdin(new MemoryStream(bytes), out _, out var error));
+        Assert.Contains("4 MiB", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task APngInsideTheWorkspaceBecomesAnAttachableImage()
     {
         using var sandbox = ToolTestWorkspace.Create();

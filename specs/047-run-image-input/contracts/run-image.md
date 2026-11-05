@@ -7,7 +7,7 @@ sharpcoreagent run "<prompt>" --image <path> [--image <path> ...]
 | Rule | Behaviour |
 |---|---|
 | command | `run` only; `chat` exits 2 |
-| resolution | workspace or read-only attachment |
+| path | workspace, read-only attachment, or `-` for stdin |
 | type | extension: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` |
 | per file | at most 4 MiB |
 | per turn | sum at most `MaxTurnImageBytes` |

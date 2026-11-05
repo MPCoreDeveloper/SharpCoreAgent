@@ -24,6 +24,7 @@ internal static class HelpText
           sharpcoreagent [options]                     a session in the current directory
           sharpcoreagent run "<prompt>" [options]      one turn, then exit
           sharpcoreagent run "<prompt>" --image <path>  attach a workspace picture to the prompt
+          sharpcoreagent run "<prompt>" --image -       attach a picture piped or pasted into stdin
           sharpcoreagent chat [options]                interactive loop
           sharpcoreagent models [--provider <name>]    list the models this build knows
           sharpcoreagent credentials --check           which provider keys are configured, and where
@@ -52,7 +53,7 @@ internal static class HelpText
           --workspace <path>       all         current directory
           --add-root <path>        run, chat   none        a read-only root the read tools may also read; repeatable
           --web                    run, chat   off         fetch_url may read http and https pages; the network is off otherwise
-          --image <path>           run         none        attach a PNG, JPEG, GIF or WebP picture to the prompt; repeatable
+          --image <path|->         run         none        attach a PNG, JPEG, GIF or WebP picture to the prompt; repeatable, '-' reads stdin
           --fsharp                 run, chat   off         also let file_diagnostics, uses_at and signature_at ask the F# type checker
           --no-csharp              run, chat   C# on       remove the C# compiler adapter and its three code-intelligence tools
           --no-git                 run, chat   Git on      remove the read-only git_status and git_diff evidence tools

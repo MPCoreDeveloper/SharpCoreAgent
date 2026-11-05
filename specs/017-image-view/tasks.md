@@ -82,7 +82,7 @@ has a real list rather than a memory.
       rewriting a developer's picture is worse than a refusal.
 - [ ] T029 **Images in session files.** Deliberate, and documented in `JsonFileSessionStore`: a transcript people
       grep is not a blob store, and the file is one `view_image` call away.
-- [ ] T030 **Pasted, dragged or piped images.** Attachment input is a different path from a workspace file, and pasted input would be a second way for a picture to enter a conversation with no path in the transcript. The `--image` flag on `run` is shipped in `047-run-image-input`, where the picture does have a path.
+- [ ] T030 **Pasted, dragged or piped images.** Piping is shipped in two parts: `--image <path>` in `047-run-image-input` and `--image -` (stdin) in `050-stdin-image-input`. Dragging and a clipboard API remain open, because each is a UI concern rather than a file path.
 - [ ] T031 **Transcript trimming.** Two clauses of this row were closed around it: `020` (round 11) put a per-turn ceiling
       of 16 MiB on what a turn may add, and `021` (round 12) stopped a picture the conversation already carries from being
       attached a second time — the row's *deduplication* half, by all three doors, as a success rather than a refusal.

@@ -16,4 +16,4 @@ Rules:
 - The path must be inside the workspace or a read-only attachment.
 - The model must declare image support; `deepseek-flash` and the Grok 4.3+ entries do.
 - The prompt is still required.
-- The flags are per invocation and are not written to the settings file.
+- `--image <path>` also accepts `-` for a piped image; see `050-stdin-image-input`.
