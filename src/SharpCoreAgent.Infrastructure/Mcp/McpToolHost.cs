@@ -54,12 +54,14 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     /// <param name="servers">The command lines, in the order the flags were given.</param>
     /// <param name="options">The ceilings every connection works within.</param>
     /// <param name="models">The resolver sampling uses, or null when the host did not provide one.</param>
+    /// <param name="urls">The remote streamable-HTTP endpoints, in the order the flags were given.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    /// <exception cref="ArgumentException">A command line is blank.</exception>
+    /// <exception cref="ArgumentException">A command line is blank, or a URL is not absolute http or https.</exception>
     public McpToolHost(
         IEnumerable<string> servers,
         McpClientOptions options,
-        IChatModelResolver? models = null)
+        IChatModelResolver? models = null,
+        IEnumerable<string>? urls = null)
     {
         ArgumentNullException.ThrowIfNull(servers);
         _options = (options ?? throw new ArgumentNullException(nameof(options))).Validate();
@@ -73,17 +75,39 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
             ArgumentException.ThrowIfNullOrWhiteSpace(commandLine);
 
             var stem = McpLauncher.Stem(commandLine);
-            var key = McpToolName.Fold(stem);
-            seen.TryGetValue(key, out var count);
-            count++;
-            seen[key] = count;
-
+            var count = Next(seen, stem);
             _connections.Add(new McpServerConnection(
                 McpToolName.ForServer(stem, count),
                 commandLine,
                 _options,
                 _sink.Write));
         }
+
+        foreach (var url in urls ?? [])
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(url);
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var endpoint) ||
+                (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new ArgumentException($"'{url}' is not an absolute http or https MCP URL", nameof(urls));
+            }
+
+            var count = Next(seen, endpoint.Host);
+            _connections.Add(new McpServerConnection(
+                McpToolName.ForServer(endpoint.Host, count),
+                endpoint,
+                _options,
+                _sink.Write));
+        }
+    }
+
+    private static int Next(Dictionary<string, int> seen, string stem)
+    {
+        var key = McpToolName.Fold(stem);
+        seen.TryGetValue(key, out var count);
+        count++;
+        seen[key] = count;
+        return count;
     }
 
     /// <summary>Gets the connections, in the order the flags were given.</summary>

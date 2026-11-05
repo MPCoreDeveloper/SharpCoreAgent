@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033, T034a, T034b and T036; T035 and T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033, T034a, T034b, T035a and T036; T035b and T037 deferred, listed in `tasks.md`)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -143,6 +143,10 @@ Acceptance:
   read-only `<server>_prompts` tool: no argument lists names and required arguments, and `name` plus an
   optional `arguments` object renders one. Binary resources are described by type and size; neither
   tool writes a file, and both are absent when the capability was not advertised.
+- **FR-020** `--mcp-url` talks streamable HTTP to one explicit endpoint: POST per JSON-RPC message,
+  JSON or SSE answer, `Mcp-Session-Id` preserved, no redirect, an 8 MiB response ceiling, and `https`
+  except for a loopback `http` host. The same handshake, tools, resources, prompts and supervision run
+  over it; OAuth and the legacy HTTP+SSE handshake are not part of this flag.
 
 ## Non-functional requirements
 
@@ -157,8 +161,9 @@ Acceptance:
 
 - **MCP logging.** One more capability of the same protocol, and it is not a tool the model calls.
   Sampling, resources and prompts are now covered by T034a and T034b and `--mcp-sampling`.
-- **Remote transports (HTTP+SSE, streamable HTTP).** A socket, a token and an OAuth flow are a
-  different threat model from a child process the developer started.
+- **Remote transports beyond streamable HTTP (legacy HTTP+SSE, OAuth).** T035a added the streamable-HTTP
+  client behind an explicit `--mcp-url`; the legacy handshake and an OAuth flow are a different threat
+  model and remain open.
 - **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five
   read-only evidence tools for one workspace. Exposing the agent's write and process surface to another
   process is a different product with a different approval boundary.

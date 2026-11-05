@@ -44,9 +44,11 @@ public sealed class McpServerConnection : IAsyncDisposable
     private readonly EventHandler _processExit;
     private readonly Stream? _input;
     private readonly Stream? _output;
+    private readonly Uri? _endpoint;
+    private readonly HttpMessageHandler? _handler;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
-    private JsonRpcPipe? _pipe;
+    private IJsonRpcChannel? _pipe;
     private Task? _stderrPump;
     private CancellationTokenSource? _stderrStop;
     private int _restartCount;
@@ -101,6 +103,32 @@ public sealed class McpServerConnection : IAsyncDisposable
     {
         _input = input ?? throw new ArgumentNullException(nameof(input));
         _output = output ?? throw new ArgumentNullException(nameof(output));
+    }
+
+    /// <summary>
+    /// Creates a connection that speaks streamable HTTP to one explicit endpoint.
+    /// </summary>
+    /// <param name="name">The prefix this server's tools carry.</param>
+    /// <param name="endpoint">The <c>http</c> or <c>https</c> endpoint the developer named.</param>
+    /// <param name="options">The ceilings the conversation works within.</param>
+    /// <param name="log">Receives channel diagnostics while <c>--verbose</c> is in force.</param>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is blank.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> or <paramref name="options"/> is null.</exception>
+    public McpServerConnection(string name, Uri endpoint, McpClientOptions options, Action<string>? log = null)
+        : this(name, endpoint?.ToString() ?? string.Empty, options, log)
+    {
+        _endpoint = endpoint;
+    }
+
+    internal McpServerConnection(
+        string name,
+        Uri endpoint,
+        HttpMessageHandler handler,
+        McpClientOptions options,
+        Action<string>? log = null)
+        : this(name, endpoint, options, log)
+    {
+        _handler = handler ?? throw new ArgumentNullException(nameof(handler));
     }
 
     /// <summary>Gets the prefix this server's tools carry, such as <c>npx</c> or <c>npx_2</c>.</summary>
@@ -572,7 +600,7 @@ public sealed class McpServerConnection : IAsyncDisposable
     }
 
     private async Task<McpCallResult> SendAsync(
-        JsonRpcPipe pipe,
+        IJsonRpcChannel pipe,
         JsonObject parameters,
         TimeSpan timeout,
         Func<McpArtefact, string>? save,
@@ -656,7 +684,7 @@ public sealed class McpServerConnection : IAsyncDisposable
         }
     }
 
-    private bool MarkRestartPending(JsonRpcPipe pipe)
+    private bool MarkRestartPending(IJsonRpcChannel pipe)
     {
         if (!CanRestart || (!pipe.IsClosed && !ProcessHasExited()))
         {
@@ -760,6 +788,12 @@ public sealed class McpServerConnection : IAsyncDisposable
         if (_input is not null && _output is not null)
         {
             _pipe = new JsonRpcPipe(_input, _output, _log);
+            return;
+        }
+
+        if (_endpoint is not null)
+        {
+            _pipe = new HttpJsonRpcChannel(_endpoint, _log, _handler);
             return;
         }
 

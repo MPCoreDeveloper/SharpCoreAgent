@@ -67,6 +67,21 @@ public sealed class McpRegistrationTests
         Assert.Equal(McpSamplingPolicy.First, provider.GetRequiredService<McpClientOptions>().SamplingPolicy);
     }
 
+    [Fact]
+    public void ARemoteUrlRegistersAHostWithoutStartingIt()
+    {
+        using var provider = Build(new SharpCoreAgentOptions
+        {
+            IndexEnabled = false,
+            McpUrls = ["https://mcp.example/rpc"],
+        });
+
+        var host = provider.GetRequiredService<McpToolHost>();
+        var server = Assert.Single(host.Servers);
+        Assert.Equal("https://mcp.example/rpc", server.CommandLine);
+        Assert.Contains("mcp", server.Name, StringComparison.Ordinal);
+    }
+
     private static ServiceProvider Build(SharpCoreAgentOptions options) =>
         new ServiceCollection().AddSharpCoreAgent(options).BuildServiceProvider();
 }

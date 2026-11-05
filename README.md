@@ -255,6 +255,7 @@ keep working on the file that needs repairing.
 | `--no-csharp` | run, chat | C# on — remove the Roslyn adapter and its three code-intelligence tools for this invocation |
 | `--no-git` | run, chat | Git on — remove the read-only `git_status` and `git_diff` evidence tools |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
+| `--mcp-url <url>` | run, chat | none — talk streamable HTTP to this explicit endpoint; `https`, or `http` on loopback; repeatable |
 | `--mcp-sampling <policy>` | run, chat | `deny` — `deny`, `first` (one request per connection) or `unrestricted` (rate-limited); a server may ask the session's model to sample |
 | `--browser` | run, chat | off — start the Playwright MCP server with Edge on Windows or Chromium elsewhere; adds `npx_browser_*` tools |
 | `--client <name>` | mcp config | none — `claude`, `vscode`, `visualstudio` or `codex`: whose configuration the printed block is for |
@@ -626,6 +627,13 @@ naming the command line. A server that exits later is restarted on the next call
 with a fresh handshake; the call that saw the failure is not repeated. Each child is killed with its
 process tree when the session ends, its stderr is kept for `--verbose` and never reaches the transcript,
 and there is no MCP client in a process that did not pass the flag.
+
+A server may also be reached over the network. `--mcp-url https://mcp.example/rpc` speaks the streamable-HTTP
+transport described by the MCP specification: one POST per message, JSON or server-sent events back, and the
+`Mcp-Session-Id` header preserved across requests. The endpoint is explicit and must be `https`, except that
+`http` is accepted for a loopback host. This client adds no OAuth flow, follows no redirect and accepts no
+certificate it would not accept elsewhere; authentication is the endpoint's business. The tools, resources and
+prompts it advertises arrive under the same generated names as a stdio server.
 
 A server may also ask the client to sample, which spends the session's model budget without the model
 deciding to. That is off unless the developer says otherwise: `--mcp-sampling deny` (the default) answers

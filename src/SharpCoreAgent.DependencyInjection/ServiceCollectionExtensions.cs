@@ -122,7 +122,7 @@ public static class ServiceCollectionExtensions
             AddWeb(services, options);
         }
 
-        if (options.McpServers.Count > 0)
+        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0)
         {
             AddMcp(services, options);
         }
@@ -329,7 +329,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(provider => new McpToolHost(
             options.McpServers,
             provider.GetRequiredService<McpClientOptions>(),
-            provider.GetRequiredService<IChatModelResolver>()));
+            provider.GetRequiredService<IChatModelResolver>(),
+            urls: options.McpUrls));
 
         services.AddSingleton<IToolRegistry>(provider =>
         {

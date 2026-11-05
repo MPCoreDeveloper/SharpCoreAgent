@@ -74,6 +74,13 @@ public sealed record SharpCoreAgentOptions
     /// </remarks>
     public IReadOnlyList<string> McpServers { get; init; } = [];
 
+    /// <summary>Gets the remote MCP endpoints this invocation talks to over streamable HTTP.</summary>
+    /// <remarks>
+    /// Explicit, absolute URLs only. Like <see cref="McpServers"/>, this is per invocation and absent from settings and
+    /// the environment: a remote server is a decision someone typed, not a default inherited from a file.
+    /// </remarks>
+    public IReadOnlyList<string> McpUrls { get; init; } = [];
+
     /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
     /// <remarks>
     /// A server request spends the developer's model budget without the model deciding to, so the default is deny.
@@ -236,7 +243,7 @@ public sealed record SharpCoreAgentOptions
                 ? PromptLibrary.SystemPromptFor(
                     IndexEnabled,
                     WebAccessEnabled,
-                    McpServers.Count > 0,
+                    McpServers.Count > 0 || McpUrls.Count > 0,
                     FSharpToolsEnabled,
                     CSharpToolsEnabled,
                     GitToolsEnabled)

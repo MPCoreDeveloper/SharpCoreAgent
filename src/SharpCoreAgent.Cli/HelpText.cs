@@ -64,6 +64,7 @@ internal static class HelpText
           --no-verify              run, chat   gate on     do not require dotnet_verify after a .NET edit for this run
           --web-allow <host>       run, chat   none        also read this host, whose address is loopback, private or metadata; repeatable
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
+          --mcp-url <url>          run, chat   none        talk streamable HTTP to this MCP endpoint; https, or http on loopback; repeatable
           --mcp-sampling <policy>  run, chat   deny        deny, first or unrestricted; first answers one server sampling request per connection
           --browser                run, chat   off         start the Playwright MCP server with Edge (Windows) or Chromium; adds npx_browser_* tools
           --client <name>          mcp config  —           claude, vscode, visualstudio or codex: whose configuration gets the block
@@ -118,6 +119,12 @@ internal static class HelpText
           saw the failure is not repeated. Search is not built in: a server, such as
           @brave/brave-search-mcp-server with BRAVE_API_KEY set, is what the flag
           is for.
+          --mcp-url talks streamable HTTP to one explicit endpoint instead of starting a child: https, or
+          http only for a loopback host. The endpoint owns its authentication; this client sends no OAuth
+          flow, follows no redirect and accepts no certificate it would not accept elsewhere. Its tools,
+          resources and prompts arrive under the same <server>_<tool> names as a stdio server.
+
+
 
           --mcp-sampling decides whether a server may ask the session's model to sample: deny (the
           default) answers -32601, first answers one request per connection, and unrestricted answers

@@ -20,7 +20,7 @@ namespace SharpCoreAgent.Infrastructure.Mcp;
 /// are still unanswered — which is what makes "the server died" a failed call instead of a hung one.
 /// </para>
 /// </remarks>
-internal sealed class JsonRpcPipe : IAsyncDisposable
+internal sealed class JsonRpcPipe : IJsonRpcChannel
 {
     private readonly StreamReader _reader;
     private readonly Stream _output;
@@ -45,7 +45,7 @@ internal sealed class JsonRpcPipe : IAsyncDisposable
     /// Null keeps the old behaviour: every server request is answered <c>-32601</c>. A connection sets this only while a
     /// tool call is in flight, so a sampling request cannot outlive the turn that authorized it.
     /// </remarks>
-    internal Func<string, JsonElement, CancellationToken, Task<JsonObject?>>? ServerRequestHandler { get; set; }
+    public Func<string, JsonElement, CancellationToken, Task<JsonObject?>>? ServerRequestHandler { get; set; }
 
     /// <summary>
     /// Creates a pipe over an already-open pair of streams.

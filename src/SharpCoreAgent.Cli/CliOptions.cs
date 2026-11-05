@@ -318,6 +318,9 @@ internal sealed record CliOptions
     /// </remarks>
     public IReadOnlyList<string> McpServers { get; init; } = [];
 
+    /// <summary>Gets the remote MCP endpoints this invocation talks to over streamable HTTP.</summary>
+    public IReadOnlyList<string> McpUrls { get; init; } = [];
+
     /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
     public McpSamplingPolicy McpSampling { get; init; } = McpSamplingPolicy.Deny;
 
@@ -511,6 +514,7 @@ internal sealed record CliOptions
         CSharpToolsEnabled = CSharp,
         GitToolsEnabled = Git,
         McpServers = Browser ? [.. McpServers, BrowserServerCommand] : McpServers,
+        McpUrls = McpUrls,
         McpSampling = McpSampling,
         Approval = Approval,
         MaxIterations = MaxIterations,
@@ -1945,10 +1949,10 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectMcpFlags(CliOptions options)
     {
-        if (options.McpServers.Count > 0 || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
+        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
         {
             throw new CliUsageException(
-                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too.",
+                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too.",
                 "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
         }
     }
@@ -2204,6 +2208,18 @@ internal sealed record CliOptions
                 {
                     McpServers = [.. options.McpServers, TakeValue(args, ref index, name)],
                 };
+
+            case "--mcp-url":
+                var url = TakeValue(args, ref index, name);
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var endpoint) ||
+                    (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
+                {
+                    throw new CliUsageException(
+                        $"'{url}' is not an absolute http or https MCP URL.",
+                        "Use https, or http only for a loopback MCP server.");
+                }
+
+                return options with { McpUrls = [.. options.McpUrls, url] };
 
             case "--mcp-sampling":
                 var sampling = TakeValue(args, ref index, name);

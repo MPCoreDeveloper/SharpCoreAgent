@@ -117,14 +117,14 @@ internal static class CliHost
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(error);
 
-        if (options.McpServers.Count == 0 && !options.Browser)
+        if (options.McpServers.Count == 0 && options.McpUrls.Count == 0 && !options.Browser)
         {
             return true;
         }
 
         if (provider.GetService<McpToolHost>() is not { } host)
         {
-            await error.WriteLineAsync("error: --mcp was given, but this build registered no MCP client.".AsMemory(), cancellationToken).ConfigureAwait(false);
+            await error.WriteLineAsync("error: an MCP server was given, but this build registered no MCP client.".AsMemory(), cancellationToken).ConfigureAwait(false);
             return false;
         }
 

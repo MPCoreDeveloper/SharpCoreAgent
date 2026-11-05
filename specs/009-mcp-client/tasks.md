@@ -116,7 +116,12 @@ next pass has a real list rather than a memory.
   supervision and result ceiling, describe binary resources instead of writing them, and are absent
   when the capability was not advertised. `McpCatalogTests` proves the bridges over a scripted server;
   `McpProcessTests` proves the host adds exactly those two tools when a real server advertises them.
-- [ ] T035 Remote transports (HTTP+SSE, streamable HTTP).
+- [X] T035a Streamable-HTTP client (`--mcp-url`). **Closed.** An explicit endpoint is spoken to with one
+  POST per JSON-RPC message and a JSON or SSE answer; `Mcp-Session-Id` is preserved, redirects are off,
+  the response is bounded at 8 MiB, and only `https` (or loopback `http`) is accepted. It reuses the
+  connection's handshake, tools, resources, prompts and supervision. `HttpJsonRpcChannelTests` covers
+  JSON, SSE, the session header, HTTP failure, the URL rule and a full handshake over the fake handler.
+- [ ] T035b Legacy HTTP+SSE transport and OAuth. The streamable-HTTP half is done; these remain.
 - [ ] T037 A declarative server list read from a file.
 
 ## Amendment — T036 supervision (2026-11-05)

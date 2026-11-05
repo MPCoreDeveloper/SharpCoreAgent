@@ -141,7 +141,8 @@ fixed names are one constant so a test can assert the list; the `.gitignore` mat
 ## Server-provided tools (009)
 
 `--mcp "<command>"` starts a stdio MCP server and registers every tool it lists. These are the only tools
-whose schema this build does not write, and the only ones whose names are generated:
+whose schema this build does not write, and the only ones whose names are generated. `--mcp-url <url>`
+speaks streamable HTTP to an explicit endpoint and produces the same generated tools, resources and prompts.
 
 - **Name** — `<server>_<tool>`, folded to `[a-z0-9_]` with runs collapsed, ends trimmed and the whole name
   capped at 64 characters. `<server>` is the command's executable stem (`npx`, `uvx`, `mcp-server-git`);

@@ -178,5 +178,37 @@ public sealed class McpOptionTests
         Assert.Contains("--mcp-sampling applies there too", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ARemoteUrlIsParsedForTheTurnCommands()
+    {
+        var options = CliOptions.Parse(
+            ["run", "hello", "--mcp-url", "https://mcp.example/rpc"],
+            NoEnvironment);
+
+        Assert.Equal(["https://mcp.example/rpc"], options.McpUrls);
+        Assert.Equal(["https://mcp.example/rpc"], options.ToSharpCoreAgentOptions().McpUrls);
+    }
+
+    [Fact]
+    public void ARemoteUrlMustBeAbsoluteHttpOrHttps()
+    {
+        var relative = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["run", "hello", "--mcp-url", "/rpc"], NoEnvironment));
+        var ftp = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["run", "hello", "--mcp-url", "ftp://mcp.example/rpc"], NoEnvironment));
+
+        Assert.Contains("not an absolute http or https MCP URL", relative.Message, StringComparison.Ordinal);
+        Assert.Contains("not an absolute http or https MCP URL", ftp.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARemoteUrlIsRefusedWhereNoTurnRuns()
+    {
+        var error = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["models", "--mcp-url", "https://mcp.example/rpc"], NoEnvironment));
+
+        Assert.Contains("--mcp-url", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 }
