@@ -54,5 +54,5 @@ public sealed record WebFetchOptions
     /// Named so an operator reading a log can tell an agent from a scanner. It is the one header the tool adds, and it
     /// carries no version, no host name and no path: those identify the machine rather than the client.
     /// </remarks>
-    public string UserAgent { get; init; } = "sharpcoreagent";
+    public string UserAgent { get; init; } = "sharpcoreagent/1.0 (+https://github.com/MPCoreDeveloper/SharpCoreAgent)";
 }

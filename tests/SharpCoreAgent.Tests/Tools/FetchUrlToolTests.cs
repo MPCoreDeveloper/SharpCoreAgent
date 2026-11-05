@@ -187,6 +187,77 @@ public sealed class FetchUrlToolTests
     }
 
     [Fact]
+    public async Task RobotsDisallowRefusesBeforeThePageRequest()
+    {
+        var handler = new StubHandler()
+            .Map("https://example.com/robots.txt", () => Respond("User-agent: *\nDisallow: /page", "text/plain"))
+            .Map(Url, () => Respond("should not be read"));
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var result = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.True(result.IsRefused);
+        Assert.Contains("robots.txt disallows", result.Content, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
+        Assert.Single(handler.RobotsRequests);
+    }
+
+    [Fact]
+    public async Task IgnoreRobotsSkipsTheRobotsRequest()
+    {
+        var handler = new StubHandler().Map(Url, () => Respond("hello"));
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var result = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url, ignore_robots = true })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Empty(handler.RobotsRequests);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task RobustFailClosedUnlessOptedOpen()
+    {
+        var handler = new StubHandler()
+            .Map("https://example.com/robots.txt", () => Respond("down", "text/plain", HttpStatusCode.InternalServerError, "Error"))
+            .Map(Url, () => Respond("hello"));
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var refused = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url })),
+            sandbox.Context,
+            CancellationToken.None);
+        Assert.True(refused.IsRefused);
+
+        var open = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url, robots_fail_open = true })),
+            sandbox.Context,
+            CancellationToken.None);
+        Assert.False(open.IsError);
+    }
+
+    [Fact]
+    public async Task UseBrowserWithoutBrowserIsAnExplicitRefusal()
+    {
+        var handler = new StubHandler().Map(Url, () => Respond("hello"));
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var result = await Tool(handler).ExecuteAsync(
+            ToolTestWorkspace.Call("fetch_url", ToolTestWorkspace.Args(new { url = Url, use_browser = true })),
+            sandbox.Context,
+            CancellationToken.None);
+
+        Assert.True(result.IsRefused);
+        Assert.Contains("--browser", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PagingReturnsTheRequestedWindowAndNamesIt()
     {
         var handler = new StubHandler().Map(Url, () => Respond("abcdefghij", "text/plain"));
@@ -452,6 +523,8 @@ public sealed class FetchUrlToolTests
 
         public List<RequestRecord> Requests { get; } = [];
 
+        public List<RequestRecord> RobotsRequests { get; } = [];
+
         public StubHandler Map(string url, Func<HttpResponseMessage> response)
         {
             _routes[url] = response;
@@ -473,7 +546,19 @@ public sealed class FetchUrlToolTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            Requests.Add(new RequestRecord(request.Method.Method, request.RequestUri!.AbsoluteUri, request.Headers.ToString()));
+            var record = new RequestRecord(request.Method.Method, request.RequestUri!.AbsoluteUri, request.Headers.ToString());
+            if (string.Equals(request.RequestUri.AbsolutePath, "/robots.txt", StringComparison.Ordinal))
+            {
+                RobotsRequests.Add(record);
+                if (_routes.TryGetValue(request.RequestUri.AbsoluteUri, out var robots))
+                {
+                    return Task.FromResult(robots());
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound) { ReasonPhrase = "Not Found" });
+            }
+
+            Requests.Add(record);
 
             return _routes.TryGetValue(request.RequestUri.AbsoluteUri, out var response)
                 ? Task.FromResult(response())

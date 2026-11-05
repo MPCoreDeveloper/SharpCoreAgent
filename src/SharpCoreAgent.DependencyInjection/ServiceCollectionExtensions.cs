@@ -298,6 +298,10 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IWebAddressResolver>(DnsWebAddressResolver.Instance);
         services.AddSingleton(new WebFetchOptions { AllowedHosts = options.WebAllowedHosts });
+        services.AddSingleton<IBrowserFetcher>(provider =>
+            provider.GetService<McpToolHost>() is { } host
+                ? new McpBrowserFetcher(host)
+                : UnavailableBrowserFetcher.Instance);
         services.AddSingleton<ITool, FetchUrlTool>();
     }
 

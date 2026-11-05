@@ -39,11 +39,14 @@ public sealed class FetchUrlTool : ITool
     public const string Name = "fetch_url";
 
     private const string Schema =
-        """{"type":"object","properties":{"url":{"type":"string","description":"Absolute http or https URL to read."},"max_chars":{"type":"integer","minimum":1,"maximum":60000,"description":"Longest text to return; defaults to the tool's ceiling."},"start_index":{"type":"integer","minimum":0,"maximum":1000000,"description":"Zero-based character offset to start the returned window at; defaults to 0."}},"required":["url"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"url":{"type":"string","description":"Absolute http or https URL to read."},"max_chars":{"type":"integer","minimum":1,"maximum":60000,"description":"Longest text to return; defaults to the tool's ceiling."},"start_index":{"type":"integer","minimum":0,"maximum":1000000,"description":"Zero-based character offset to start the returned window at; defaults to 0."},"allow_cookies":{"type":"boolean","description":"Send and receive cookies for this call only. Default false."},"ignore_robots":{"type":"boolean","description":"Ignore robots.txt. Default false."},"robots_fail_open":{"type":"boolean","description":"Allow the fetch when robots.txt cannot be read. Default false."},"use_browser":{"type":"boolean","description":"Use the Playwright browser (requires --browser). Default false."},"timeout_ms":{"type":"integer","minimum":1,"maximum":60000,"description":"Per-call timeout in milliseconds."}},"required":["url"],"additionalProperties":false}""";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly WebFetchOptions _options;
     private readonly IWebAddressResolver _resolver;
+    private readonly IBrowserFetcher _browser;
+    private readonly Lock _robotsGate = new();
+    private readonly Dictionary<string, (DateTimeOffset Expires, RobotsFile Rules)> _robots = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Creates the tool.
@@ -51,21 +54,24 @@ public sealed class FetchUrlTool : ITool
     /// <param name="httpClientFactory">Supplies the fetch client, which carries no credential and no cookie jar.</param>
     /// <param name="options">The ceilings and the hosts the developer named.</param>
     /// <param name="resolver">Turns a host into the addresses the refusal is judged from.</param>
+    /// <param name="browser">The optional browser path; absent means <c>use_browser</c> is refused.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     public FetchUrlTool(
         IHttpClientFactory httpClientFactory,
         WebFetchOptions options,
-        IWebAddressResolver resolver)
+        IWebAddressResolver resolver,
+        IBrowserFetcher? browser = null)
     {
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+        _browser = browser ?? UnavailableBrowserFetcher.Instance;
     }
 
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "Fetch one absolute http or https URL and return the page as readable text — or, when the response is a picture and this session's model can see images, the picture itself, attached to the next message. Reports the final URL after redirects, the status, the content type and whether the text was cut. Refuses loopback, private, link-local and cloud-metadata addresses unless the developer named the host. Sends no cookie and no credential, and never runs JavaScript.",
+        "Fetch one absolute http or https URL and return the page as readable text — or, when the response is a picture and this session's model can see images, the picture itself, attached to the next message. Reports the final URL after redirects, the status, the content type and whether the text was cut. Refuses loopback, private, link-local and cloud-metadata addresses unless the developer named the host. Sends no cookie unless allow_cookies is true, sends no credential, and never runs JavaScript in the pure-fetch path; use_browser requires --browser.",
         Schema);
 
     /// <inheritdoc />
@@ -88,6 +94,11 @@ public sealed class FetchUrlTool : ITool
         var url = arguments.GetRequiredString("url");
         var maxChars = arguments.GetOptionalInt("max_chars", _options.MaxChars, minimum: 1, maximum: _options.MaxChars);
         var startIndex = arguments.GetOptionalInt("start_index", 0, minimum: 0, maximum: 1_000_000);
+        var allowCookies = arguments.GetOptionalBool("allow_cookies", false);
+        var ignoreRobots = arguments.GetOptionalBool("ignore_robots", false);
+        var robotsFailOpen = arguments.GetOptionalBool("robots_fail_open", false);
+        var useBrowser = arguments.GetOptionalBool("use_browser", false);
+        var timeoutMs = arguments.GetOptionalInt("timeout_ms", 0, minimum: 0, maximum: 60_000);
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var requested))
         {
@@ -97,13 +108,38 @@ public sealed class FetchUrlTool : ITool
                 $"'{url}' is not an absolute URL. Give one address, scheme included, for example https://example.com/page.");
         }
 
-        // One ceiling for the whole fetch, redirects and body included: a chain of slow hops must not add up to a
-        // minute of waiting just because each hop stayed inside a per-request budget.
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_options.Timeout);
+        timeout.CancelAfter(timeoutMs > 0 ? TimeSpan.FromMilliseconds(timeoutMs) : _options.Timeout);
         var token = timeout.Token;
 
         var client = _httpClientFactory.CreateClient(WebFetchOptions.HttpClientName);
+        var jar = allowCookies ? new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase) : null;
+
+        if (await RobotsRefusalAsync(client, toolCall, requested, ignoreRobots, robotsFailOpen, token).ConfigureAwait(false) is { } robots)
+        {
+            return robots;
+        }
+
+        if (useBrowser)
+        {
+            if (!_browser.IsAvailable)
+            {
+                return ToolResult.Refused(
+                    toolCall.Id,
+                    Name,
+                    "use_browser requires --browser; no browser process was started by --web.");
+            }
+
+            var browser = await _browser.FetchAsync(requested, context, token).ConfigureAwait(false);
+            return browser.IsError
+                ? ToolResult.Failure(toolCall.Id, Name, browser.Text)
+                : ToolResult.Success(
+                    toolCall.Id,
+                    Name,
+                    $"url          {requested.AbsoluteUri}\nmode         browser\n\n{browser.Text}",
+                    new ToolEffect(ToolEffectKind.Read, requested.AbsoluteUri));
+        }
+
         var current = requested;
         var hops = 0;
 
@@ -119,10 +155,12 @@ public sealed class FetchUrlTool : ITool
                 using var request = new HttpRequestMessage(HttpMethod.Get, current);
                 request.Headers.TryAddWithoutValidation("User-Agent", _options.UserAgent);
                 request.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1");
+                AddCookies(request, current, jar);
 
                 using var response = await client
                     .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token)
                     .ConfigureAwait(false);
+                CaptureCookies(response, current, jar);
 
                 if (IsRedirect(response.StatusCode))
                 {
@@ -250,6 +288,138 @@ public sealed class FetchUrlTool : ITool
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"refused: {uri.Host} resolves to {string.Join(", ", addresses)}, which is {blocked}. fetch_url does not read this machine, its network or its cloud metadata, and no redirect reaches them either. If this host is meant, name it for this invocation: --web-allow {uri.Host}"));
+    }
+
+    /// <summary>Checks the origin's robots.txt before a fetch.</summary>
+    /// <param name="client">The fetch client, which also fetches robots.txt.</param>
+    /// <param name="toolCall">The call, for a refusal identifier.</param>
+    /// <param name="uri">The requested URL.</param>
+    /// <param name="ignoreRobots">Whether the caller explicitly opted out.</param>
+    /// <param name="failOpen">Whether an unreadable robots.txt may be treated as empty.</param>
+    /// <param name="cancellationToken">Cancels the check.</param>
+    /// <returns>A refusal/failure, or <see langword="null"/> when the fetch may proceed.</returns>
+    private async ValueTask<ToolResult?> RobotsRefusalAsync(
+        HttpClient client,
+        ToolCall toolCall,
+        Uri uri,
+        bool ignoreRobots,
+        bool failOpen,
+        CancellationToken cancellationToken)
+    {
+        if (ignoreRobots)
+        {
+            return null;
+        }
+
+        var origin = uri.GetLeftPart(UriPartial.Authority);
+        var now = DateTimeOffset.UtcNow;
+
+        lock (_robotsGate)
+        {
+            if (_robots.TryGetValue(origin, out var cached) && cached.Expires > now)
+            {
+                return cached.Rules.Allows(uri.PathAndQuery)
+                    ? null
+                    : RefuseRobots(toolCall, uri);
+            }
+        }
+
+        RobotsFile rules;
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                new Uri(origin + "/robots.txt", UriKind.Absolute));
+            request.Headers.TryAddWithoutValidation("User-Agent", _options.UserAgent);
+            using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+            {
+                rules = RobotsFile.Empty;
+            }
+            else if (!response.IsSuccessStatusCode)
+            {
+                if (!failOpen)
+                {
+                    return ToolResult.Refused(
+                        toolCall.Id,
+                        Name,
+                        $"robots.txt for {origin} answered {(int)response.StatusCode} {response.ReasonPhrase}; refusing this fetch. Pass robots_fail_open:true to treat it as empty.");
+                }
+
+                rules = RobotsFile.Empty;
+            }
+            else
+            {
+                var (bytes, _) = await ReadBoundedAsync(response.Content, _options.MaxBytes, cancellationToken).ConfigureAwait(false);
+                rules = RobotsFile.Parse(Encoding.UTF8.GetString(bytes), _options.UserAgent);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            if (!failOpen)
+            {
+                return ToolResult.Refused(
+                    toolCall.Id,
+                    Name,
+                    $"robots.txt for {origin} could not be read: {ex.Message}; refusing this fetch. Pass robots_fail_open:true to treat it as empty.");
+            }
+
+            rules = RobotsFile.Empty;
+        }
+
+        lock (_robotsGate)
+        {
+            _robots[origin] = (now.AddHours(1), rules);
+        }
+
+        return rules.Allows(uri.PathAndQuery) ? null : RefuseRobots(toolCall, uri);
+    }
+
+    private static ToolResult RefuseRobots(ToolCall toolCall, Uri uri) =>
+        ToolResult.Refused(
+            toolCall.Id,
+            Name,
+            $"robots.txt disallows {uri.PathAndQuery} on {uri.Host}; no request was sent. Pass ignore_robots:true only if you have the right to override it.");
+
+    private static void AddCookies(HttpRequestMessage request, Uri uri, Dictionary<string, List<string>>? jar)
+    {
+        if (jar is not null && jar.TryGetValue(uri.Host, out var cookies) && cookies.Count > 0)
+        {
+            request.Headers.TryAddWithoutValidation("Cookie", string.Join("; ", cookies));
+        }
+    }
+
+    private static void CaptureCookies(HttpResponseMessage response, Uri uri, Dictionary<string, List<string>>? jar)
+    {
+        if (jar is null || !response.Headers.TryGetValues("Set-Cookie", out var values))
+        {
+            return;
+        }
+
+        if (!jar.TryGetValue(uri.Host, out var cookies))
+        {
+            cookies = [];
+            jar[uri.Host] = cookies;
+        }
+
+        foreach (var value in values)
+        {
+            var pair = value.Split(';')[0].Trim();
+            if (pair.Length == 0)
+            {
+                continue;
+            }
+
+            var name = pair.Split('=', 2)[0];
+            cookies.RemoveAll(cookie => cookie.StartsWith(name + "=", StringComparison.Ordinal));
+            cookies.Add(pair);
+        }
     }
 
     private static bool IsRedirect(HttpStatusCode status) => (int)status is 301 or 302 or 303 or 307 or 308;

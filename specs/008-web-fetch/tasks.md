@@ -48,12 +48,12 @@ pass has a real list rather than a memory.
 
 ## Deliberately not in this round
 
-- [ ] T029 JavaScript execution, cookies and logins. Not round 4's either: the browser server the developer names executes the JavaScript and keeps the cookies, and `010-browser` adds only the artefact path a screenshot needs (`specs/000-parity-roadmap.md`, 2026-10-28). A native binary is the constraint this product keeps.
+- [X] T029 JavaScript execution, cookies and logins. **Browser path closed by `052-browser-automation`; pure fetch stays HTTP GET only.** Cookies are explicit per call (`allow_cookies`) with host-scoped, non-persistent handling (`057-fetch-policy`).
 - [X] T030 A connect-time address check (`SocketsHttpHandler.ConnectCallback`) that closes the DNS-rebinding gap named in `plan.md`. (Done 2026-10-28, after the round merged: `WebFetchHandler.Create` resolves inside the callback, refuses a blocked address naming `--web-allow`, and connects to a permitted one explicitly rather than by name; it also sets `UseProxy = false`, because through a proxy the callback is handed the proxy's endpoint and the proxy then resolves the name itself. `WebFetchHandlerTests` proves the refusal, the named-port-only exemption and a real loopback round trip; `WebToolRegistrationTests` drives the client the container built, with no tool in the way.)
 - [X] T031 Paging a long page (`start_index`). **Done in `055-fetch-paging`:** the tool accepts a zero-based
   `start_index`, returns the `max_chars` window and names its 1-based range when it is not the first whole page.
 - [X] T032 A web search tool. Refused: a search engine is a ranking + scraping + rate-limit policy that this repository does not own. Reachable today via `--mcp` (Brave Search MCP server or equivalent).
-- [ ] T033 `robots.txt` handling. Refused in the spec: politeness is the developer's call, not a second request per fetch.
+- [X] T033 `robots.txt` handling. **Done in `057-fetch-policy`:** one-hour origin cache, `*`/product groups, longest Allow/Disallow, 404/410 empty, 401/403/5xx and transport failures fail closed unless `robots_fail_open: true`.
 
 ## Amended after the round landed
 
