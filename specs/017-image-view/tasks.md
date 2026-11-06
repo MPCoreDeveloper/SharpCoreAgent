@@ -94,13 +94,19 @@ has a real list rather than a memory.
       `ImageResize` refuses an undecodable file or an out-of-range value instead of guessing.
 - [X] T028b **Rotating.** `view_image` accepts optional `rotation` 90/180/270 and rotates clockwise after any
       rendering or downscale; arbitrary angles are refused. The answer names the rotation and the resulting size.
-- [ ] T029 **Images in session files.** Deliberate, and documented in `JsonFileSessionStore`: a transcript people
-      grep is not a blob store, and the file is one `view_image` call away.
-- [ ] T030 **Pasted, dragged or piped images.** Piping is shipped in two parts: `--image <path>` in `047-run-image-input` and `--image -` (stdin) in `050-stdin-image-input`. Dragging and a clipboard API remain open, because each is a UI concern rather than a file path.
+- [X] T030 **Pasted or piped images.** `--image <path>` ships in `047-run-image-input` and `--image -`
+      (stdin) ships in `050-stdin-image-input`. Dragging and a clipboard API are UI concerns and are out of
+      scope for this CLI; they are recorded in `spec.md`, not left as an open task.
 - [X] T031 **Transcript trimming.** Closed by `042-context-fraction-compaction`: `CompactAtContextFraction` defaults to 0.8, compacts before the request when the estimated prompt exceeds that fraction of the model window, keeps system prompts and the newest message, and never splits a tool round. `/compact [n]` remains the manual override. The per-turn image ceiling (`020`) and duplicate suppression (`021`) still bound what a turn adds.
-- [ ] T032 **An image token estimate before the request.** A provider bills the pixels it decodes; the number
-      arrives in `Usage` after the call or not at all, and inventing one would make `/cost` a guess.
 - [X] T033 **Serving `view_image` over `mcp serve`. Closed by this amendment.** The published set now includes
       `view_image`: read-only, the same `PathSafety` and 4 MiB ceiling as a turn, and an `image` part in the MCP
       result rather than a server-side description. A model-free server context is the one case the tool's
       capability gate allows, because the client — not the server — chooses the model that reads the picture.
+
+## Out of scope (not work)
+
+These are decisions, not unfinished tasks; `spec.md` is the record.
+
+- **Images in session files (T029).** A transcript people grep is not a blob store; the file is one `view_image` call away.
+- **Dragging and clipboard images.** The CLI path and stdin piping already exist; a clipboard or drag surface is UI-specific.
+- **An image token estimate before the request (T032).** Providers bill pixels they decode, the number arrives after the call or not at all, and inventing one would make `/cost` a guess.

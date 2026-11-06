@@ -150,8 +150,8 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
 - **PDF, audio and video.** Audio and video are no longer refused: `view_media` reads metadata through the LGPL
   FFmpeg runtime and decodes one video frame as PNG. The runtime packages cover Windows and Linux; macOS refuses
   the capability rather than treating a video as a still.
-- **Pasted, dragged or piped images**, and an `--image` flag on `run`. A picture enters a conversation the way any
-  other evidence does: through a tool, with a path a report can name.
+- **Dragging and clipboard images.** `--image <path>` and `--image -` (stdin) already ship; a drag or clipboard
+  surface is a UI concern and is not part of this CLI.
 - **Rotating.** `view_image` accepts `rotation` 90/180/270 and applies it clockwise after any rendering or downscale;
   arbitrary angles are refused. This is explicit and opt-in, like `max_dimension` (FR-012), so the file is still shown
   byte for byte when neither argument is given.
