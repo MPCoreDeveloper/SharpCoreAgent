@@ -140,7 +140,10 @@ next pass has a real list rather than a memory.
   between remote calls when the access token is near expiry, and metadata discovery falls back from
   `oauth-authorization-server` to `openid-configuration`. `McpOAuthTests` covers the source refresh and
   the HTTP channel asks the provider for each request.
-- [ ] T037 A declarative server list read from a file.
+- [X] T037 A declarative server list read from a file. **Closed with an explicit gate.** `--mcp-file`
+  accepts `mcpServers` or `servers`, local `command` entries with optional `args` and `env`, refuses
+  `url` entries, and is never discovered automatically. `McpServerFile` enforces the 1 MiB and entry
+  validation; the host preserves the file's names and applies its environment to the child.
 
 ## Amendment — T036 supervision (2026-11-05)
 

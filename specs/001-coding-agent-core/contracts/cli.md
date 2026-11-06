@@ -42,6 +42,7 @@ settings file, its precedence and its exit code are in
 | `--mcp <command>` | run, chat | — | Start one stdio MCP server and register the tools it lists for this process; repeatable, refused on `models`, `index`, `config` and `setup`, and has no settings key or environment variable (009) |
 | `--mcp-url <url>` | run, chat | — | Talk streamable HTTP to one explicit MCP endpoint; repeatable. `https`, or `http` only for a loopback host; no OAuth, no redirects, and no settings key or environment variable (009, 035). Refused on every other command |
 | `--mcp-sse-url <url>` | run, chat | — | Talk the legacy HTTP+SSE handshake to one explicit MCP endpoint; repeatable. The same URL rule and no settings key or environment variable (009, 035b). Refused on every other command |
+| `--mcp-file <path>` | run, chat | — | Read local servers from this explicit JSON file (`mcpServers` or `servers`, each a `command` with optional `args`/`env`); no automatic `.mcp.json`, no `url` entries, and no settings key or environment variable (009, 037) |
 | `--mcp-oauth-client <id>` | run, chat | — | Public OAuth client id for the remote endpoints; requires `--mcp-oauth-auth` and `--mcp-oauth-token` (009, 035c) |
 | `--mcp-oauth-auth <url>` | run, chat | — | OAuth 2.1 authorization endpoint; `https`, or `http` on loopback (009, 035c) |
 | `--mcp-oauth-token <url>` | run, chat | — | OAuth token endpoint; `https`, or `http` on loopback (009, 035c) |
@@ -124,7 +125,7 @@ Everything else the command says goes to stderr, the URL first and alone on its 
 It exits `0` when Ctrl+C stops it, the way `mcp serve` ends at end of input, and `2` when the port cannot
 be bound — outside `0–65535`, not a number, or already held — with the port named and `--port` as the fix.
 It runs no model, keeps no transcript and starts nothing: `--model`, `--provider`, `--planner`,
-`--executor`, `--reviewer`, `--session`, `--approval`, `--client`, `--write`, `--mcp`, `--mcp-url`, `--mcp-sse-url`, the `--mcp-oauth-*` flags, `--mcp-sampling` and `--web` are
+`--executor`, `--reviewer`, `--session`, `--approval`, `--client`, `--write`, `--mcp`, `--mcp-url`, `--mcp-sse-url`, `--mcp-file`, the `--mcp-oauth-*` flags, `--mcp-sampling` and `--web` are
 refused at `2`, and opening the printed URL is the developer's action.
 
 ## The editor files (`ide`) (024)
@@ -152,7 +153,7 @@ not an array, exits `7` with the file untouched.
 Both actions exit `0` for a document printed, a file created, updated, or already correct, and `7` for a file
 that could not be read, merged or written. `ide` with no action, an unknown action, an operand after the
 action, and the flags that name a turn or a client (`--provider`, `--model`, `--planner`, `--executor`,
-`--reviewer`, `--base-url`, `--fallback`, `--session`), the network (`--web`, `--web-allow`, `--mcp`, `--mcp-url`, `--mcp-sse-url`, the `--mcp-oauth-*` flags, `--mcp-sampling`), an
+`--reviewer`, `--base-url`, `--fallback`, `--session`), the network (`--web`, `--web-allow`, `--mcp`, `--mcp-url`, `--mcp-sse-url`, `--mcp-file`, the `--mcp-oauth-*` flags, `--mcp-sampling`), an
 index action (`--status`, `--rebuild`, `--verify`, `--prune`), `--no-index`, `--add-root`, the panel's flags
 (`--serve`, `--port`, `--refresh`), `--no-refresh`, `--client` and `--json` are all refused at `2`.
 

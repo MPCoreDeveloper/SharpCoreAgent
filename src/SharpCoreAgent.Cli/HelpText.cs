@@ -66,6 +66,7 @@ internal static class HelpText
           --mcp <command>          run, chat   none        start this MCP server and offer its tools; repeatable
           --mcp-url <url>          run, chat   none        talk streamable HTTP to this MCP endpoint; https, or http on loopback; repeatable
           --mcp-sse-url <url>      run, chat   none        talk legacy HTTP+SSE to this MCP endpoint; https, or http on loopback; repeatable
+          --mcp-file <path>        run, chat   none        read local servers from this explicit JSON file; no automatic .mcp.json
           --mcp-oauth-client <id>  run, chat   —           public OAuth client id for the remote endpoints
           --mcp-oauth-auth <url>   run, chat   —           OAuth authorization endpoint the browser opens
           --mcp-oauth-token <url>  run, chat   —           OAuth token endpoint the code is exchanged at
@@ -137,6 +138,12 @@ internal static class HelpText
           the server names, and keeps answers on that stream. It has the same https/loopback rule, redirect
           refusal and tool naming as --mcp-url; use it only for a server that has not moved to streamable
           HTTP.
+          --mcp-file is the only way a file starts servers: no .mcp.json is discovered automatically. It
+          accepts mcpServers or servers, each entry a command with optional args and env. A url entry is
+          refused; use --mcp-url or --mcp-sse-url for a remote server. The file is read only when this flag
+          names it, and a command it contains runs with the same approval and lifecycle rules as --mcp.
+
+
 
           The --mcp-oauth flags add OAuth 2.1 authorization code with PKCE to a remote endpoint. The
           client opens a loopback callback, prints the authorization URL for you to open, verifies state,

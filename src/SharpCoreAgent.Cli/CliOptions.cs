@@ -324,6 +324,9 @@ internal sealed record CliOptions
     /// <summary>Gets the legacy HTTP+SSE MCP endpoints this invocation talks to.</summary>
     public IReadOnlyList<string> McpSseUrls { get; init; } = [];
 
+    /// <summary>Gets the explicit declarative server file, when one was named.</summary>
+    public string? McpFile { get; init; }
+
     /// <summary>Gets the public OAuth client identifier, when the remote MCP endpoints need one.</summary>
     public string? McpOAuthClientId { get; init; }
 
@@ -581,6 +584,25 @@ internal sealed record CliOptions
         }
     }
 
+    private IReadOnlyList<McpServerDefinition> LoadMcpFile()
+    {
+        if (McpFile is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return McpServerFile.Load(McpFile);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            throw new CliUsageException(
+                ex.Message,
+                "Fix the file named by --mcp-file; it is read only when explicitly named.");
+        }
+    }
+
     private static Uri? OptionalUri(string? value, string name)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -609,6 +631,7 @@ internal sealed record CliOptions
         McpServers = Browser ? [.. McpServers, BrowserServerCommand] : McpServers,
         McpUrls = McpUrls,
         McpSseUrls = McpSseUrls,
+        McpServerDefinitions = LoadMcpFile(),
         McpSampling = McpSampling,
         Approval = Approval,
         MaxIterations = MaxIterations,
@@ -2043,10 +2066,10 @@ internal sealed record CliOptions
     /// </remarks>
     private static void RejectMcpFlags(CliOptions options)
     {
-        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.McpSseUrls.Count > 0 || options.HasMcpOAuth || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
+        if (options.McpServers.Count > 0 || options.McpUrls.Count > 0 || options.McpSseUrls.Count > 0 || options.McpFile is not null || options.HasMcpOAuth || options.Browser || options.McpSampling != McpSamplingPolicy.Deny)
         {
             throw new CliUsageException(
-                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too; --mcp-sse-url applies there too; the --mcp-oauth flags apply there too.",
+                "--mcp applies to run and chat, and --browser applies there too; --mcp-sampling applies there too; --mcp-url applies there too; --mcp-sse-url applies there too; --mcp-file applies there too; the --mcp-oauth flags apply there too.",
                 "For example: sharpcoreagent run \"summarise the open issues\" --mcp \"npx -y @modelcontextprotocol/server-filesystem .\"");
         }
     }
@@ -2326,6 +2349,9 @@ internal sealed record CliOptions
                 }
 
                 return options with { McpSseUrls = [.. options.McpSseUrls, sseUrl] };
+
+            case "--mcp-file":
+                return options with { McpFile = TakeValue(args, ref index, name) };
 
             case "--mcp-oauth-client":
                 return options with { McpOAuthClientId = TakeValue(args, ref index, name) };

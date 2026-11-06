@@ -84,6 +84,9 @@ public sealed record SharpCoreAgentOptions
     /// <summary>Gets the legacy HTTP+SSE MCP endpoints this invocation talks to.</summary>
     public IReadOnlyList<string> McpSseUrls { get; init; } = [];
 
+    /// <summary>Gets the local server definitions read from an explicitly named file.</summary>
+    public IReadOnlyList<McpServerDefinition> McpServerDefinitions { get; init; } = [];
+
     /// <summary>Gets what an MCP server may ask the session's model to do. Default <see cref="McpSamplingPolicy.Deny"/>.</summary>
     /// <remarks>
     /// A server request spends the developer's model budget without the model deciding to, so the default is deny.
@@ -246,7 +249,7 @@ public sealed record SharpCoreAgentOptions
                 ? PromptLibrary.SystemPromptFor(
                     IndexEnabled,
                     WebAccessEnabled,
-                    McpServers.Count > 0 || McpUrls.Count > 0 || McpSseUrls.Count > 0,
+                    McpServers.Count > 0 || McpUrls.Count > 0 || McpSseUrls.Count > 0 || McpServerDefinitions.Count > 0,
                     FSharpToolsEnabled,
                     CSharpToolsEnabled,
                     GitToolsEnabled)

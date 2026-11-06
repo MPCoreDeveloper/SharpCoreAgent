@@ -257,6 +257,7 @@ keep working on the file that needs repairing.
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--mcp-url <url>` | run, chat | none — talk streamable HTTP to this explicit endpoint; `https`, or `http` on loopback; repeatable |
 | `--mcp-sse-url <url>` | run, chat | none — talk legacy HTTP+SSE to this explicit endpoint; `https`, or `http` on loopback; repeatable |
+| `--mcp-file <path>` | run, chat | none — read local servers from this explicit JSON file; no automatic `.mcp.json` |
 | `--mcp-oauth-client <id>` | run, chat | none — public OAuth client id for the remote endpoints |
 | `--mcp-oauth-auth <url>` | run, chat | none — OAuth 2.1 authorization endpoint |
 | `--mcp-oauth-token <url>` | run, chat | none — OAuth token endpoint |
@@ -646,6 +647,11 @@ prompts it advertises arrive under the same generated names as a stdio server.
 For a server that still speaks the older handshake, `--mcp-sse-url https://mcp.example/sse` opens the GET
 event stream, reads the POST endpoint from its `endpoint` event, and receives every answer on that same
 stream. The URL rule is identical; it is a compatibility path, not a fallback.
+
+A local server list can be read from a file only when this invocation names it: `--mcp-file ./mcp.json`.
+The file may use `mcpServers` or `servers`, each entry a `command` with optional `args` and `env`. A `url`
+entry is refused; use the remote flags instead. There is no automatic `.mcp.json` lookup, no settings key
+and no environment variable, so a repository cannot start a program merely by being opened.
 
 For an endpoint that requires delegated authorization, the `--mcp-oauth-*` flags run OAuth 2.1 authorization
 code with PKCE. The client opens a loopback callback, prints an authorization URL for you to open, verifies

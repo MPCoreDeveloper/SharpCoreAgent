@@ -36,6 +36,7 @@ public sealed class McpServerConnection : IAsyncDisposable
     private readonly McpClientOptions _options;
     private readonly McpSamplingLimiter _sampling;
     private readonly Action<string>? _log;
+    private readonly IReadOnlyDictionary<string, string>? _environment;
     private readonly List<McpToolInfo> _tools = [];
     private readonly object _toolsGate = new();
     private JsonElement _capabilities;
@@ -65,9 +66,15 @@ public sealed class McpServerConnection : IAsyncDisposable
     /// <param name="commandLine">The command line exactly as the developer typed it.</param>
     /// <param name="options">The ceilings the conversation works within.</param>
     /// <param name="log">Receives stderr lines while <c>--verbose</c> is in force.</param>
+    /// <param name="environment">Additional environment values for this child, when a declarative file named them.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="commandLine"/> is blank.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
-    public McpServerConnection(string name, string commandLine, McpClientOptions options, Action<string>? log = null)
+    public McpServerConnection(
+        string name,
+        string commandLine,
+        McpClientOptions options,
+        Action<string>? log = null,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(commandLine);
@@ -77,6 +84,7 @@ public sealed class McpServerConnection : IAsyncDisposable
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _sampling = new McpSamplingLimiter(_options);
         _log = log;
+        _environment = environment;
         _processExit = (_, _) => KillQuietly();
 
         // Until the server answers, the version this client sends is the one it can honestly report.
@@ -836,6 +844,14 @@ public sealed class McpServerConnection : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+
+        if (_environment is { Count: > 0 } environment)
+        {
+            foreach (var variable in environment)
+            {
+                startInfo.Environment[variable.Key] = variable.Value;
+            }
+        }
 
         if (rawArguments is not null)
         {

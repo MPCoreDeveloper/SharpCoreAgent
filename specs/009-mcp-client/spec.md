@@ -1,6 +1,6 @@
 # 009 — Any server's tools: the MCP client
 
-**Status**: implemented (T001–T033, T034a, T034b, T035a–T035e and T036; T037 deferred, listed in `tasks.md`)
+**Status**: implemented (T001–T033, T034a, T034b, T035a–T035e, T036 and T037)
 **Branch**: `feature/009-mcp-client`, merged to `main` as `be0b265`
 **Depends on**: `001-coding-agent-core` (the `ITool` model, the result contract, the approval modes),
 `003-terminal-console-agent` (the console surface and `T040`, the task this round closes),
@@ -157,6 +157,10 @@ Acceptance:
   registration; `--mcp-oauth-file` persists the access and refresh tokens. A token source refreshes an
   expired access token on the next invocation and between remote calls during a turn. No browser is
   started. Missing pieces are a usage error and a stdio server refuses them.
+- **FR-023** `--mcp-file <path>` reads `mcpServers` or `servers` only when explicitly named: each entry
+  is a local `command` with optional `args` and `env`; a `url` entry is refused, and there is no
+  automatic `.mcp.json`, settings key or environment variable. The file is bounded at 1 MiB and a
+  malformed entry is a usage error before startup.
 
 ## Non-functional requirements
 
@@ -176,9 +180,9 @@ Acceptance:
 - **Server mode as a general MCP gateway.** `mcp serve` (`013`) is this product's one server: five
   read-only evidence tools for one workspace. Exposing the agent's write and process surface to another
   process is a different product with a different approval boundary.
-- **A declarative server list (`.mcp.json`).** A file that starts processes on every run is exactly
-  the authority-nobody-granted case `--web` and `--add-root` refuse; it belongs to a round that argues
-  for it.
+- **A declarative server list is explicit only.** T037 reads `--mcp-file` when named; there is no automatic
+  `.mcp.json`, no settings key and no `url` entry in that file. A file that starts a process without the flag
+  is still exactly the authority-nobody-granted case the original refusal described.
 
 ## Exit codes
 

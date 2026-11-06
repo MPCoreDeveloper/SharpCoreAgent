@@ -97,6 +97,19 @@ public sealed class McpRegistrationTests
         Assert.Contains("mcp", server.Name, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ADefinitionFromAFileKeepsItsNameAndEnvironment()
+    {
+        var host = new McpToolHost(
+            [],
+            new McpClientOptions(),
+            definitions: [new McpServerDefinition("files", "npx -y server", new Dictionary<string, string> { ["ROOT"] = "/tmp" })]);
+
+        var server = Assert.Single(host.Servers);
+        Assert.Equal("files", server.Name);
+        Assert.Equal("npx -y server", server.CommandLine);
+    }
+
     private static ServiceProvider Build(SharpCoreAgentOptions options) =>
         new ServiceCollection().AddSharpCoreAgent(options).BuildServiceProvider();
 }

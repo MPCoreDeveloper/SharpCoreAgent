@@ -56,6 +56,7 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
     /// <param name="models">The resolver sampling uses, or null when the host did not provide one.</param>
     /// <param name="urls">The remote streamable-HTTP endpoints, in the order the flags were given.</param>
     /// <param name="sseUrls">The legacy HTTP+SSE endpoints, in the order the flags were given.</param>
+    /// <param name="definitions">Servers read from an explicitly named file.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="ArgumentException">A command line is blank, or a URL is not absolute http or https.</exception>
     public McpToolHost(
@@ -63,7 +64,8 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
         McpClientOptions options,
         IChatModelResolver? models = null,
         IEnumerable<string>? urls = null,
-        IEnumerable<string>? sseUrls = null)
+        IEnumerable<string>? sseUrls = null,
+        IEnumerable<McpServerDefinition>? definitions = null)
     {
         ArgumentNullException.ThrowIfNull(servers);
         _options = (options ?? throw new ArgumentNullException(nameof(options))).Validate();
@@ -93,6 +95,17 @@ public sealed class McpToolHost : IDisposable, IAsyncDisposable
         foreach (var url in sseUrls ?? [])
         {
             AddEndpoint(url, legacySse: true, seen);
+        }
+
+        foreach (var definition in definitions ?? [])
+        {
+            var count = Next(seen, definition.Name);
+            _connections.Add(new McpServerConnection(
+                McpToolName.ForServer(definition.Name, count),
+                definition.CommandLine,
+                _options,
+                _sink.Write,
+                definition.Environment));
         }
     }
 

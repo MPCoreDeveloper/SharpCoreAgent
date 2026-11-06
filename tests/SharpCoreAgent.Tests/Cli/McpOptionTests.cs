@@ -261,5 +261,34 @@ public sealed class McpOptionTests
         Assert.Contains("endpoints, an issuer", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AServerFileIsParsedOnlyForTheTurnCommands()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sca-mcp-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """{"mcpServers":{"files":{"command":"npx","args":["-y","server"]}}}""");
+            var options = CliOptions.Parse(["run", "hello", "--mcp-file", path], NoEnvironment);
+            var mapped = options.ToSharpCoreAgentOptions();
+
+            var definition = Assert.Single(mapped.McpServerDefinitions);
+            Assert.Equal("files", definition.Name);
+            Assert.Equal("npx -y server", definition.CommandLine);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void AServerFileIsRefusedWhereNoTurnRuns()
+    {
+        var error = Assert.Throws<CliUsageException>(
+            () => CliOptions.Parse(["models", "--mcp-file", "mcp.json"], NoEnvironment));
+
+        Assert.Contains("--mcp-file", error.Message, StringComparison.Ordinal);
+    }
+
     private static string? NoEnvironment(string name) => null;
 }

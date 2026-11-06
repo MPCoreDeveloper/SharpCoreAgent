@@ -255,7 +255,8 @@ gains the read-only `<server>_resources` and `<server>_prompts` bridges. T035a s
 legacy HTTP+SSE and T035c–T035e OAuth authorization-code/PKCE, discovery, registration, startup and
 mid-turn refresh, persistence and OpenID fallback landed the same day as `--mcp-url`, `--mcp-sse-url`
 and the `--mcp-oauth-*` flags, with `HttpJsonRpcChannelTests`, `SseJsonRpcChannelTests`, `McpOAuthTests`,
-`McpSamplingTests`, `McpCatalogTests` and `McpProcessTests` for evidence.
+`McpSamplingTests`, `McpCatalogTests` and `McpProcessTests` for evidence. T037 added an explicit
+`--mcp-file` list with no automatic discovery.
 
 ## Round 4 — `010-browser` (landed 2026-10-30 as `a447a4d`)
 

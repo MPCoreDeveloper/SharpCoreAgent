@@ -117,7 +117,7 @@ internal static class CliHost
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(error);
 
-        if (options.McpServers.Count == 0 && options.McpUrls.Count == 0 && options.McpSseUrls.Count == 0 && !options.HasMcpOAuth && !options.Browser)
+        if (options.McpServers.Count == 0 && options.McpUrls.Count == 0 && options.McpSseUrls.Count == 0 && options.McpFile is null && !options.HasMcpOAuth && !options.Browser)
         {
             return true;
         }
