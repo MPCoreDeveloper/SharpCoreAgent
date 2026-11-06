@@ -91,6 +91,11 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   Latin model. It never captions or describes the picture, never sends it anywhere, bounds the answer at 16 000
   characters, and reports a `Read` effect. Its path, extension and 4 MiB rules are `ImageFile`'s, the same as
   `view_image`.
+- **FR-014** `view_media` reads an audio/video file through FFMediaToolkit over the LGPL FFmpeg runtime and returns
+  container, duration, video codec/dimensions and audio codec/sample rate/channels. For a video it decodes one frame
+  at an optional whole-second `at`, applies optional `max_dimension`, and offers the PNG through the same
+  `SupportsImages`, duplicate and per-turn budget rules as `view_image`. Audio has no frame. The runtime is Windows
+  and Linux only; macOS returns a refusal naming that limit.
 
 ## Edge cases
 
@@ -142,9 +147,9 @@ tool result. A turn asked what a screenshot shows should not end on a descriptio
   sentence, the sink and the path.
 - **`fetch_url` returning images**, a `Content-Type: image/*` branch, or a download tool. **Closed by `019`** for the
   four types a provider accepts; every other binary keeps this round's refusal.
-- **PDF, audio and video.** A video or an audio file named as a picture would be a provider rejection, and extracting
-  frames or audio needs a separate runtime. PDF is no longer in this list: `PdfImage` renders a page to PNG through
-  PdfPig and SkiaSharp, with no native PDFium or Ghostscript process.
+- **PDF, audio and video.** Audio and video are no longer refused: `view_media` reads metadata through the LGPL
+  FFmpeg runtime and decodes one video frame as PNG. The runtime packages cover Windows and Linux; macOS refuses
+  the capability rather than treating a video as a still.
 - **Pasted, dragged or piped images**, and an `--image` flag on `run`. A picture enters a conversation the way any
   other evidence does: through a tool, with a path a report can name.
 - **Rotating.** `view_image` accepts `rotation` 90/180/270 and applies it clockwise after any rendering or downscale;

@@ -40,6 +40,7 @@ Obligations:
 | `search_text` | ReadOnly | `Read` | `pattern` (required, regex-free literal), `glob?` (default `*`), `path?` (default `.`, a file searches that file), `max_matches?` (default 100) | `relative/path:line: text` |
 | `list_roots` | ReadOnly | `Read` | none | `primary` and `read-only` lines with absolute paths (007) |
 | `view_image` | ReadOnly | `Read` | `path` (required), `max_dimension?` (64–4096), `rotation?` (90/180/270), `page?` (PDF, default 1) | `'<path>' (<media type> · <n> bytes[, page <n> rendered <w> × <h> PNG][, resized <w> × <h> PNG][, rotated <d>° to <w> × <h>]) is attached to the next message.` and the image itself, on the user message that follows (017) |
+| `view_media` | ReadOnly | `Read` | `path` (required), `at?` (video seconds), `max_dimension?` (64–4096) | Metadata for an audio/video file; a video additionally attaches one decoded frame as PNG when the model reads images (017 T027c) |
 | `ocr_image` | ReadOnly | `Read` | `path` (required) | `'<path>':` followed by the recognized text, or `'<path>' contains no recognizable text.` (017 T026) |
 | `write_file` | Destructive | `Created`/`Modified` | `path` (required), `content` (required), `overwrite?` (default `true`) | `wrote N bytes to <path> (<created|overwritten>)` |
 | `delete_file` | Destructive | `Deleted` | `path` (required) | `deleted <path>` or error |

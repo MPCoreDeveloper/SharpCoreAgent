@@ -118,6 +118,15 @@
     <PackageVersion Include="RapidOcrNet" Version="4.2.0" />
 
     <!--
+      Audio/video metadata and frame extraction for T027c. FFMediaToolkit is MIT and binds FFmpeg 7.1 through
+      FFmpeg.AutoGen; the runtime package is an LGPL build of FFmpeg itself, not a commercial codec pack. The
+      runtime package covers Windows and Linux today; macOS reports the capability unavailable rather than
+      silently reading a video as an image.
+    -->
+    <PackageVersion Include="FFMediaToolkit" Version="4.8.1" />
+    <PackageVersion Include="FFMpeg.runtime" Version="7.1.3" />
+
+    <!--
       The approved-API snapshot analyzer (constitution, Principle VII). Dev-time only:
       PrivateAssets="all" keeps it out of every package and out of a consumer's build.
     -->

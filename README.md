@@ -386,7 +386,7 @@ session: a standing approval belongs to the conversation that earned it.
 
 ## Tools
 
-`list_directory`, `read_file`, `view_image`, `ocr_image`, `search_text`, `list_roots`, `list_artifacts`, `write_file`, `replace_in_file`,
+`list_directory`, `read_file`, `view_image`, `view_media`, `ocr_image`, `search_text`, `list_roots`, `list_artifacts`, `write_file`, `replace_in_file`,
 `delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `python_verify`, `node_verify`,
 `git_status`, `git_diff`, `task`, `file_diagnostics`, `uses_at`, `signature_at`.
 
@@ -456,6 +456,12 @@ answer names the page and the rendered size. When a caller asks for `max_dimensi
 `ocr_image` is the text-only path: it reads the same picture, SVG or PDF page through the local RapidOcrNet PP-OCRv5
 Latin model and returns the recognized text. It never captions or describes the picture and never sends it anywhere;
 the bundled models are copied to `models/v5` beside the binary.
+
+`view_media` reads audio and video through FFMediaToolkit (MIT) over the bundled LGPL FFmpeg runtime. It reports
+container duration, video codec and dimensions, and audio codec, sample rate and channels. For a video it also
+decodes one frame at `at` seconds and attaches it as PNG under the same model capability, duplicate and per-turn
+budget rules as `view_image`; audio has no frame, so it returns metadata only. The runtime packages cover Windows
+and Linux; macOS receives a clear refusal instead of a file being mislabelled as a picture.
 
 A session file keeps the transcript's text and not its images: a screenshot is megabytes of base64 on one
 line of a document people grep, and the file it came from is still on disk and one `view_image` call away —
@@ -531,7 +537,7 @@ undo: restored 1 file(s), removed 0 created file(s)
 
 `fetch_url` is an opt-in tool and one of three flags that add tools to the registry. `--web` adds this
 one for a single invocation, and without the flag it is absent from the registry, from the definitions the
-model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-six
+model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-seven
 tools a build starts with; `--no-csharp` removes the adapter and its three tools for one invocation, and `--no-git`
 removes `git_status` and `git_diff`. `--fsharp` adds a second adapter behind
 the same three tools, and `--mcp` adds whatever each server offers. Of the optional capabilities,

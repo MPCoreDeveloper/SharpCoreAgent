@@ -180,6 +180,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, ListDirectoryTool>();
         services.AddSingleton<ITool, ReadFileTool>();
         services.AddSingleton<ITool, ViewImageTool>();
+        services.AddSingleton<ITool, ViewMediaTool>();
         services.AddSingleton<ITool, OcrImageTool>();
         services.AddSingleton<ITool, SearchTextTool>();
         services.AddSingleton<ITool, ListRootsTool>();

@@ -84,8 +84,11 @@ has a real list rather than a memory.
 - [X] T027b **PDF.** `view_image` accepts `.pdf` and `PdfImage` renders one page (page 1 by default, `page` selects
       another) through PdfPig and SkiaSharp; no PDFium or Ghostscript process. Audio and video remain refused: their
       extensions would lie about what a provider can read and each needs a separate runtime.
-- [ ] T027c **Audio and video.** Extracting frames or audio is a separate runtime and a separate contract; a video
-      named as a picture is still refused.
+- [X] T027c **Audio and video.** `view_media` reads metadata through FFMediaToolkit 4.8.1 (MIT) over the bundled
+      LGPL FFmpeg 7.1 runtime, and decodes one video frame as PNG at an optional whole-second `at`. Audio is metadata
+      only; video frames obey `SupportsImages`, duplicate suppression, `max_dimension` and the per-turn image budget.
+      The runtime packages cover Windows and Linux; macOS receives a clear refusal. FFMediaToolkit is the replaceable
+      seam if its packaging changes.
 - [X] T028a **Resizing and re-encoding, on request.** `view_image` takes optional `max_dimension` (64–4096); it
       preserves aspect ratio, re-encodes PNG and names the result. Omitting it is byte-identical to the old answer.
       `ImageResize` refuses an undecodable file or an out-of-range value instead of guessing.
