@@ -51,6 +51,29 @@ public sealed class DotnetVerifyToolTests
     }
 
     [Fact]
+    public async Task FilterAndNoBuildAreRefusedForABuild()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+
+        var withFilter = await new DotnetVerifyTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                DotnetVerifyTool.Name,
+                ToolTestWorkspace.Args(new { kind = DotnetVerifyTool.Build, filter = "FullyQualifiedName~X" })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+        Assert.True(withFilter.IsError);
+        Assert.Contains("only to kind 'test'", withFilter.Content, StringComparison.Ordinal);
+
+        var withNoBuild = await new DotnetVerifyTool().ExecuteAsync(
+            ToolTestWorkspace.Call(
+                DotnetVerifyTool.Name,
+                ToolTestWorkspace.Args(new { kind = DotnetVerifyTool.Build, no_build = true })),
+            sandbox.Context,
+            TestContext.Current.CancellationToken);
+        Assert.True(withNoBuild.IsError);
+    }
+
+    [Fact]
     public async Task AMissingProjectIsAFailureThatNamesIt()
     {
         using var sandbox = ToolTestWorkspace.Create();

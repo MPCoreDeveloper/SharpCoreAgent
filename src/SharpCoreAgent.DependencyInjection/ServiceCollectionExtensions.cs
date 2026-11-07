@@ -146,20 +146,21 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the nineteen workspace tools and the registry that advertises them.
+    /// Registers the workspace, index, delegator and project-memory tools, and the registry that advertises them.
     /// </summary>
     /// <param name="services">The container to add to.</param>
     /// <remarks>
     /// <c>fetch_url</c> is not one of them: it is registered by <see cref="AddWeb"/> only when the developer asked for the
     /// network, so this count is the workspace surface and stays true with <c>--web</c> on or off. The number is the
-    /// surface a default build advertises — fifteen tools from rounds 1–3, <c>dotnet_verify</c> from <c>012</c>,
-    /// <c>python_verify</c> and <c>node_verify</c> from <c>040</c>, <c>task</c> from <c>011</c>, <c>view_image</c>
-    /// from the image round and <c>ocr_image</c> from T026 — and <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added or
-    /// dropped without a failing test. <see cref="AddCodeIntelligence"/> adds the three language-neutral code tools by
-    /// default, making the default process surface twenty-six.
+    /// surface a default build advertises — the read/write/shell tools, <c>dotnet_verify</c> from <c>012</c>,
+    /// <c>python_verify</c> and <c>node_verify</c> from <c>040</c>, <c>task</c> from <c>011</c>, the image tools and
+    /// <c>ocr_image</c>, the index-backed tools, and <c>project_memory</c>/<c>remember</c> from <c>059</c> — and
+    /// <c>TaskToolRegistrationTests</c> pins the whole set, so a tool cannot be added or dropped without a failing test.
+    /// <see cref="AddCodeIntelligence"/> adds the three language-neutral code tools by default and <see cref="AddGit"/>
+    /// adds the five Git tools, so the default process surface is larger than this method alone.
     ///
     /// The tools are singletons because they are stateless: each call resolves every path through the
-    /// workspace it is handed, so one instance serves every session in the process. The five index-backed
+    /// workspace it is handed, so one instance serves every session in the process. The index-backed
     /// tools take an optional <c>ICodeIndex</c>, which the built-in container leaves null when the host
     /// registered none — that is how <c>--no-index</c> reaches them without a flag they have to check.
     /// <para>
@@ -219,18 +220,23 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, IndexStatusTool>();
         services.AddSingleton<ITool, FindDocsTool>();
         services.AddSingleton<ITool, FindCuesTool>();
+        services.AddSingleton<ITool, ProjectMemoryTool>();
+        services.AddSingleton<ITool, RememberTool>();
 
         // Built once from the registered tools; ToolRegistry rejects duplicate names, which turns a
         // copy-pasted registration into a startup failure instead of a model-visible ambiguity.
         services.AddSingleton<IToolRegistry>(provider => new ToolRegistry(provider.GetServices<ITool>()));
     }
 
-    /// <summary>Registers the two read-only Git evidence tools over the shell process host.</summary>
+    /// <summary>Registers the read-only Git evidence tools and the approval-gated Git write tools over the shell process host.</summary>
     /// <param name="services">The container to add to.</param>
     private static void AddGit(IServiceCollection services)
     {
         services.AddSingleton<ITool>(provider => new GitStatusTool(provider.GetRequiredService<ShellProcessRegistry>()));
         services.AddSingleton<ITool>(provider => new GitDiffTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new GitStageTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new GitCommitTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new GitBranchTool(provider.GetRequiredService<ShellProcessRegistry>()));
     }
 
     /// <summary>
@@ -398,8 +404,8 @@ public static class ServiceCollectionExtensions
     /// whose owner may never have typed a key for this product, and none is needed to answer "where is this
     /// declared".
     /// <para>
-    /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface is
-    /// twenty-six workspace tools including the ones that write, start processes and delegate, and the server's
+    /// The five tools are registered here rather than reused from <c>AddSharpCoreAgent</c>: that surface includes the
+    /// tools that write, start processes and delegate, and the server's
     /// allow-list is the statement that this container holds none of them. The published set filters this registry
     /// again, so the two gates the contract requires are both present.
     /// </para>

@@ -172,6 +172,7 @@ public static class PromptLibrary
         - git_status shows staged, unstaged, untracked, renamed and conflicted paths. The first column is the index and the second is the working tree.
         - git_diff shows a unified diff. scope=working is unstaged, scope=staged is the index against HEAD, and scope=head is every tracked change against HEAD. Use path when the change is local to one file or folder.
         - An untracked file is not in git_diff; git_status names it and read_file shows it. Both Git tools are read-only, so use them instead of run_shell in Plan and Review.
+        - git_stage stages paths, git_commit records the staged index with your message, and git_branch lists, creates or deletes a branch. These three are destructive and approval-gated: they are hidden in Plan and Review and each write prompts outside allow mode, so propose them to the developer rather than assuming they ran.
         """;
 
     /// <summary>

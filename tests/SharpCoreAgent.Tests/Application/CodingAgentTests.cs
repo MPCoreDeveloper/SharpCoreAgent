@@ -702,6 +702,27 @@ public sealed class CodingAgentTests
             session.Messages.Count(message => message.Role == ChatRole.User && message.Content == PromptLibrary.VerifyNudge));
     }
 
+    [Fact]
+    public async Task ANoBuildTestRunDoesNotCloseTheCompileGate()
+    {
+        using var directory = TempDirectory.Create();
+        var model = new ScriptedModel(
+            Descriptor,
+            [ToolCallTurn("write_file")],
+            [ToolCallTurn(ToolNames.DotnetVerify)],
+            [Completed("tests pass")]);
+        var session = Session(directory.Path);
+
+        // A no_build test re-runs the already-built binaries: it proves nothing about whether the edit compiles, so a
+        // passing result carries CountsAsVerification=false and the compile gap stays open.
+        var report = await Agent(model, [EditingTool(), NonVerifyingTool()])
+            .RunTurnAsync(session, "fix it", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AgentOutcome.Completed, report.Outcome);
+        Assert.True(report.IsUnverified);
+        Assert.Contains("unverified", report.Detail!, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("deploy.ps1")]
     [InlineData("query.sql")]
@@ -1210,6 +1231,14 @@ public sealed class CodingAgentTests
             call => passed
                 ? ToolResult.Success(call.Id, call.Name, "result       passed")
                 : ToolResult.Failure(call.Id, call.Name, "result       failed"),
+            DotnetVerifyTool.VerificationProfiles);
+
+    /// <summary>Gets a verifier whose passing result does not count as a build (a no_build test run).</summary>
+    private static ITool NonVerifyingTool() =>
+        new StubTool(
+            ToolNames.DotnetVerify,
+            ToolSafety.Destructive,
+            call => ToolResult.Success(call.Id, call.Name, "result       skipped build") with { CountsAsVerification = false },
             DotnetVerifyTool.VerificationProfiles);
 
     /// <summary>Gets a non-.NET verifier that declares its own profile, as a language adapter or host tool would.</summary>

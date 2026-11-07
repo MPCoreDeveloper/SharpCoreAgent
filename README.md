@@ -253,7 +253,7 @@ keep working on the file that needs repairing.
 | `--web-allow <host>` | run, chat | none — also read this host, whose address is loopback, private or metadata; repeatable |
 | `--fsharp` | run, chat | off — add the F# adapter behind the default `file_diagnostics`, `uses_at` and `signature_at` tools |
 | `--no-csharp` | run, chat | C# on — remove the Roslyn adapter and its three code-intelligence tools for this invocation |
-| `--no-git` | run, chat | Git on — remove the read-only `git_status` and `git_diff` evidence tools |
+| `--no-git` | run, chat | Git on — remove the `git_status`/`git_diff` evidence tools and the approval-gated `git_stage`/`git_commit`/`git_branch` write tools |
 | `--mcp <command>` | run, chat | none — start this MCP server and offer its tools as `<server>_<tool>`; repeatable |
 | `--mcp-url <url>` | run, chat | none — talk streamable HTTP to this explicit endpoint; `https`, or `http` on loopback; repeatable |
 | `--mcp-sse-url <url>` | run, chat | none — talk legacy HTTP+SSE to this explicit endpoint; `https`, or `http` on loopback; repeatable |
@@ -388,7 +388,8 @@ session: a standing approval belongs to the conversation that earned it.
 
 `list_directory`, `read_file`, `view_image`, `view_media`, `ocr_image`, `search_text`, `list_roots`, `list_artifacts`, `write_file`, `replace_in_file`,
 `delete_file`, `run_shell`, `shell_output`, `shell_stop`, `dotnet_verify`, `python_verify`, `node_verify`,
-`git_status`, `git_diff`, `task`, `file_diagnostics`, `uses_at`, `signature_at`.
+`git_status`, `git_diff`, `git_stage`, `git_commit`, `git_branch`, `task`, `file_diagnostics`, `uses_at`, `signature_at`,
+`project_memory`, `remember`.
 
 `git_status` and `git_diff` are the read-only evidence a Plan or Review turn can get without a shell. `git_status`
 reports porcelain index/worktree codes, untracked files, renames and conflicts; `git_diff` shows a unified diff for
@@ -397,7 +398,9 @@ scoped to one workspace path. Neither accepts a command, an option, a revision e
 workspace: the argv is fixed, the model's path travels after `--`, external diff drivers and textconv are disabled,
 and optional index locks are off so reading the status does not rewrite what it reports. Output is bounded at 64 KiB
 and 500 status entries. Untracked files are named by `git_status`; they are not part of a Git diff. `--no-git` removes
-both tools and their prompt rule for one invocation.
+both tools and their prompt rule for one invocation. Their approval-gated companions record a change: `git_stage` stages workspace paths, `git_commit` records the staged index with a bounded message the approval prompt shows (hooks and signing are disabled, and the author is your configured identity), and `git_branch` lists, creates or deletes a branch. All three are destructive, so each prompts outside `allow` and none runs in Plan or Review.
+
+`project_memory` (read-only) and `remember` (approval-gated) are a small, persistent project notebook. `remember` saves a named note under `.sharpcoreagent/memory/` — a convention, an architecture fact, a decision — and `project_memory` lists the notes or returns one; both are bounded (16 KiB per note, 64 notes), a note is written verbatim and never executed, and the store is git-ignored and never injected into the prompt on its own, so a session reads what it chooses to read.
 
 `search_text`, `list_directory` and the index share one workspace-local `.gitignore` matcher: root and nested files,
 negation, anchored and directory-only rules, wildcards and `**`. An ignored directory is not walked, and the built-in
@@ -406,7 +409,7 @@ exclusions (`.git`, `node_modules`, `bin`, `obj`, `.vs`, `.sharpcoreagent`) stil
 
 `dotnet_verify` builds or tests the workspace and answers with a report rather than a log: exit code,
 `passed`/`failed`, warnings, the diagnostics themselves, test counts, duration and the summary MSBuild
-printed, followed by the SDK's own output. It is the one tool with authority over a turn's ending — a turn
+printed, followed by the SDK's own output. For a `test` run, `filter` narrows to the matching tests and `no_build` re-runs the already-built binaries; because a `no_build` run does not compile, it never closes the turn's verification gate. It is the one tool with authority over a turn's ending — a turn
 that created, modified or deleted a `.cs`, `.vb`, `.fs`, `.csproj`, `.vbproj`, `.fsproj`, `.props`,
 `.targets`, `.sln` or `.slnx` file cannot complete until `dotnet_verify` has passed *after* that edit. The
 loop asks twice, then accepts the answer and says so: `⚠ no passing dotnet_verify ran after the last .NET

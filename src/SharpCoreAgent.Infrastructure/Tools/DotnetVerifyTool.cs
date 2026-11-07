@@ -65,7 +65,7 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
     public const string DefaultFileName = "dotnet";
 
     private const string Schema =
-        """{"type":"object","properties":{"kind":{"type":"string","enum":["build","test"],"description":"build compiles the workspace and reports diagnostics; test also runs the test suite."},"project":{"type":"string","description":"Project or solution to narrow the run to, relative to the workspace root. Omit to build whatever the root contains."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":900}},"required":["kind"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"kind":{"type":"string","enum":["build","test"],"description":"build compiles the workspace and reports diagnostics; test also runs the test suite."},"project":{"type":"string","description":"Project or solution to narrow the run to, relative to the workspace root. Omit to build whatever the root contains."},"filter":{"type":"string","description":"Test-name filter (test only); passed as --filter. A value that matches no test is a failure."},"no_build":{"type":"boolean","description":"Test only: run against already-built binaries with --no-build. It does not compile, so it does not close the compile gate."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":900}},"required":["kind"],"additionalProperties":false}""";
 
     /// <summary>Gets how long the call waits for the output readers after the process exits.</summary>
     private static readonly TimeSpan DrainGrace = TimeSpan.FromMilliseconds(250);
@@ -145,6 +145,13 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
             return ToolResult.Failure(toolCall.Id, Name, $"kind must be '{Build}' or '{Test}', not '{kind}'.");
         }
 
+        var filter = arguments.GetOptionalString("filter");
+        var noBuild = arguments.GetOptionalBool("no_build", false);
+        if (kind == Build && (filter is { Length: > 0 } || noBuild))
+        {
+            return ToolResult.Failure(toolCall.Id, Name, "'filter' and 'no_build' apply only to kind 'test'.");
+        }
+
         var timeoutSeconds = arguments.GetOptionalInt(
             "timeout_seconds",
             DefaultTimeoutSeconds,
@@ -181,12 +188,22 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
         }
 
         var command = CommandFor(kind, project);
+        if (filter is { Length: > 0 })
+        {
+            command = string.Concat(command, " --filter ", filter);
+        }
+
+        if (noBuild)
+        {
+            command = string.Concat(command, " --no-build");
+        }
+
         ShellProcess process;
         try
         {
             process = _processes.Start(
                 command,
-                CreateStartInfo(kind, project, workingDirectory),
+                CreateStartInfo(kind, project, workingDirectory, filter, noBuild),
                 context.Output,
                 TimeSpan.FromSeconds(timeoutSeconds));
         }
@@ -243,6 +260,9 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
             // Recorded even when the build failed: the turn's own report should say a compiler ran, and
             // "dotnet build" in `CommandsRun` beside a failed result is the honest description of the turn.
             Effects = [new ToolEffect(ToolEffectKind.CommandRun, command)],
+
+            // A run that skipped compilation is not evidence the source builds, so it must not close the compile gate.
+            CountsAsVerification = !noBuild,
         };
 
         return result with { IsTruncated = truncated };
@@ -328,13 +348,15 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
     /// <param name="kind">The kind of run.</param>
     /// <param name="project">The workspace-relative project, or null for the root.</param>
     /// <param name="workingDirectory">The directory the run starts in.</param>
+    /// <param name="filter">The test-name filter, or null; passed as <c>--filter</c> for a test run.</param>
+    /// <param name="noBuild">Whether to run against already-built binaries with <c>--no-build</c>.</param>
     /// <returns>The start information.</returns>
     /// <remarks>
     /// The arguments travel as a list rather than as a command line, so a workspace path with a space needs no
     /// quoting and there is no string for a caller to break out of — the same reading of Principle III that
     /// <c>run_shell</c> applies to the command it hands its shell.
     /// </remarks>
-    private ProcessStartInfo CreateStartInfo(string kind, string? project, string workingDirectory)
+    private ProcessStartInfo CreateStartInfo(string kind, string? project, string workingDirectory, string? filter, bool noBuild)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -356,6 +378,17 @@ public sealed class DotnetVerifyTool : ITool, IVerificationTool
         if (!string.IsNullOrEmpty(project))
         {
             startInfo.ArgumentList.Add(project);
+        }
+
+        if (filter is { Length: > 0 })
+        {
+            startInfo.ArgumentList.Add("--filter");
+            startInfo.ArgumentList.Add(filter);
+        }
+
+        if (noBuild)
+        {
+            startInfo.ArgumentList.Add("--no-build");
         }
 
         // The parser reads English markers ("Build FAILED.", "N Warning(s)"); a localized SDK would answer

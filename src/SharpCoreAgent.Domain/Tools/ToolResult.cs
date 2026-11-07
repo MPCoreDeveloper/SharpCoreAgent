@@ -68,6 +68,17 @@ public sealed record ToolResult
     /// <summary>Gets a value indicating whether <see cref="Content"/> was shortened to respect the budget.</summary>
     public bool IsTruncated { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the turn's verification gate may treat this result as the passing verification
+    /// it waits for.
+    /// </summary>
+    /// <remarks>
+    /// True by default, so every existing tool and every existing test is unchanged. A verifier sets it false when it
+    /// answered without establishing the fact it exists to establish — a test run that skipped compilation, for
+    /// example — so a turn that edited source and only re-ran tests stays unverified.
+    /// </remarks>
+    public bool CountsAsVerification { get; init; } = true;
+
     /// <summary>Gets the changes the invocation reported.</summary>
     public IReadOnlyList<ToolEffect> Effects { get; init; } = [];
 

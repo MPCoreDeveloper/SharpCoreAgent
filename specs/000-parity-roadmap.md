@@ -1036,6 +1036,16 @@ unassigned until a round needs it. `012` is the compiler oracle, which needs nei
 `015` is F# code intelligence, `016` is model roles, `017` is the image view, `019` is image ingress, `020`
 is the picture budget of one turn and `021` is the picture the conversation already carries.
 
+## Milestone — `059-capability-gap-closure` (landed 2026-11-07, no merge commit)
+
+**Ships**: three gap-closing slices, each independently gated green. *Git writes* — `git_stage`, `git_commit`, `git_branch`, all `Destructive` and approval-gated, on the same `GitCommand`/`ShellProcessRegistry` as the read-only pair, with the write path dropping `--no-optional-locks` and disabling hooks and signing; a branch name is confined by `git check-ref-format` and a leading `-` is refused. *Targeted verification* — `dotnet_verify` gains `filter` (test only) and `no_build`; a `no_build` run does not compile, so `ToolResult.CountsAsVerification` (default true) keeps it from closing the compile gate. *Project memory* — `project_memory` (ReadOnly) and `remember` (Destructive) over a git-ignored, slug-bounded store under `.sharpcoreagent/memory/`.
+
+**Why it is a milestone, not a round**: it closes the three gaps a capability-maturity pass found still open after rounds 1–23 (`035` shipped Git evidence, `012`/`037`/`040` shipped the verification loop and profiles, `041`/`042` shipped resume and compaction), so it is additive to the numbered rounds rather than a new one. `PromptLibrary.GitRule` gains one line naming the write tools; no provider, index, or new `Process.Start`.
+
+**Evidence**: whole suite 1872 total, 0 failed, 1871 succeeded, 1 pre-existing skip, Release at 0 warnings; new classes `GitWriteToolTests`, `ProjectMemoryToolTests`, and the `CodingAgentTests` no-build gate test; `--no-git` removes all five Git tools.
+
+**Does not reverse** the "what stays out" list below: the notebook is a private, git-ignored store the model reads through a tool, not `AGENTS.md`/`.clinerules` ambient authority, and it is never injected into the prompt on its own.
+
 ## What stays out of this program
 
 Checkpoints and rewind, rules files (`AGENTS.md`, `.clinerules`), remote or team sessions, a plugin

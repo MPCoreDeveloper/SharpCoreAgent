@@ -607,6 +607,7 @@ public sealed class CodingAgent
                 var name = binding.Profile.Name;
                 if (!result.IsError
                     && !result.IsRefused
+                    && result.CountsAsVerification
                     && string.Equals(result.ToolName, binding.ToolName, StringComparison.Ordinal))
                 {
                     _lastVerification[name] = index;

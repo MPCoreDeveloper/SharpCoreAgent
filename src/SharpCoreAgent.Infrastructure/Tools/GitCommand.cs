@@ -9,6 +9,11 @@ internal sealed class GitCommand(ShellProcessRegistry processes, string fileName
 {
     public const string DefaultFileName = "git";
     public const int DefaultTimeoutSeconds = 30;
+
+    // A directory this process never creates: pointing core.hooksPath at a path with no hooks disables every
+    // repository-configured hook for a write, the write-path analogue of the read path's --no-ext-diff.
+    private static readonly string NoHooksPath =
+        Path.Combine(Path.GetTempPath(), $"sharpcoreagent-nohooks-{Environment.ProcessId}");
     private static readonly TimeSpan DrainGrace = TimeSpan.FromMilliseconds(250);
     private static readonly string[] RedirectingVariables =
     [
@@ -30,18 +35,37 @@ internal sealed class GitCommand(ShellProcessRegistry processes, string fileName
         Workspace workspace,
         IReadOnlyList<string> command,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool write = false)
     {
         var arguments = new List<string>
         {
-            "--no-optional-locks",
             "--no-pager",
             "-c", "core.quotepath=false",
-            "-c", "core.fsmonitor=false",
             "-c", "status.relativePaths=true",
             "-c", "diff.noprefix=false",
             "-c", "diff.mnemonicPrefix=false",
         };
+
+        if (write)
+        {
+            // A commit takes the index lock and writes objects, so --no-optional-locks is wrong here, and a
+            // repository-configured hook or signing program must never run inside an approved "commit".
+            arguments.Add("-c");
+            arguments.Add(string.Concat("core.hooksPath=", NoHooksPath));
+            arguments.Add("-c");
+            arguments.Add("commit.gpgsign=false");
+            arguments.Add("-c");
+            arguments.Add("tag.gpgsign=false");
+        }
+        else
+        {
+            // A status read must not refresh the index, and no repository fsmonitor hook may run during a read.
+            arguments.Insert(0, "--no-optional-locks");
+            arguments.Add("-c");
+            arguments.Add("core.fsmonitor=false");
+        }
+
         arguments.AddRange(command);
 
         ShellProcess process;
@@ -49,7 +73,7 @@ internal sealed class GitCommand(ShellProcessRegistry processes, string fileName
         {
             process = processes.Start(
                 Display(arguments),
-                StartInfo(workspace.Root, arguments),
+                StartInfo(workspace.Root, arguments, write),
                 null,
                 timeout);
         }
@@ -84,7 +108,7 @@ internal sealed class GitCommand(ShellProcessRegistry processes, string fileName
         return Path.DirectorySeparatorChar == '\\' ? relative.Replace('\\', '/') : relative;
     }
 
-    private ProcessStartInfo StartInfo(string workingDirectory, IReadOnlyList<string> arguments)
+    private ProcessStartInfo StartInfo(string workingDirectory, IReadOnlyList<string> arguments, bool write)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -105,7 +129,10 @@ internal sealed class GitCommand(ShellProcessRegistry processes, string fileName
             startInfo.ArgumentList.Add(argument);
         }
 
-        startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        if (!write)
+        {
+            startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        }
         startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
         startInfo.Environment["GIT_PAGER"] = "cat";
         startInfo.Environment["PAGER"] = "cat";

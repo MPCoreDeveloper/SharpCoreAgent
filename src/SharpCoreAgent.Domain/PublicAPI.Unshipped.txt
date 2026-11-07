@@ -796,6 +796,8 @@ SharpCoreAgent.Domain.Tools.ToolResult.CallId.get -> string!
 SharpCoreAgent.Domain.Tools.ToolResult.CallId.init -> void
 SharpCoreAgent.Domain.Tools.ToolResult.Content.get -> string!
 SharpCoreAgent.Domain.Tools.ToolResult.Content.init -> void
+SharpCoreAgent.Domain.Tools.ToolResult.CountsAsVerification.get -> bool
+SharpCoreAgent.Domain.Tools.ToolResult.CountsAsVerification.init -> void
 SharpCoreAgent.Domain.Tools.ToolResult.Effects.get -> System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Tools.ToolEffect!>!
 SharpCoreAgent.Domain.Tools.ToolResult.Effects.init -> void
 SharpCoreAgent.Domain.Tools.ToolResult.Equals(SharpCoreAgent.Domain.Tools.ToolResult? other) -> bool
