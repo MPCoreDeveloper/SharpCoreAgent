@@ -21,6 +21,7 @@ SharpCoreAgent.Domain.Model.FallbackUsed.StatusCode.get -> int
 SharpCoreAgent.Domain.Model.FallbackUsed.StatusCode.init -> void
 abstract SharpCoreAgent.Domain.Agents.AgentEvent.<Clone>$() -> SharpCoreAgent.Domain.Agents.AgentEvent!
 abstract SharpCoreAgent.Domain.Model.ChatStreamEvent.<Clone>$() -> SharpCoreAgent.Domain.Model.ChatStreamEvent!
+const SharpCoreAgent.Domain.Index.CodeQuery.AnyEvidenceKind = "any" -> string!
 const SharpCoreAgent.Domain.Index.CodeQuery.AnyKind = "any" -> string!
 const SharpCoreAgent.Domain.Index.CodeQuery.DefaultHops = 1 -> int
 const SharpCoreAgent.Domain.Index.CodeQuery.DefaultK = 8 -> int
@@ -87,6 +88,9 @@ override SharpCoreAgent.Domain.Conversation.ToolCall.ToString() -> string!
 override SharpCoreAgent.Domain.Index.CodeContext.Equals(object? obj) -> bool
 override SharpCoreAgent.Domain.Index.CodeContext.GetHashCode() -> int
 override SharpCoreAgent.Domain.Index.CodeContext.ToString() -> string!
+override SharpCoreAgent.Domain.Index.CodeDocRef.Equals(object? obj) -> bool
+override SharpCoreAgent.Domain.Index.CodeDocRef.GetHashCode() -> int
+override SharpCoreAgent.Domain.Index.CodeDocRef.ToString() -> string!
 override SharpCoreAgent.Domain.Index.CodeEvidence.Equals(object? obj) -> bool
 override SharpCoreAgent.Domain.Index.CodeEvidence.GetHashCode() -> int
 override SharpCoreAgent.Domain.Index.CodeEvidence.ToString() -> string!
@@ -333,6 +337,22 @@ SharpCoreAgent.Domain.Index.CodeContext.Subject.get -> SharpCoreAgent.Domain.Ind
 SharpCoreAgent.Domain.Index.CodeContext.Subject.init -> void
 SharpCoreAgent.Domain.Index.CodeContext.Target.get -> string!
 SharpCoreAgent.Domain.Index.CodeContext.Target.init -> void
+SharpCoreAgent.Domain.Index.CodeDocRef
+SharpCoreAgent.Domain.Index.CodeDocRef.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeDocRef!
+SharpCoreAgent.Domain.Index.CodeDocRef.CodeDocRef() -> void
+SharpCoreAgent.Domain.Index.CodeDocRef.EndLine.get -> int
+SharpCoreAgent.Domain.Index.CodeDocRef.EndLine.init -> void
+SharpCoreAgent.Domain.Index.CodeDocRef.Equals(SharpCoreAgent.Domain.Index.CodeDocRef? other) -> bool
+SharpCoreAgent.Domain.Index.CodeDocRef.Heading.get -> string?
+SharpCoreAgent.Domain.Index.CodeDocRef.Heading.init -> void
+SharpCoreAgent.Domain.Index.CodeDocRef.Path.get -> string!
+SharpCoreAgent.Domain.Index.CodeDocRef.Path.init -> void
+SharpCoreAgent.Domain.Index.CodeDocRef.StartLine.get -> int
+SharpCoreAgent.Domain.Index.CodeDocRef.StartLine.init -> void
+SharpCoreAgent.Domain.Index.CodeDocRef.Symbol.get -> string?
+SharpCoreAgent.Domain.Index.CodeDocRef.Symbol.init -> void
+SharpCoreAgent.Domain.Index.CodeDocRef.Text.get -> string!
+SharpCoreAgent.Domain.Index.CodeDocRef.Text.init -> void
 SharpCoreAgent.Domain.Index.CodeEvidence
 SharpCoreAgent.Domain.Index.CodeEvidence.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeEvidence!
 SharpCoreAgent.Domain.Index.CodeEvidence.CodeEvidence() -> void
@@ -363,12 +383,18 @@ SharpCoreAgent.Domain.Index.CodeQuery
 SharpCoreAgent.Domain.Index.CodeQuery.<Clone>$() -> SharpCoreAgent.Domain.Index.CodeQuery!
 SharpCoreAgent.Domain.Index.CodeQuery.CodeQuery() -> void
 SharpCoreAgent.Domain.Index.CodeQuery.Equals(SharpCoreAgent.Domain.Index.CodeQuery? other) -> bool
+SharpCoreAgent.Domain.Index.CodeQuery.EvidenceKind.get -> string!
+SharpCoreAgent.Domain.Index.CodeQuery.EvidenceKind.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery.ExcludePathPrefix.get -> string?
+SharpCoreAgent.Domain.Index.CodeQuery.ExcludePathPrefix.init -> void
 SharpCoreAgent.Domain.Index.CodeQuery.Hops.get -> int
 SharpCoreAgent.Domain.Index.CodeQuery.Hops.init -> void
 SharpCoreAgent.Domain.Index.CodeQuery.K.get -> int
 SharpCoreAgent.Domain.Index.CodeQuery.K.init -> void
 SharpCoreAgent.Domain.Index.CodeQuery.Kind.get -> string?
 SharpCoreAgent.Domain.Index.CodeQuery.Kind.init -> void
+SharpCoreAgent.Domain.Index.CodeQuery.Language.get -> string?
+SharpCoreAgent.Domain.Index.CodeQuery.Language.init -> void
 SharpCoreAgent.Domain.Index.CodeQuery.Path.get -> string?
 SharpCoreAgent.Domain.Index.CodeQuery.Path.init -> void
 SharpCoreAgent.Domain.Index.CodeQuery.Text.get -> string!
@@ -412,6 +438,7 @@ SharpCoreAgent.Domain.Index.EvidenceLeg.Path = 4 -> SharpCoreAgent.Domain.Index.
 SharpCoreAgent.Domain.Index.EvidenceLeg.Symbol = 3 -> SharpCoreAgent.Domain.Index.EvidenceLeg
 SharpCoreAgent.Domain.Index.EvidenceLeg.Vector = 1 -> SharpCoreAgent.Domain.Index.EvidenceLeg
 SharpCoreAgent.Domain.Index.ICodeIndex
+SharpCoreAgent.Domain.Index.ICodeIndex.FindDocsAsync(string! text, int maxResults, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeDocRef!>!>
 SharpCoreAgent.Domain.Index.ICodeIndex.FindReferencesAsync(string! symbol, SharpCoreAgent.Domain.Index.ReferenceDirection direction, int maxResults, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeEvidence!>!>
 SharpCoreAgent.Domain.Index.ICodeIndex.FindSymbolsAsync(string! name, string? kind, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SharpCoreAgent.Domain.Index.CodeSymbolRef!>!>
 SharpCoreAgent.Domain.Index.ICodeIndex.GetContextAsync(string! target, int hops, int k, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SharpCoreAgent.Domain.Index.CodeContext!>
@@ -799,12 +826,15 @@ static SharpCoreAgent.Domain.Conversation.ToolCall.operator ==(SharpCoreAgent.Do
 static SharpCoreAgent.Domain.Index.CodeContext.Empty(string! target) -> SharpCoreAgent.Domain.Index.CodeContext!
 static SharpCoreAgent.Domain.Index.CodeContext.operator !=(SharpCoreAgent.Domain.Index.CodeContext? left, SharpCoreAgent.Domain.Index.CodeContext? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeContext.operator ==(SharpCoreAgent.Domain.Index.CodeContext? left, SharpCoreAgent.Domain.Index.CodeContext? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeDocRef.operator !=(SharpCoreAgent.Domain.Index.CodeDocRef? left, SharpCoreAgent.Domain.Index.CodeDocRef? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeDocRef.operator ==(SharpCoreAgent.Domain.Index.CodeDocRef? left, SharpCoreAgent.Domain.Index.CodeDocRef? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeEvidence.operator !=(SharpCoreAgent.Domain.Index.CodeEvidence? left, SharpCoreAgent.Domain.Index.CodeEvidence? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeEvidence.operator ==(SharpCoreAgent.Domain.Index.CodeEvidence? left, SharpCoreAgent.Domain.Index.CodeEvidence? right) -> bool
-static SharpCoreAgent.Domain.Index.CodeQuery.Create(string! text, string? path = null, string? kind = null, int k = 8, int hops = 1) -> SharpCoreAgent.Domain.Index.CodeQuery!
+static SharpCoreAgent.Domain.Index.CodeQuery.Create(string! text, string? path = null, string? kind = null, int k = 8, int hops = 1, string? language = null, string? excludePathPrefix = null, string? evidenceKind = null) -> SharpCoreAgent.Domain.Index.CodeQuery!
 static SharpCoreAgent.Domain.Index.CodeQuery.NormalizePath(string? path) -> string?
 static SharpCoreAgent.Domain.Index.CodeQuery.operator !=(SharpCoreAgent.Domain.Index.CodeQuery? left, SharpCoreAgent.Domain.Index.CodeQuery? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeQuery.operator ==(SharpCoreAgent.Domain.Index.CodeQuery? left, SharpCoreAgent.Domain.Index.CodeQuery? right) -> bool
+static SharpCoreAgent.Domain.Index.CodeQuery.SupportedEvidenceKinds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 static SharpCoreAgent.Domain.Index.CodeQuery.SupportedKinds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 static SharpCoreAgent.Domain.Index.CodeSymbolRef.operator !=(SharpCoreAgent.Domain.Index.CodeSymbolRef? left, SharpCoreAgent.Domain.Index.CodeSymbolRef? right) -> bool
 static SharpCoreAgent.Domain.Index.CodeSymbolRef.operator ==(SharpCoreAgent.Domain.Index.CodeSymbolRef? left, SharpCoreAgent.Domain.Index.CodeSymbolRef? right) -> bool

@@ -126,8 +126,8 @@ dotnet run --project src\SharpCoreAgent.Cli -- models
 dotnet run --project src\SharpCoreAgent.Cli -- run "list the files in this repository" --provider demo --approval readonly
 ```
 
-Build the index once per clone. Nothing does it for you: `search_code`, `find_symbol`, `find_references`
-and `code_context` answer from the index, and without one they say so instead of guessing:
+Build the index once per clone. Nothing does it for you: `search_code`, `find_symbol`, `find_references`,
+`code_context` and `find_docs` answer from the index, and without one they say so instead of guessing:
 
 ```powershell
 dotnet run --project src\SharpCoreAgent.Cli -- index
@@ -537,7 +537,7 @@ undo: restored 1 file(s), removed 0 created file(s)
 
 `fetch_url` is an opt-in tool and one of three flags that add tools to the registry. `--web` adds this
 one for a single invocation, and without the flag it is absent from the registry, from the definitions the
-model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-seven
+model sees and from the system prompt. The C# adapter and the read-only Git tools are already part of the twenty-eight
 tools a build starts with; `--no-csharp` removes the adapter and its three tools for one invocation, and `--no-git`
 removes `git_status` and `git_diff`. `--fsharp` adds a second adapter behind
 the same three tools, and `--mcp` adds whatever each server offers. Of the optional capabilities,
@@ -723,10 +723,11 @@ so nothing outlives the session by accident. Every command runs with an empty, a
 the `< /dev/null` a build expects — so nothing a turn starts can take the line you type at the next
 prompt, and a command that asks a question gets end-of-input instead of a turn that never returns.
 
-Five more answer questions about the code itself from the index instead of from the filesystem:
+Six more answer questions about the code itself from the index instead of from the filesystem:
 `search_code` (a question, in words), `find_symbol` (a declaration by name), `find_references`
-(callers or callees), `code_context` (a declaration's neighbours) and `index_status` (what the index
-holds, and how fresh it is). All five are read-only, none of them opens a database — the index sits
+(callers or callees), `code_context` (a declaration's neighbours), `find_docs` (documentation
+sections and the declaration each describes) and `index_status` (what the index holds, and how
+fresh it is). All six are read-only, none of them opens a database — the index sits
 behind `ICodeIndex` — and every block they return carries a `path:start-end` citation and the
 `sha256:` of the text it quotes, so an answer can be checked without hunting for it.
 
@@ -750,7 +751,7 @@ Under `--approval allow`, an absolute path inside an attached root is writable b
 use `list_roots` to learn the absolute prefix.
 
 A relative path always means the primary root, even when an attachment holds a file with the same
-relative name, and the five index tools stay primary-only: one index describes one tree, so they answer
+relative name, and the six index tools stay primary-only: one index describes one tree, so they answer
 an attachment path with "not indexed" and point at `read_file` and `search_text` instead. Attachments
 are never written to the settings file and never recorded in the transcript — a resumed session starts
 with the roots its new invocation names.
@@ -829,7 +830,7 @@ read-only flag when it has one.
 
 ## Code index
 
-`sharpcoreagent index` builds the index the five retrieval tools read:
+`sharpcoreagent index` builds the index the six retrieval tools read:
 
 ```powershell
 sharpcoreagent index                  # incremental: only changed files are re-read
@@ -1100,8 +1101,8 @@ the second duplicates settings that would drift.
 - `specs/002-code-evidence-index` — M0–M3 are complete: the index foundations (schema, file scanner,
   tokenizer, extractor, embedder, writer lock), the write path (incremental per-file build,
   budget-bounded refresh, rebuild, verify, prune), the retrieval pipeline (lexical and vector legs,
-  reciprocal-rank fusion, boosts, graph expansion, selection budget), the five retrieval tools
-  (`search_code`, `find_symbol`, `find_references`, `code_context`, `index_status`), the `index` command
+  reciprocal-rank fusion, boosts, graph expansion, selection budget), the six retrieval tools
+  (`search_code`, `find_symbol`, `find_references`, `code_context`, `find_docs`, `index_status`), the `index` command
   and the agent-facing wiring.
 - `specs/003-terminal-console-agent` — P0–P2 are complete (one ANSI palette with `NO_COLOR` and pipe
   detection, `replace_in_file` with a unified-diff approval prompt, `--mode plan` and `/mode`), plus

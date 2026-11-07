@@ -41,16 +41,17 @@ public static class PromptLibrary
     /// Gets the rule that tells the model to search the index before it reads files.
     /// </summary>
     /// <remarks>
-    /// A host without an index must not ship this text: an instruction to call five tools that were never registered is
+    /// A host without an index must not ship this text: an instruction to call six tools that were never registered is
     /// worse than no instruction, because the model spends a turn discovering the failure. <see cref="SystemPromptFor"/>
     /// is the only way the app assembles the prompt, so the rule and the tools that back it cannot disagree.
     /// </remarks>
     public const string IndexRule =
         """
         Using the index:
-        - Five tools read a local index of this workspace: search_code ranks passages for a question, find_symbol finds a
+        - Six tools read a local index of this workspace: search_code ranks passages for a question, find_symbol finds a
           declaration by name, find_references lists what a symbol calls and what calls it, code_context walks a symbol's
-          or a file's neighbours, and index_status says what the index covers and how fresh it is.
+          or a file's neighbours, find_docs finds documentation sections and the declaration each describes, and
+          index_status says what the index covers and how fresh it is.
         - Ask search_code before reading whole files or grepping. It answers with blocks that are already addressed, so
           the next step is one more call rather than an assumption about which file matters.
         - Cite what you relied on as path:start-end, for example src/Geometry/Circle.cs:12-18. A claim about this code

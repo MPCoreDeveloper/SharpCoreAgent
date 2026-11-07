@@ -24,7 +24,7 @@ public sealed class SearchCodeTool : ITool
     public const string Name = "search_code";
 
     private const string Schema =
-        """{"type":"object","properties":{"query":{"type":"string","description":"What to find: words, identifiers or a question."},"path":{"type":"string","description":"Limit to a file or directory relative to the workspace root."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field","doc","config"],"description":"Restrict to one declaration kind. Defaults to any."},"k":{"type":"integer","minimum":1,"maximum":12,"description":"How many blocks to return. Defaults to 8."},"hops":{"type":"integer","minimum":0,"maximum":3,"description":"How far to expand through the symbol graph before ranking. Defaults to 1."}},"required":["query"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"query":{"type":"string","description":"What to find: words, identifiers or a question."},"path":{"type":"string","description":"Limit to a file or directory relative to the workspace root."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field","doc","config"],"description":"Restrict to one declaration kind. Defaults to any."},"language":{"type":"string","description":"Restrict to one indexed language, such as csharp, markdown or json. Defaults to any."},"exclude_path_prefix":{"type":"string","description":"Skip files at or under this workspace-relative path prefix."},"evidence_kind":{"type":"string","enum":["any","code","document","configuration","other"],"description":"Restrict to code, documents, configuration or other files. Defaults to any."},"k":{"type":"integer","minimum":1,"maximum":12,"description":"How many blocks to return. Defaults to 8."},"hops":{"type":"integer","minimum":0,"maximum":3,"description":"How far to expand through the symbol graph before ranking. Defaults to 1."}},"required":["query"],"additionalProperties":false}""";
 
     private readonly ICodeIndex? _index;
 
@@ -63,6 +63,13 @@ public sealed class SearchCodeTool : ITool
             CodeQuery.SupportedKinds,
             Name,
             "kind");
+        var language = arguments.GetOptionalString("language");
+        var excludePathPrefix = arguments.GetOptionalString("exclude_path_prefix");
+        var evidenceKind = CodeIndexAccess.EvidenceKindName(
+            arguments.GetOptionalString("evidence_kind"),
+            CodeQuery.SupportedEvidenceKinds,
+            Name,
+            "evidence_kind");
         var k = arguments.GetOptionalInt("k", CodeQuery.DefaultK, minimum: 1, maximum: CodeQuery.MaxK);
         var hops = arguments.GetOptionalInt("hops", CodeQuery.DefaultHops, minimum: 0, maximum: CodeQuery.MaxHops);
 
@@ -87,7 +94,7 @@ public sealed class SearchCodeTool : ITool
             return failure;
         }
 
-        var query = CodeQuery.Create(text, path, kind, k, hops);
+        var query = CodeQuery.Create(text, path, kind, k, hops, language, excludePathPrefix, evidenceKind);
         var blocks = await _index!.SearchAsync(query, cancellationToken).ConfigureAwait(false);
 
         return CodeIndexAccess.Answer(toolCall.Id, Name, Render(query, status, blocks), CodeIndexFormat.MaxOutputChars);

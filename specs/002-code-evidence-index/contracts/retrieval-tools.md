@@ -1,6 +1,6 @@
 # Contract: Retrieval Tools
 
-**Scope**: five tools in `SharpCoreAgent.Infrastructure.Tools`, each implementing `ITool` exactly as
+**Scope**: six tools in `SharpCoreAgent.Infrastructure.Tools`, each implementing `ITool` exactly as
 `specs/001-coding-agent-core/contracts/tools.md` requires, each bound to `ICodeIndex` and to nothing
 storage-shaped.
 
@@ -28,17 +28,18 @@ them opens a database, none of them knows what SharpCoreDB is.
 
 | Name | Safety | Effects | Arguments |
 |---|---|---|---|
-| `search_code` | ReadOnly | `Read` | `query` (required), `path?`, `kind?`, `k?` (1–12, default 8), `hops?` (0–3, default 1) |
+| `search_code` | ReadOnly | `Read` | `query` (required), `path?`, `kind?`, `language?`, `exclude_path_prefix?`, `evidence_kind?`, `k?` (1–12, default 8), `hops?` (0–3, default 1) |
 | `find_symbol` | ReadOnly | `Read` | `name` (required), `kind?`, `max_results?` (1–50, default 20) |
 | `find_references` | ReadOnly | `Read` | `symbol` (required), `direction?` (callers\|callees\|both, default callers), `max_results?` (1–100, default 40) |
 | `code_context` | ReadOnly | `Read` | `target` (required: path or symbol), `hops?` (1–3, default 1), `k?` (1–12, default 8) |
+| `find_docs` | ReadOnly | `Read` | `query` (required), `max_results?` (1–50, default 20) |
 | `index_status` | ReadOnly | `Read` | none |
 
 ### JSON Schemas (exact strings returned to the model)
 
 `search_code`
 ```json
-{"type":"object","properties":{"query":{"type":"string","description":"What to find: words, identifiers or a question."},"path":{"type":"string","description":"Limit to a file or directory relative to the workspace root."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field","doc","config"],"description":"Restrict to one declaration kind. Defaults to any."},"k":{"type":"integer","minimum":1,"maximum":12,"description":"How many blocks to return. Defaults to 8."},"hops":{"type":"integer","minimum":0,"maximum":3,"description":"How far to expand through the symbol graph before ranking. Defaults to 1."}},"required":["query"],"additionalProperties":false}
+{"type":"object","properties":{"query":{"type":"string","description":"What to find: words, identifiers or a question."},"path":{"type":"string","description":"Limit to a file or directory relative to the workspace root."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field","doc","config"],"description":"Restrict to one declaration kind. Defaults to any."},"language":{"type":"string","description":"Restrict to one indexed language, such as csharp, markdown or json. Defaults to any."},"exclude_path_prefix":{"type":"string","description":"Skip files at or under this workspace-relative path prefix."},"evidence_kind":{"type":"string","enum":["any","code","document","configuration","other"],"description":"Restrict to code, documents, configuration or other files. Defaults to any."},"k":{"type":"integer","minimum":1,"maximum":12,"description":"How many blocks to return. Defaults to 8."},"hops":{"type":"integer","minimum":0,"maximum":3,"description":"How far to expand through the symbol graph before ranking. Defaults to 1."}},"required":["query"],"additionalProperties":false}
 ```
 
 `find_symbol`
@@ -54,6 +55,11 @@ them opens a database, none of them knows what SharpCoreDB is.
 `code_context`
 ```json
 {"type":"object","properties":{"target":{"type":"string","description":"A workspace-relative path, or a symbol name."},"hops":{"type":"integer","minimum":1,"maximum":3,"description":"How many graph hops to follow. Defaults to 1."},"k":{"type":"integer","minimum":1,"maximum":12,"description":"How many neighbouring declarations to show. Defaults to 8."}},"required":["target"],"additionalProperties":false}
+```
+
+`find_docs`
+```json
+{"type":"object","properties":{"query":{"type":"string","description":"Words or a phrase to find in documentation headings or text."},"max_results":{"type":"integer","minimum":1,"maximum":50,"description":"Defaults to 20."}},"required":["query"],"additionalProperties":false}
 ```
 
 `index_status`
@@ -153,8 +159,9 @@ services.AddSingleton<ITool, FindSymbolTool>();
 services.AddSingleton<ITool, FindReferencesTool>();
 services.AddSingleton<ITool, CodeContextTool>();
 services.AddSingleton<ITool, IndexStatusTool>();
+services.AddSingleton<ITool, FindDocsTool>();
 ```
 
-The five tools are registered next to the existing six in `AddSharpCoreAgentTools`, so the model sees eleven
-tools; the system prompt tells it which question each one answers (see `PromptLibrary`).
+The six tools are registered in `AddSharpCoreAgentTools` beside the workspace, shell and code-intelligence
+tools; the system prompt tells the model which question each one answers (see `PromptLibrary`).
 

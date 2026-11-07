@@ -10,14 +10,14 @@ namespace SharpCoreAgent.Tests.Application;
 /// registers.
 /// </summary>
 /// <remarks>
-/// The rule is asserted as five names plus the citation form rather than as a whole-string snapshot. A snapshot would
-/// fail on every rewording, which teaches people to paste the new text without reading it; the five names and the
+/// The rule is asserted as six names plus the citation form rather than as a whole-string snapshot. A snapshot would
+/// fail on every rewording, which teaches people to paste the new text without reading it; the six names and the
 /// <c>path:start-end</c> obligation are the parts a model's behaviour actually depends on.
 /// </remarks>
 public sealed class PromptLibraryTests
 {
     private static readonly string[] RetrievalTools =
-        ["search_code", "find_symbol", "find_references", "code_context", "index_status"];
+        ["search_code", "find_symbol", "find_references", "code_context", "find_docs", "index_status"];
 
     [Fact]
     public void TheIndexRuleNamesEveryRetrievalTool() =>

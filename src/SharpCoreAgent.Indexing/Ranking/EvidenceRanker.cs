@@ -63,14 +63,8 @@ internal static class EvidenceRanker
     /// <summary>How recently a file must have been written to earn the recency boost.</summary>
     internal static TimeSpan RecentWindow { get; } = TimeSpan.FromMinutes(10);
 
-    /// <summary>The languages that answer the <c>doc</c> query kind.</summary>
-    private static readonly HashSet<string> DocLanguages = new(StringComparer.OrdinalIgnoreCase) { "markdown" };
-
-    /// <summary>The languages that answer the <c>config</c> query kind.</summary>
-    private static readonly HashSet<string> ConfigLanguages = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "json", "yaml", "toml", "xml",
-    };
+    // The doc/config language sets now live in EvidenceKinds, beside the code/document/configuration
+    // classification the evidence_kind filter uses, so the two cannot drift apart.
 
     /// <summary>
     /// Ranks the passages two legs produced.
@@ -166,7 +160,7 @@ internal static class EvidenceRanker
             .Select(chunk => chunk.Id)];
 
     /// <summary>
-    /// Decides whether one passage is inside the request's path and kind.
+    /// Decides whether one passage is inside the request's path, language, evidence kind and declaration kind.
     /// </summary>
     /// <param name="chunk">The passage.</param>
     /// <param name="snapshot">The build being searched.</param>
@@ -179,9 +173,26 @@ internal static class EvidenceRanker
         CodeQuery query,
         IReadOnlyDictionary<string, SymbolRow> symbolsByKey)
     {
-        if (query.Path is { } path
-            && !string.Equals(chunk.Path, path, StringComparison.Ordinal)
-            && !chunk.Path.StartsWith(path + "/", StringComparison.Ordinal))
+        if (query.Path is { } path && !IsWithin(chunk.Path, path))
+        {
+            return false;
+        }
+
+        if (query.ExcludePathPrefix is { } excluded && IsWithin(chunk.Path, excluded))
+        {
+            return false;
+        }
+
+        var language = LanguageOf(chunk, snapshot);
+
+        if (query.Language is { } wantedLanguage
+            && !string.Equals(language, wantedLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.Equals(query.EvidenceKind, CodeQuery.AnyEvidenceKind, StringComparison.Ordinal)
+            && !string.Equals(EvidenceKinds.Classify(language), query.EvidenceKind, StringComparison.Ordinal))
         {
             return false;
         }
@@ -191,16 +202,14 @@ internal static class EvidenceRanker
             return true;
         }
 
-        var language = LanguageOf(chunk, snapshot);
-
         if (string.Equals(query.Kind, "doc", StringComparison.Ordinal))
         {
-            return DocLanguages.Contains(language);
+            return EvidenceKinds.IsDocument(language);
         }
 
         if (string.Equals(query.Kind, "config", StringComparison.Ordinal))
         {
-            return ConfigLanguages.Contains(language);
+            return EvidenceKinds.IsConfiguration(language);
         }
 
         // A declaration kind asks about the symbol the passage opens, not about the shape of the block: a `method`
@@ -238,6 +247,20 @@ internal static class EvidenceRanker
     /// <returns>The language, or the empty string when the file row is gone.</returns>
     private static string LanguageOf(ChunkRow chunk, IndexSnapshot snapshot) =>
         snapshot.Files.TryGetValue(chunk.FileId, out var file) ? file.Language : string.Empty;
+
+    /// <summary>
+    /// Reports whether a passage path is the prefix itself or sits beneath it.
+    /// </summary>
+    /// <param name="path">The passage's workspace-relative path, with <c>/</c> separators.</param>
+    /// <param name="prefix">A filter's workspace-relative prefix, already normalised with <c>/</c> separators.</param>
+    /// <returns><see langword="true"/> when <paramref name="path"/> is <paramref name="prefix"/> or a descendant.</returns>
+    /// <remarks>
+    /// The comparison is ordinal and appends the separator before testing a prefix, so <c>docs</c> does not match
+    /// <c>docs-generated/x</c>: a path filter names a directory or a file, not a string that merely starts the same way.
+    /// </remarks>
+    private static bool IsWithin(string path, string prefix) =>
+        string.Equals(path, prefix, StringComparison.Ordinal)
+        || path.StartsWith(prefix + "/", StringComparison.Ordinal);
 
     /// <summary>
     /// Turns the fused list into the candidates that will be scored.
@@ -719,12 +742,12 @@ internal static class EvidenceRanker
 
         var language = LanguageOf(chunk, snapshot);
 
-        if (DocLanguages.Contains(language))
+        if (EvidenceKinds.IsDocument(language))
         {
             return "doc";
         }
 
-        return ConfigLanguages.Contains(language) ? "config" : "chunk";
+        return EvidenceKinds.IsConfiguration(language) ? "config" : "chunk";
     }
 
     /// <summary>

@@ -104,6 +104,69 @@ public sealed class RetrievalToolTests : IDisposable
     }
 
     [Fact]
+    public void SearchCodeAdvertisesTheEvidenceFilters()
+    {
+        var tool = new SearchCodeTool(new FakeIndex());
+
+        Assert.Contains("\"language\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"exclude_path_prefix\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"evidence_kind\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"code\",\"document\",\"configuration\",\"other\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchCodePassesEvidenceFiltersToTheQuery()
+    {
+        var index = new FakeIndex();
+
+        await Search(index, """{"query":"x","language":"CSharp","exclude_path_prefix":"./docs/","evidence_kind":"Code"}""");
+
+        Assert.NotNull(index.LastQuery);
+        Assert.Equal("csharp", index.LastQuery.Language);
+        Assert.Equal("docs", index.LastQuery.ExcludePathPrefix);
+        Assert.Equal("code", index.LastQuery.EvidenceKind);
+    }
+
+    [Fact]
+    public async Task SearchCodeRejectsAnUnknownEvidenceKind()
+    {
+        var tool = new SearchCodeTool(new FakeIndex());
+
+        await Assert.ThrowsAsync<ToolArgumentException>(async () =>
+        {
+            await Execute(tool, """{"query":"x","evidence_kind":"prose"}""");
+        });
+    }
+
+    [Fact]
+    public async Task FindDocsRendersHeadingAndDescribedSymbol()
+    {
+        var index = new FakeIndex
+        {
+            Docs =
+            [
+                Doc("docs/geometry.md", "Geometry", "Demo.Geometry.Circle", 1, 4, "# Geometry\n\nA Circle has a radius."),
+            ],
+        };
+
+        var result = await Execute(new FindDocsTool(index), """{"query":"geometry"}""");
+
+        Assert.False(result.IsError);
+        Assert.Contains("1 section for 'geometry'", result.Content, StringComparison.Ordinal);
+        Assert.Contains("docs/geometry.md:1-4 · Geometry · describes Demo.Geometry.Circle", result.Content, StringComparison.Ordinal);
+        Assert.Contains("  A Circle has a radius.", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FindDocsSaysWhenNothingMatched()
+    {
+        var result = await Execute(new FindDocsTool(new FakeIndex()), """{"query":"nothing"}""");
+
+        Assert.False(result.IsError);
+        Assert.Equal("no documentation matched 'nothing' in the index (412 files)", result.Content);
+    }
+
+    [Fact]
     public async Task FindSymbolCountsTheMatchTiers()
     {
         var index = new FakeIndex
@@ -232,6 +295,7 @@ public sealed class RetrievalToolTests : IDisposable
     [InlineData("search_code")]
     [InlineData("find_symbol")]
     [InlineData("find_references")]
+    [InlineData("find_docs")]
     [InlineData("code_context")]
     [InlineData("index_status")]
     public void EveryRetrievalToolIsReadOnly(string name)
@@ -242,6 +306,7 @@ public sealed class RetrievalToolTests : IDisposable
             "search_code" => new SearchCodeTool(index),
             "find_symbol" => new FindSymbolTool(index),
             "find_references" => new FindReferencesTool(index),
+            "find_docs" => new FindDocsTool(index),
             "code_context" => new CodeContextTool(index),
             _ => new IndexStatusTool(index),
         };
@@ -311,6 +376,16 @@ public sealed class RetrievalToolTests : IDisposable
             Callees = callees,
         };
 
+    private static CodeDocRef Doc(string path, string? heading, string? symbol, int start, int end, string text) => new()
+    {
+        Path = path,
+        Heading = heading,
+        Symbol = symbol,
+        StartLine = start,
+        EndLine = end,
+        Text = text,
+    };
+
     /// <summary>
     /// A stand-in for the index that answers with whatever a test hands it.
     /// </summary>
@@ -372,6 +447,13 @@ public sealed class RetrievalToolTests : IDisposable
             ReferenceDirection direction,
             int maxResults,
             CancellationToken cancellationToken) => ValueTask.FromResult(Blocks);
+
+        public IReadOnlyList<CodeDocRef> Docs { get; set; } = [];
+
+        public ValueTask<IReadOnlyList<CodeDocRef>> FindDocsAsync(
+            string text,
+            int maxResults,
+            CancellationToken cancellationToken) => ValueTask.FromResult(Docs);
 
         public ValueTask<CodeContext> GetContextAsync(
             string target,

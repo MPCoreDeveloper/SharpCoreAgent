@@ -54,6 +54,21 @@ public sealed class CodeIndexSearchTests
         Assert.True(blocks.Count <= 2);
     }
 
+    [Fact]
+    public async Task FindDocsAnswersFromTheBuiltIndex()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+        await BuildAsync(sandbox);
+
+        using var index = SharpCoreDbCodeIndex.For(sandbox.Workspace);
+        var docs = await index.FindDocsAsync("circle notes", 10, TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(docs);
+        Assert.Equal("docs/notes.md", docs[0].Path);
+        Assert.Equal("Circle notes", docs[0].Heading);
+    }
+
     private const string CircleSource = """
         namespace Demo.Geometry;
 
@@ -74,10 +89,17 @@ public sealed class CodeIndexSearchTests
         }
         """;
 
+    private const string NotesSource = """
+        # Circle notes
+
+        The Circle type is immutable.
+        """;
+
     private static void WriteCorpus(ToolTestWorkspace sandbox)
     {
         sandbox.Write("src/Geometry/Circle.cs", CircleSource);
         sandbox.Write("src/Geometry/Square.cs", SquareSource);
+        sandbox.Write("docs/notes.md", NotesSource);
     }
 
     private static async Task BuildAsync(ToolTestWorkspace sandbox)

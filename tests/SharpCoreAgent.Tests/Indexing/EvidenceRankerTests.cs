@@ -78,6 +78,50 @@ public sealed class EvidenceRankerTests
     }
 
     [Fact]
+    public async Task LanguageFilterKeepsOnlyThatLanguage()
+    {
+        var blocks = await RankAsync(CodeQuery.Create("radius", language: "markdown", k: 8, hops: 0));
+
+        Assert.NotEmpty(blocks);
+        Assert.All(blocks, block => Assert.Equal("docs/geometry.md", block.Path));
+    }
+
+    [Fact]
+    public async Task LanguageFilterThatMatchesNothingReturnsEmpty()
+    {
+        var blocks = await RankAsync(CodeQuery.Create("radius", language: "rust", k: 8, hops: 0));
+
+        Assert.Empty(blocks);
+    }
+
+    [Fact]
+    public async Task ExcludePathPrefixDropsThatTree()
+    {
+        var blocks = await RankAsync(CodeQuery.Create("radius", excludePathPrefix: "docs", k: 8, hops: 0));
+
+        Assert.NotEmpty(blocks);
+        Assert.DoesNotContain(blocks, block => block.Path.StartsWith("docs/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EvidenceKindCodeExcludesDocumentsAndConfiguration()
+    {
+        var blocks = await RankAsync(CodeQuery.Create("radius", evidenceKind: "code", k: 8, hops: 0));
+
+        Assert.NotEmpty(blocks);
+        Assert.All(blocks, block => Assert.EndsWith(".cs", block.Path, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EvidenceKindConfigurationKeepsOnlyConfigFiles()
+    {
+        var blocks = await RankAsync(CodeQuery.Create("radius", evidenceKind: "configuration", k: 8, hops: 0));
+
+        Assert.NotEmpty(blocks);
+        Assert.All(blocks, block => Assert.Equal("config/appsettings.json", block.Path));
+    }
+
+    [Fact]
     public async Task SameQuerySameOrder()
     {
         var first = await RankAsync(CodeQuery.Create("circle radius area", k: 8));
@@ -168,12 +212,17 @@ public sealed class EvidenceRankerTests
         A Circle has a radius; the Square has a side.
         """;
 
+    private const string ConfigSource = """
+        { "shape": "circle", "radius": 2 }
+        """;
+
     private static void WriteCorpus(ToolTestWorkspace sandbox)
     {
         sandbox.Write("src/Geometry/Shape.cs", ShapeSource);
         sandbox.Write("src/Geometry/Circle.cs", CircleSource);
         sandbox.Write("src/Geometry/Square.cs", SquareSource);
         sandbox.Write("docs/geometry.md", DocSource);
+        sandbox.Write("config/appsettings.json", ConfigSource);
     }
 
     private static async Task<IReadOnlyList<CodeEvidence>> RankAsync(CodeQuery query)

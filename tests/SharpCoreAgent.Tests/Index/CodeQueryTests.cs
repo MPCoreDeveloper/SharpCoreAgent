@@ -165,4 +165,108 @@ public sealed class CodeQueryTests
     {
         Assert.Throws<ArgumentException>(() => CodeQuery.Create("x", path: "src/a\0b.cs"));
     }
+
+    [Fact]
+    public void SupportedEvidenceKindsAreTheSchemaEnum()
+    {
+        string[] expected = ["any", "code", "document", "configuration", "other"];
+
+        Assert.Equal(expected, CodeQuery.SupportedEvidenceKinds);
+    }
+
+    [Fact]
+    public void NewFiltersDefaultToNoRestriction()
+    {
+        var query = CodeQuery.Create("turn loop");
+
+        Assert.Null(query.Language);
+        Assert.Null(query.ExcludePathPrefix);
+        Assert.Equal(CodeQuery.AnyEvidenceKind, query.EvidenceKind);
+    }
+
+    [Theory]
+    [InlineData("CSharp", "csharp")]
+    [InlineData("  Markdown  ", "markdown")]
+    [InlineData("JSON", "json")]
+    public void LanguageIsLowercasedAndTrimmed(string asked, string expected)
+    {
+        Assert.Equal(expected, CodeQuery.Create("x", language: asked).Language);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BlankLanguageMeansAny(string? asked)
+    {
+        Assert.Null(CodeQuery.Create("x", language: asked).Language);
+    }
+
+    [Theory]
+    [InlineData("docs\\generated", "docs/generated")]
+    [InlineData("./docs/", "docs")]
+    [InlineData("  tests/  ", "tests")]
+    public void ExcludePathPrefixIsNormalisedToTheStoredForm(string asked, string expected)
+    {
+        Assert.Equal(expected, CodeQuery.Create("x", excludePathPrefix: asked).ExcludePathPrefix);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(".")]
+    [InlineData("./")]
+    public void ExcludePathPrefixThatNamesTheWorkspaceBecomesNull(string? asked)
+    {
+        Assert.Null(CodeQuery.Create("x", excludePathPrefix: asked).ExcludePathPrefix);
+    }
+
+    [Fact]
+    public void RootedExcludePathPrefixIsRejected()
+    {
+        var rooted = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "generated");
+
+        Assert.Throws<ArgumentException>(() => CodeQuery.Create("x", excludePathPrefix: rooted));
+    }
+
+    [Theory]
+    [InlineData("../secrets")]
+    [InlineData("src/../../secrets")]
+    public void ClimbingExcludePathPrefixIsRejected(string prefix)
+    {
+        Assert.Throws<ArgumentException>(() => CodeQuery.Create("x", excludePathPrefix: prefix));
+    }
+
+    [Theory]
+    [InlineData("CODE", "code")]
+    [InlineData("  Document  ", "document")]
+    [InlineData("configuration", "configuration")]
+    [InlineData("Other", "other")]
+    [InlineData("Any", "any")]
+    public void EvidenceKindIsCanonicalised(string asked, string expected)
+    {
+        Assert.Equal(expected, CodeQuery.Create("x", evidenceKind: asked).EvidenceKind);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void MissingEvidenceKindMeansAny(string? asked)
+    {
+        Assert.Equal(CodeQuery.AnyEvidenceKind, CodeQuery.Create("x", evidenceKind: asked).EvidenceKind);
+    }
+
+    [Theory]
+    [InlineData("prose")]
+    [InlineData("source")]
+    [InlineData("codex")]
+    public void UnknownEvidenceKindIsRejected(string evidenceKind)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => CodeQuery.Create("x", evidenceKind: evidenceKind));
+
+        Assert.Contains("evidence_kind must be one of", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(evidenceKind, exception.Message, StringComparison.Ordinal);
+    }
 }

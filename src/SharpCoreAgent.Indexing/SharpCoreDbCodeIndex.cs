@@ -252,6 +252,60 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Documentation is read straight from the <c>docs</c> table rather than the shared snapshot, because a section's
+    /// full text can be large and holding every README in memory for every build would cost more than the occasional
+    /// lookup saves. The file paths and the symbol names come from the loaded snapshot, so a section still resolves to
+    /// the same citation a search would print.
+    /// </remarks>
+    public ValueTask<IReadOnlyList<CodeDocRef>> FindDocsAsync(
+        string text,
+        int maxResults,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+
+        if (!_paths.DatabaseExists)
+        {
+            return ValueTask.FromResult<IReadOnlyList<CodeDocRef>>([]);
+        }
+
+        var database = OpenDatabase();
+        var snapshot = _state.Reader.Load(database);
+
+        var qualifiedByKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var symbol in snapshot.Symbols.Values)
+        {
+            qualifiedByKey.TryAdd(symbol.Key, symbol.QualifiedName);
+        }
+
+        var docs = new List<DocRow>();
+        foreach (var row in IndexSql.Query(database, "SELECT file_id, heading, symbol_key, start_line, end_line, text FROM docs ORDER BY id"))
+        {
+            var fileId = IndexSql.AsLong(row.GetValueOrDefault("file_id"));
+            if (!snapshot.Paths.TryGetValue(fileId, out var path))
+            {
+                continue;
+            }
+
+            var symbolKey = IndexSql.AsOptionalText(row.GetValueOrDefault("symbol_key"));
+
+            docs.Add(new DocRow
+            {
+                Path = path,
+                Heading = IndexSql.AsOptionalText(row.GetValueOrDefault("heading")),
+                Symbol = symbolKey is not null && qualifiedByKey.TryGetValue(symbolKey, out var qualified) ? qualified : null,
+                StartLine = (int)IndexSql.AsLong(row.GetValueOrDefault("start_line")),
+                EndLine = (int)IndexSql.AsLong(row.GetValueOrDefault("end_line")),
+                Text = IndexSql.AsText(row.GetValueOrDefault("text")),
+            });
+        }
+
+        return ValueTask.FromResult(DocumentationRetriever.Search(docs, text, maxResults));
+    }
+
+    /// <inheritdoc />
     public ValueTask<CodeContext> GetContextAsync(
         string target,
         int hops,

@@ -101,7 +101,27 @@ internal static class CodeIndexAccess
     /// The check is here rather than delegated to <see cref="CodeQuery.Create"/> so the error names the JSON field the
     /// model actually wrote, which is the detail that makes a correction possible on the next call.
     /// </remarks>
-    internal static string? KindName(string? value, IReadOnlyList<string> allowed, string toolName, string field)
+    internal static string? KindName(string? value, IReadOnlyList<string> allowed, string toolName, string field) =>
+        ChoiceName(value, allowed, CodeQuery.AnyKind, toolName, field);
+
+    /// <summary>
+    /// Validates an <c>evidence_kind</c> argument against the closed list the index can answer for.
+    /// </summary>
+    /// <param name="value">The argument as the model wrote it, or <see langword="null"/>.</param>
+    /// <param name="allowed">The closed list, in schema order.</param>
+    /// <param name="toolName">The tool name, used in the error message.</param>
+    /// <param name="field">The parameter name, used in the error message.</param>
+    /// <returns>The canonical spelling, or <see langword="null"/> for "any evidence kind".</returns>
+    /// <exception cref="ToolArgumentException">The value is not one of <paramref name="allowed"/>.</exception>
+    internal static string? EvidenceKindName(string? value, IReadOnlyList<string> allowed, string toolName, string field) =>
+        ChoiceName(value, allowed, CodeQuery.AnyEvidenceKind, toolName, field);
+
+    private static string? ChoiceName(
+        string? value,
+        IReadOnlyList<string> allowed,
+        string anyValue,
+        string toolName,
+        string field)
     {
         ArgumentNullException.ThrowIfNull(allowed);
 
@@ -121,7 +141,7 @@ internal static class CodeIndexAccess
                 $"must be one of {string.Join(", ", allowed)}, but was '{trimmed}'");
         }
 
-        return string.Equals(canonical, CodeQuery.AnyKind, StringComparison.Ordinal) ? null : canonical;
+        return string.Equals(canonical, anyValue, StringComparison.Ordinal) ? null : canonical;
     }
 
     /// <summary>

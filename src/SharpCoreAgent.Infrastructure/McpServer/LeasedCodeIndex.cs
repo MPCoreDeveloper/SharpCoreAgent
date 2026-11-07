@@ -56,6 +56,13 @@ public sealed class LeasedCodeIndex : ICodeIndex
         UseAsync((index, token) => index.FindReferencesAsync(symbol, direction, maxResults, token), cancellationToken);
 
     /// <inheritdoc />
+    public ValueTask<IReadOnlyList<CodeDocRef>> FindDocsAsync(
+        string text,
+        int maxResults,
+        CancellationToken cancellationToken) =>
+        UseAsync((index, token) => index.FindDocsAsync(text, maxResults, token), cancellationToken);
+
+    /// <inheritdoc />
     public ValueTask<CodeContext> GetContextAsync(
         string target,
         int hops,

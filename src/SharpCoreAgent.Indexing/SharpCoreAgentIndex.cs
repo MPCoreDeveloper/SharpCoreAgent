@@ -86,6 +86,13 @@ public sealed class SharpCoreAgentIndex : ICodeIndex, ICodeIndexMaintainer, IDis
         _reader.FindReferencesAsync(symbol, direction, maxResults, cancellationToken);
 
     /// <inheritdoc />
+    public ValueTask<IReadOnlyList<CodeDocRef>> FindDocsAsync(
+        string text,
+        int maxResults,
+        CancellationToken cancellationToken) =>
+        _reader.FindDocsAsync(text, maxResults, cancellationToken);
+
+    /// <inheritdoc />
     public ValueTask<CodeContext> GetContextAsync(
         string target,
         int hops,

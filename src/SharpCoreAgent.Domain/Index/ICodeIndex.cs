@@ -61,6 +61,18 @@ public interface ICodeIndex
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds documentation sections whose heading or text matches one phrase.
+    /// </summary>
+    /// <param name="text">Words or a phrase; a section matches when every whitespace-separated term appears in it.</param>
+    /// <param name="maxResults">The hard cap on returned sections; implementations may cap it lower.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    /// <returns>
+    /// Sections ordered by heading match, then by path and line; possibly empty. Each carries the declaration its
+    /// heading names, when the build could attach one.
+    /// </returns>
+    ValueTask<IReadOnlyList<CodeDocRef>> FindDocsAsync(string text, int maxResults, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Explains what sits around one file or declaration.
     /// </summary>
     /// <param name="target">A workspace-relative path, or a symbol name.</param>
