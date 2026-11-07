@@ -36,7 +36,7 @@ public sealed class FindSymbolTool : ITool
     ];
 
     private const string Schema =
-        """{"type":"object","properties":{"name":{"type":"string","description":"Symbol name, qualified name or a fragment of one (case-insensitive)."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field"],"description":"Restrict to one declaration kind. Defaults to any."},"max_results":{"type":"integer","minimum":1,"maximum":50,"description":"Defaults to 20."}},"required":["name"],"additionalProperties":false}""";
+        """{"type":"object","properties":{"name":{"type":"string","description":"Symbol name, qualified name or a fragment of one (case-insensitive)."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field"],"description":"Restrict to one declaration kind. Defaults to any."},"path":{"type":"string","description":"Limit to a file or directory relative to the workspace root."},"language":{"type":"string","description":"Restrict to one indexed language, such as csharp or markdown. Defaults to any."},"evidence_kind":{"type":"string","enum":["any","code","document","configuration","other"],"description":"Restrict to code, documents, configuration or other files. Defaults to any."},"max_results":{"type":"integer","minimum":1,"maximum":50,"description":"Defaults to 20."}},"required":["name"],"additionalProperties":false}""";
 
     private readonly ICodeIndex? _index;
 
@@ -67,7 +67,25 @@ public sealed class FindSymbolTool : ITool
         using var arguments = ToolArgumentReader.Parse(Name, toolCall.ArgumentsJson);
         var name = arguments.GetRequiredString("name");
         var kind = CodeIndexAccess.KindName(arguments.GetOptionalString("kind"), KindNames, Name, "kind");
+        var language = arguments.GetOptionalString("language");
+        var evidenceKind = CodeIndexAccess.EvidenceKindName(
+            arguments.GetOptionalString("evidence_kind"),
+            CodeQuery.SupportedEvidenceKinds,
+            Name,
+            "evidence_kind");
         var maxResults = arguments.GetOptionalInt("max_results", 20, minimum: 1, maximum: MaxResults);
+
+        var path = CodeIndexAccess.ResolvePath(
+            arguments.GetOptionalString("path"),
+            context.Workspace,
+            toolCall.Id,
+            Name,
+            out var refusal);
+
+        if (refusal is not null)
+        {
+            return refusal;
+        }
 
         var (failure, status) = await CodeIndexAccess
             .CheckAsync(_index, toolCall.Id, Name, context.Workspace.Root, cancellationToken)
@@ -78,7 +96,7 @@ public sealed class FindSymbolTool : ITool
             return failure;
         }
 
-        var symbols = await _index!.FindSymbolsAsync(name, kind, cancellationToken).ConfigureAwait(false);
+        var symbols = await _index!.FindSymbolsAsync(name, kind, path, language, evidenceKind, cancellationToken).ConfigureAwait(false);
         var take = Math.Min(maxResults, MaxResults);
 
         return CodeIndexAccess.Answer(

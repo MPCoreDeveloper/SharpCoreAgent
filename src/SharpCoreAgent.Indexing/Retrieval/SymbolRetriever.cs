@@ -1,5 +1,6 @@
 using SharpCoreAgent.Domain.Index;
 using SharpCoreAgent.Indexing.Extraction;
+using SharpCoreAgent.Indexing.Ranking;
 
 namespace SharpCoreAgent.Indexing.Retrieval;
 
@@ -23,6 +24,9 @@ internal static class SymbolRetriever
     /// <param name="snapshot">The build being searched.</param>
     /// <param name="name">A short name, a qualified name or a fragment of one.</param>
     /// <param name="kind">A declaration kind to restrict to, or <see langword="null"/> for all of them.</param>
+    /// <param name="path">A workspace-relative file or directory to restrict to, or <see langword="null"/>.</param>
+    /// <param name="language">An indexed language to restrict to, or <see langword="null"/> for every language.</param>
+    /// <param name="evidenceKind">A coarse evidence kind to restrict to, or <see langword="null"/> for all of them.</param>
     /// <param name="maxResults">The requested cap; it is lowered to <see cref="MaxResults"/> when larger.</param>
     /// <returns>The declarations, best tier first, then by path and line.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="snapshot"/> is null.</exception>
@@ -32,6 +36,9 @@ internal static class SymbolRetriever
         IndexSnapshot snapshot,
         string name,
         string? kind,
+        string? path,
+        string? language,
+        string? evidenceKind,
         int maxResults)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -44,7 +51,7 @@ internal static class SymbolRetriever
 
         foreach (var row in snapshot.Symbols.Values)
         {
-            if (kind is { Length: > 0 } && !string.Equals(row.Kind, kind, StringComparison.OrdinalIgnoreCase))
+            if (!MatchesFilters(snapshot, row, kind, path, language, evidenceKind))
             {
                 continue;
             }
@@ -229,6 +236,50 @@ internal static class SymbolRetriever
         }
 
         return counts;
+    }
+
+    /// <summary>
+    /// Decides whether one declaration passes the request's kind, path, language and evidence-kind filters.
+    /// </summary>
+    /// <param name="snapshot">The build being searched.</param>
+    /// <param name="row">The declaration.</param>
+    /// <param name="kind">The declaration kind to restrict to, or <see langword="null"/>.</param>
+    /// <param name="path">The path prefix to restrict to, or <see langword="null"/>.</param>
+    /// <param name="language">The indexed language to restrict to, or <see langword="null"/>.</param>
+    /// <param name="evidenceKind">The coarse evidence kind to restrict to, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the declaration may be returned.</returns>
+    private static bool MatchesFilters(
+        IndexSnapshot snapshot,
+        SymbolRow row,
+        string? kind,
+        string? path,
+        string? language,
+        string? evidenceKind)
+    {
+        if (kind is { Length: > 0 } && !string.Equals(row.Kind, kind, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (path is { } prefix && !PathScope.Contains(row.Path, prefix))
+        {
+            return false;
+        }
+
+        if (language is not { Length: > 0 } && evidenceKind is not { Length: > 0 })
+        {
+            return true;
+        }
+
+        var rowLanguage = snapshot.Files.TryGetValue(row.FileId, out var file) ? file.Language : string.Empty;
+
+        if (language is { Length: > 0 } && !string.Equals(rowLanguage, language, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return evidenceKind is not { Length: > 0 }
+            || string.Equals(EvidenceKinds.Classify(rowLanguage), evidenceKind, StringComparison.Ordinal);
     }
 
     /// <summary>

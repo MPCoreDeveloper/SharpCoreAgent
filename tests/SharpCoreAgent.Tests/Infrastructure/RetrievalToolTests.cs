@@ -197,6 +197,17 @@ public sealed class RetrievalToolTests : IDisposable
     }
 
     [Fact]
+    public void FindSymbolAdvertisesTheEvidenceFilters()
+    {
+        var tool = new FindSymbolTool(new FakeIndex());
+
+        Assert.Contains("\"path\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"language\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"evidence_kind\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"code\",\"document\",\"configuration\",\"other\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FindReferencesGroupsByFileAndKeepsFileOrderOrdinal()
     {
         var index = new FakeIndex
@@ -440,6 +451,9 @@ public sealed class RetrievalToolTests : IDisposable
         public ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
             string name,
             string? kind,
+            string? path,
+            string? language,
+            string? evidenceKind,
             CancellationToken cancellationToken) => ValueTask.FromResult(Symbols);
 
         public ValueTask<IReadOnlyList<CodeEvidence>> FindReferencesAsync(

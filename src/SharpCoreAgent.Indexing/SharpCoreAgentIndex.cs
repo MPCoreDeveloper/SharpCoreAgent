@@ -74,8 +74,11 @@ public sealed class SharpCoreAgentIndex : ICodeIndex, ICodeIndexMaintainer, IDis
     public ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
         string name,
         string? kind,
+        string? path,
+        string? language,
+        string? evidenceKind,
         CancellationToken cancellationToken) =>
-        _reader.FindSymbolsAsync(name, kind, cancellationToken);
+        _reader.FindSymbolsAsync(name, kind, path, language, evidenceKind, cancellationToken);
 
     /// <inheritdoc />
     public ValueTask<IReadOnlyList<CodeEvidence>> FindReferencesAsync(

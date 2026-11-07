@@ -96,7 +96,7 @@ public sealed class FindReferencesTool : ITool
         string symbol,
         CancellationToken cancellationToken)
     {
-        var matches = await index.FindSymbolsAsync(symbol, null, cancellationToken).ConfigureAwait(false);
+        var matches = await index.FindSymbolsAsync(symbol, null, null, null, null, cancellationToken).ConfigureAwait(false);
 
         var best = matches.FirstOrDefault(candidate =>
             string.Equals(candidate.Name, symbol, StringComparison.Ordinal) ||

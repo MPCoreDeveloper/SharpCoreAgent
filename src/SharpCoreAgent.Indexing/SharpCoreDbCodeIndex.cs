@@ -226,6 +226,9 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     public ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
         string name,
         string? kind,
+        string? path,
+        string? language,
+        string? evidenceKind,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -233,7 +236,7 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
         var snapshot = TrySnapshot();
         return ValueTask.FromResult(snapshot is null
             ? []
-            : SymbolRetriever.Search(snapshot, name, kind, SymbolRetriever.MaxResults));
+            : SymbolRetriever.Search(snapshot, name, kind, path, language, evidenceKind, SymbolRetriever.MaxResults));
     }
 
     /// <inheritdoc />

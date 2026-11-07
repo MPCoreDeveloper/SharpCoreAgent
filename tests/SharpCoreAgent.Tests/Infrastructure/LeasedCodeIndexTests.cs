@@ -57,7 +57,7 @@ public sealed class LeasedCodeIndexTests
 
         await index.GetStatusAsync(Token);
         await index.SearchAsync(CodeQuery.Create("x"), Token);
-        await index.FindSymbolsAsync("Circle", kind: null, Token);
+        await index.FindSymbolsAsync("Circle", kind: null, path: null, language: null, evidenceKind: null, Token);
         await index.FindReferencesAsync("Circle", ReferenceDirection.Callers, maxResults: 5, Token);
         await index.GetContextAsync("src/Circle.cs", hops: 1, k: 3, Token);
 
@@ -115,6 +115,9 @@ public sealed class LeasedCodeIndexTests
         public ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
             string name,
             string? kind,
+            string? path,
+            string? language,
+            string? evidenceKind,
             CancellationToken cancellationToken) =>
             Answer<IReadOnlyList<CodeSymbolRef>>([]);
 

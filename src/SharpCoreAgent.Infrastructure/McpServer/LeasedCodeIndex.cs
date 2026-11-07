@@ -44,8 +44,11 @@ public sealed class LeasedCodeIndex : ICodeIndex
     public ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
         string name,
         string? kind,
+        string? path,
+        string? language,
+        string? evidenceKind,
         CancellationToken cancellationToken) =>
-        UseAsync((index, token) => index.FindSymbolsAsync(name, kind, token), cancellationToken);
+        UseAsync((index, token) => index.FindSymbolsAsync(name, kind, path, language, evidenceKind, token), cancellationToken);
 
     /// <inheritdoc />
     public ValueTask<IReadOnlyList<CodeEvidence>> FindReferencesAsync(

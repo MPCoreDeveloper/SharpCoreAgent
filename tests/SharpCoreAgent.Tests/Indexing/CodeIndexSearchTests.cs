@@ -69,6 +69,24 @@ public sealed class CodeIndexSearchTests
         Assert.Equal("Circle notes", docs[0].Heading);
     }
 
+    [Fact]
+    public async Task FindSymbolsRespectsPathAndLanguageFilters()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+        await BuildAsync(sandbox);
+
+        using var index = SharpCoreDbCodeIndex.For(sandbox.Workspace);
+        var byPath = await index.FindSymbolsAsync(
+            "Circle", null, "src/Geometry/Circle.cs", null, null, TestContext.Current.CancellationToken);
+        var byForeignLanguage = await index.FindSymbolsAsync(
+            "Circle", null, null, "python", null, TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(byPath);
+        Assert.All(byPath, symbol => Assert.Equal("src/Geometry/Circle.cs", symbol.Path));
+        Assert.Empty(byForeignLanguage);
+    }
+
     private const string CircleSource = """
         namespace Demo.Geometry;
 

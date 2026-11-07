@@ -42,9 +42,19 @@ public interface ICodeIndex
     /// </summary>
     /// <param name="name">A short name, a qualified name or a fragment of one; matched case-insensitively.</param>
     /// <param name="kind">A declaration kind to restrict to, or <see langword="null"/> for all of them.</param>
+    /// <param name="path">A workspace-relative file or directory to restrict to, or <see langword="null"/>.</param>
+    /// <param name="language">An indexed language to restrict to, or <see langword="null"/> for every language.</param>
+    /// <param name="evidenceKind">A coarse evidence kind (<c>code</c>/<c>document</c>/<c>configuration</c>/<c>other</c>) or
+    /// <see langword="null"/> for all of them.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
     /// <returns>Declarations ordered by exactness of the match, then by path and line; possibly empty.</returns>
-    ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(string name, string? kind, CancellationToken cancellationToken);
+    ValueTask<IReadOnlyList<CodeSymbolRef>> FindSymbolsAsync(
+        string name,
+        string? kind,
+        string? path,
+        string? language,
+        string? evidenceKind,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Finds the passages that call, are called by, or otherwise relate to one declaration.

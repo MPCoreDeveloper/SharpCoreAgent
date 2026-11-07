@@ -254,13 +254,7 @@ internal static class EvidenceRanker
     /// <param name="path">The passage's workspace-relative path, with <c>/</c> separators.</param>
     /// <param name="prefix">A filter's workspace-relative prefix, already normalised with <c>/</c> separators.</param>
     /// <returns><see langword="true"/> when <paramref name="path"/> is <paramref name="prefix"/> or a descendant.</returns>
-    /// <remarks>
-    /// The comparison is ordinal and appends the separator before testing a prefix, so <c>docs</c> does not match
-    /// <c>docs-generated/x</c>: a path filter names a directory or a file, not a string that merely starts the same way.
-    /// </remarks>
-    private static bool IsWithin(string path, string prefix) =>
-        string.Equals(path, prefix, StringComparison.Ordinal)
-        || path.StartsWith(prefix + "/", StringComparison.Ordinal);
+    private static bool IsWithin(string path, string prefix) => PathScope.Contains(path, prefix);
 
     /// <summary>
     /// Turns the fused list into the candidates that will be scored.

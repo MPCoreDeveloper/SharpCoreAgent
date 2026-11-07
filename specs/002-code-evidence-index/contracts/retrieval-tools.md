@@ -29,7 +29,7 @@ them opens a database, none of them knows what SharpCoreDB is.
 | Name | Safety | Effects | Arguments |
 |---|---|---|---|
 | `search_code` | ReadOnly | `Read` | `query` (required), `path?`, `kind?`, `language?`, `exclude_path_prefix?`, `evidence_kind?`, `k?` (1–12, default 8), `hops?` (0–3, default 1) |
-| `find_symbol` | ReadOnly | `Read` | `name` (required), `kind?`, `max_results?` (1–50, default 20) |
+| `find_symbol` | ReadOnly | `Read` | `name` (required), `kind?`, `path?`, `language?`, `evidence_kind?`, `max_results?` (1–50, default 20) |
 | `find_references` | ReadOnly | `Read` | `symbol` (required), `direction?` (callers\|callees\|both, default callers), `max_results?` (1–100, default 40) |
 | `code_context` | ReadOnly | `Read` | `target` (required: path or symbol), `hops?` (1–3, default 1), `k?` (1–12, default 8) |
 | `find_docs` | ReadOnly | `Read` | `query` (required), `max_results?` (1–50, default 20) |
@@ -44,7 +44,7 @@ them opens a database, none of them knows what SharpCoreDB is.
 
 `find_symbol`
 ```json
-{"type":"object","properties":{"name":{"type":"string","description":"Symbol name, qualified name or a fragment of one (case-insensitive)."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field"],"description":"Restrict to one declaration kind. Defaults to any."},"max_results":{"type":"integer","minimum":1,"maximum":50,"description":"Defaults to 20."}},"required":["name"],"additionalProperties":false}
+{"type":"object","properties":{"name":{"type":"string","description":"Symbol name, qualified name or a fragment of one (case-insensitive)."},"kind":{"type":"string","enum":["any","class","interface","record","struct","enum","method","property","field"],"description":"Restrict to one declaration kind. Defaults to any."},"path":{"type":"string","description":"Limit to a file or directory relative to the workspace root."},"language":{"type":"string","description":"Restrict to one indexed language, such as csharp or markdown. Defaults to any."},"evidence_kind":{"type":"string","enum":["any","code","document","configuration","other"],"description":"Restrict to code, documents, configuration or other files. Defaults to any."},"max_results":{"type":"integer","minimum":1,"maximum":50,"description":"Defaults to 20."}},"required":["name"],"additionalProperties":false}
 ```
 
 `find_references`
