@@ -17,14 +17,14 @@ relative to the repo root. Each phase closes with a Release build and the full s
 - [x] T003 [P] [US1] `GitStageTool.cs` (`add -A -- <paths>`, `Destructive`, path confinement, `CommandRun` effect).
 - [x] T004 [P] [US1] `GitCommitTool.cs` (`commit --no-verify -m <message> -- [paths]`, `Destructive`,
       `IToolPreview` showing subject + staged paths).
-- [x] T005 [P] [US2] `GitBranchTool.cs` (`list`/`create`/`delete`; `git check-ref-format --branch`; refuse the
-      checked-out branch for delete; `Destructive`).
-- [x] T006 [US1] `ServiceCollectionExtensions.AddGit`: register the three tools over the shared
-      `ShellProcessRegistry`; extend `PromptLibrary.GitRule`; `--no-git` removes all five Git tools.
+- [x] T005 [P] [US2] `GitBranchTool.cs` (`ReadOnly`, `branch --list`) and `GitBranchWriteTool.cs` (`Destructive`,
+      `create`/`delete`; `git check-ref-format`; refuse the checked-out branch for delete).
+- [x] T006 [US1] `ServiceCollectionExtensions.AddGit`: register the Git tools over the shared
+      `ShellProcessRegistry`; extend `PromptLibrary.GitRule`; `--no-git` removes all six Git tools.
 - [x] T007 [P] [US1] `tests/.../Tools/GitWriteToolTests.cs` over real repos (`GitSandbox`): stage+commit yields the
-      proposed subject; `readonly` refuses all three; `ask` prompts; bad branch name and escaping path refused before
+      proposed subject; `readonly` refuses the writes; `ask` prompts; bad branch name and escaping path refused before
       Git runs; commit with nothing staged is a stable failure.
-- [x] T008 [US1] `GitToolRegistrationTests`: the surface now has five Git tools; all five disappear with `--no-git`;
+- [x] T008 [US1] `GitToolRegistrationTests`: the surface now has six Git tools; all six disappear with `--no-git`;
       update README + `HelpText`.
 - [x] T009 [US1] Phase close: Release build 0 warnings, full suite green (commit left to the developer).
 
@@ -70,7 +70,7 @@ relative to the repo root. Each phase closes with a Release build and the full s
 ## Evidence
 
 - Focused suites: `GitWriteToolTests` (7), `ProjectMemoryToolTests` (6), `DotnetVerifyToolTests` (`FilterAndNoBuildAreRefusedForABuild`), `CodingAgentTests` (`ANoBuildTestRunDoesNotCloseTheCompileGate`), plus the updated `TaskToolRegistrationTests` default surface.
-- Registration: three Git write tools default-on beside `git_status`/`git_diff` (all five removed by `--no-git`); `project_memory` (ReadOnly) and `remember` (Destructive) default-on. The pinned default surface grew by five tools.
+- Registration: `git_branch` (ReadOnly) and three Git write tools (`git_stage`, `git_commit`, `git_branch_write`) default-on beside `git_status`/`git_diff` (all six removed by `--no-git`); `project_memory` (ReadOnly) and `remember` (Destructive) default-on. The pinned default surface grew by six tools.
 - Release build: **0 warnings, 0 errors** (`dotnet build -t:Rebuild`). Complete suite: **1872 total, 0 failed, 1871 succeeded, 1 skipped (pre-existing)** in `Release`.
 - Recorded evaluation: not re-run here — the live harness needs provider keys. The only prompt change is `PromptLibrary.GitRule` gaining one line naming `git_stage`/`git_commit`/`git_branch`; the tool definitions are additive, so the offline baseline's semantics are unchanged and the input-token delta is that one line plus five tool definitions.
 - Source audit: the only process-launch paths remain `GitCommand`→`ShellProcessRegistry` and `dotnet_verify`'s single spawn; the memory tools do confined file I/O only. No new `Process.Start`, shell string or network client.

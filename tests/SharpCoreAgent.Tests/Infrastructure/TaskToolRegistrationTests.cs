@@ -32,6 +32,7 @@ public sealed class TaskToolRegistrationTests
         "find_references",
         "find_symbol",
         "git_branch",
+        "git_branch_write",
         "git_commit",
         "git_diff",
         "git_stage",

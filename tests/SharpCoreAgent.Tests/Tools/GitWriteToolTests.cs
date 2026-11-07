@@ -33,11 +33,12 @@ public sealed class GitWriteToolTests
     }
 
     [Fact]
-    public void AllThreeWritesAreDestructive()
+    public void TheWritesAreDestructiveAndTheBranchListerIsReadOnly()
     {
         Assert.Equal(ToolSafety.Destructive, new GitStageTool().Safety);
         Assert.Equal(ToolSafety.Destructive, new GitCommitTool().Safety);
-        Assert.Equal(ToolSafety.Destructive, new GitBranchTool().Safety);
+        Assert.Equal(ToolSafety.Destructive, new GitBranchWriteTool().Safety);
+        Assert.Equal(ToolSafety.ReadOnly, new GitBranchTool().Safety);
     }
 
     [Fact]
@@ -68,25 +69,24 @@ public sealed class GitWriteToolTests
     }
 
     [Fact]
-    public async Task BranchCreatesListsAndDeletes()
+    public async Task BranchListsReadOnlyAndCreatesDeletes()
     {
         using var sandbox = GitSandbox.Create();
-        var tool = new GitBranchTool();
 
-        var create = await tool.ExecuteAsync(
-            ToolTestWorkspace.Call("git_branch", ToolTestWorkspace.Args(new { op = "create", name = "feature/x" })),
+        var create = await new GitBranchWriteTool().ExecuteAsync(
+            ToolTestWorkspace.Call("git_branch_write", ToolTestWorkspace.Args(new { op = "create", name = "feature/x" })),
             sandbox.Context,
             CancellationToken.None);
         Assert.False(create.IsError, create.Content);
 
-        var list = await tool.ExecuteAsync(
-            ToolTestWorkspace.Call("git_branch", ToolTestWorkspace.Args(new { op = "list" })),
+        var list = await new GitBranchTool().ExecuteAsync(
+            ToolTestWorkspace.Call("git_branch", "{}"),
             sandbox.Context,
             CancellationToken.None);
         Assert.Contains("feature/x", list.Content, StringComparison.Ordinal);
 
-        var delete = await tool.ExecuteAsync(
-            ToolTestWorkspace.Call("git_branch", ToolTestWorkspace.Args(new { op = "delete", name = "feature/x" })),
+        var delete = await new GitBranchWriteTool().ExecuteAsync(
+            ToolTestWorkspace.Call("git_branch_write", ToolTestWorkspace.Args(new { op = "delete", name = "feature/x" })),
             sandbox.Context,
             CancellationToken.None);
         Assert.False(delete.IsError, delete.Content);
@@ -97,8 +97,8 @@ public sealed class GitWriteToolTests
     {
         using var sandbox = GitSandbox.Create();
 
-        var create = await new GitBranchTool().ExecuteAsync(
-            ToolTestWorkspace.Call("git_branch", ToolTestWorkspace.Args(new { op = "create", name = "-D" })),
+        var create = await new GitBranchWriteTool().ExecuteAsync(
+            ToolTestWorkspace.Call("git_branch_write", ToolTestWorkspace.Args(new { op = "create", name = "-D" })),
             sandbox.Context,
             CancellationToken.None);
 
@@ -111,8 +111,8 @@ public sealed class GitWriteToolTests
         using var sandbox = GitSandbox.Create();
         var current = sandbox.Run("rev-parse", "--abbrev-ref", "HEAD").Trim();
 
-        var delete = await new GitBranchTool().ExecuteAsync(
-            ToolTestWorkspace.Call("git_branch", ToolTestWorkspace.Args(new { op = "delete", name = current })),
+        var delete = await new GitBranchWriteTool().ExecuteAsync(
+            ToolTestWorkspace.Call("git_branch_write", ToolTestWorkspace.Args(new { op = "delete", name = current })),
             sandbox.Context,
             CancellationToken.None);
 

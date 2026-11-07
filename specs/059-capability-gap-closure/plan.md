@@ -63,7 +63,8 @@ variables removed, fixed `-c` prefix, literal pathspecs — is kept. Three new t
 |---|---|---|
 | `git_stage` | `add -A -- <path>...` | one or more confined workspace paths |
 | `git_commit` | `commit --no-verify -m <message> -- <path>...` | a bounded message, optional paths |
-| `git_branch` | `branch --list` · `branch <name>` · `branch -d <name>` | closed `op` + one validated name |
+| `git_branch` | `branch --list --no-color` (read-only) | none |
+| `git_branch_write` | `branch <name>` · `branch -d <name>` | closed `op` + one validated name |
 
 **No repository-configured program runs.** The write path adds `-c core.hooksPath=<fixed nonexistent dir>` so no
 pre-commit, commit-msg or post-commit hook executes, and `-c commit.gpgsign=false -c gpg.program=false` so a
@@ -76,14 +77,16 @@ after `--`. A branch name is validated with `git check-ref-format --branch <name
 `-`) before `git branch` runs, so a name can never become an option; the checked-out branch is refused for
 `delete`.
 
-**Approval is the existing gate.** All three are `ToolSafety.Destructive`, so `readonly` refuses them, `ask`
-prompts once per write (`y`/`t`/`a` unchanged), and `allow` runs them. No approval code changes. `git_commit`
-implements `IToolPreview` so the prompt shows the proposed subject and the staged paths instead of a JSON line.
+**Approval is the existing gate.** The three write tools (`git_stage`, `git_commit`, `git_branch_write`) are
+`ToolSafety.Destructive`, so `readonly` refuses them, `ask` prompts once per write (`y`/`t`/`a` unchanged), and
+`allow` runs them. `git_branch` (listing) is `ReadOnly`, so it needs no approval and is available in Plan/Review.
+No approval code changes. `git_commit` implements `IToolPreview` so the prompt shows the proposed subject and the
+staged paths instead of a JSON line.
 
 **Rendering and failure.** Success answers with a one-line summary (`committed 3 files: <subject> → <sha>`,
 `staged 3 path(s)`, `created branch <name>`); a non-zero exit, a timeout, a non-repository workspace or a missing
 `git` is a stable error result carrying Git's bounded stderr, exactly as the read tools already do. `--no-git`
-removes all five Git tools and the Git prompt rule together.
+removes all six Git tools and the Git prompt rule together.
 
 **Why `git_stage` and not `commit -a`.** A `-a` commit sweeps every tracked change into the message, including
 edits the developer did not review. An explicit stage makes the committed set visible in the prompt and is the
@@ -166,7 +169,8 @@ src/SharpCoreAgent.Infrastructure/Tools/
   GitCommand.cs            # add a write mode: drop --no-optional-locks, disable hooks/signing
   GitStageTool.cs          # new  (Destructive)
   GitCommitTool.cs         # new  (Destructive) + IToolPreview
-  GitBranchTool.cs         # new  (Destructive)
+  GitBranchTool.cs         # new  (ReadOnly — list)
+  GitBranchWriteTool.cs    # new  (Destructive — create/delete)
   DotnetVerifyTool.cs      # add filter/no_build; set CountsAsVerification
   ProjectMemoryStore.cs    # new  (Infrastructure; bounded slug files)
   ProjectMemoryTool.cs     # new  (ReadOnly  — list/get)
@@ -180,7 +184,7 @@ src/SharpCoreAgent.Application/
   PromptLibrary.cs         # extend GitRule to name the write tools; no memory prompt in v1
 
 src/SharpCoreAgent.DependencyInjection/
-  ServiceCollectionExtensions.cs  # AddGit registers the three writes; AddTools registers the two memory tools
+  ServiceCollectionExtensions.cs  # AddGit registers the Git tools; AddTools registers the two memory tools
 
 tests/SharpCoreAgent.Tests/
   Tools/GitWriteToolTests.cs        # new  (real temp repos via GitSandbox)
@@ -188,7 +192,7 @@ tests/SharpCoreAgent.Tests/
   Tools/DotnetVerifyToolTests.cs    # filter / no_build / build-refusals
   Tools/DotnetVerifyReportParserTests.cs  # unchanged shape still parsed
   Application/CodingAgentTests.cs   # no_build does not close the gate; build does
-  Infrastructure/GitToolRegistrationTests.cs  # five git tools, --no-git removes all
+  Infrastructure/GitToolRegistrationTests.cs  # six git tools, --no-git removes all
   Infrastructure/TaskToolRegistrationTests.cs # the new default count
 
 README.md, HelpText  # the git write tools, the new dotnet_verify args, project_memory
@@ -209,8 +213,8 @@ No other complexity is added: no new project, no new dependency, no new `Process
 Each slice closes on the following, recorded in `tasks.md`:
 
 - **Slice 1** — `GitWriteToolTests` over real temp repos: stage+commit produces a commit with the proposed subject;
-  `readonly` refuses all three; `ask` prompts; a bad branch name and an escaping path are refused before Git runs;
-  a `--no-git` build has none of the five tools.
+  `readonly` refuses the writes; `ask` prompts; a bad branch name and an escaping path are refused before Git runs;
+  `git_branch` lists in every mode; a `--no-git` build has none of the six tools.
 - **Slice 2** — `DotnetVerifyToolTests`: `filter` runs only matching tests, `no_build` skips the build, and both are
   refused for `kind=build`; `CodingAgentTests`: a `no_build` test after a `.cs` edit is still unverified, a
   `kind=build` after it is not.

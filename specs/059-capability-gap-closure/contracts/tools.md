@@ -24,14 +24,22 @@ Effect: `CommandRun("git commit ...")` on success; result names the short SHA an
 the proposed subject and the paths that would be committed. Hooks/signing are disabled (see plan); the author is the
 user's configured identity.
 
-### `git_branch` — `Destructive`
+### `git_branch` — `ReadOnly`
 
 ```json
-{"type":"object","properties":{"op":{"type":"string","enum":["list","create","delete"],"description":"list prints branches; create/delete take a name."},"name":{"type":"string","description":"Branch name for create/delete; validated by git check-ref-format --branch."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}},"required":["op"],"additionalProperties":false}
+{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}},"additionalProperties":false}
 ```
 
-`list` reports no effect and is safe to call in any mode the model can reach; `create`/`delete` report
-`CommandRun`. `delete` refuses the checked-out branch.
+Lists branches; the current one is marked `*`. Reports no effect (like `git_status`), so it runs in every mode,
+including Plan and Review.
+
+### `git_branch_write` — `Destructive`
+
+```json
+{"type":"object","properties":{"op":{"type":"string","enum":["create","delete"],"description":"create makes a branch; delete removes one (not the checked-out branch)."},"name":{"type":"string","description":"Branch name; validated by git check-ref-format."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}},"required":["op","name"],"additionalProperties":false}
+```
+
+`create`/`delete` report `CommandRun`. `delete` refuses the checked-out branch; a name is validated before Git runs.
 
 ## Slice 2 — `dotnet_verify` schema delta
 
@@ -71,7 +79,8 @@ count, never the body. `readonly` refuses it; `ask` prompts.
 |---|---|---|---|
 | `git_stage` | `Destructive` | `CommandRun` | refused / prompts / runs |
 | `git_commit` | `Destructive` | `CommandRun` | refused / prompts / runs |
-| `git_branch` | `Destructive` | `CommandRun` (create/delete) | refused / prompts / runs |
+| `git_branch` | `ReadOnly` | none (list) | runs / runs / runs |
+| `git_branch_write` | `Destructive` | `CommandRun` (create/delete) | refused / prompts / runs |
 | `dotnet_verify` | `Destructive` (unchanged) | `CommandRun` | refused / prompts / runs |
 | `project_memory` | `ReadOnly` | `Read` | runs / runs / runs |
 | `remember` | `Destructive` | `Created`/`Modified` | refused / prompts / runs |

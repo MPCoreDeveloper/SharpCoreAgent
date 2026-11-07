@@ -4,32 +4,20 @@ using SharpCoreAgent.Domain.Tools;
 
 namespace SharpCoreAgent.Infrastructure.Tools;
 
-/// <summary>Lists, creates and deletes branches (<c>git branch</c>), through the shared process host.</summary>
+/// <summary>Lists branches (<c>git branch --list</c>), read-only, through the shared process host.</summary>
 /// <remarks>
-/// One <see cref="ToolSafety.Destructive"/> tool with a closed operation. <c>list</c> runs a read (no lock, no hook);
-/// <c>create</c>/<c>delete</c> take the write path. A branch name is validated against Git's ref rules and confirmed
-/// with <c>git check-ref-format</c> before it reaches <c>git branch</c>, and a leading <c>-</c> is refused so a name can
-/// never become an option. Deleting the checked-out branch is refused.
+/// Read-only, so Plan and Review can see the branches the way they see <c>git_status</c> and <c>git_diff</c> — the whole
+/// reason the Git evidence tools are <see cref="ToolSafety.ReadOnly"/>. The command is fixed and takes no model input
+/// beyond an optional timeout. Creating and deleting a branch is the separate, destructive
+/// <see cref="GitBranchWriteTool"/>.
 /// </remarks>
 public sealed class GitBranchTool : ITool
 {
     /// <summary>Gets the tool name.</summary>
     public const string Name = "git_branch";
 
-    /// <summary>Gets the operation that lists branches.</summary>
-    public const string List = "list";
-
-    /// <summary>Gets the operation that creates a branch.</summary>
-    public const string Create = "create";
-
-    /// <summary>Gets the operation that deletes a branch.</summary>
-    public const string Delete = "delete";
-
     private const string Schema =
-        """{"type":"object","properties":{"op":{"type":"string","enum":["list","create","delete"],"description":"list prints branches; create/delete take a name."},"name":{"type":"string","description":"Branch name for create/delete."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}},"required":["op"],"additionalProperties":false}""";
-
-    private static readonly System.Buffers.SearchValues<char> Forbidden =
-        System.Buffers.SearchValues.Create(" ~^:?*[\\");
+        """{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}},"additionalProperties":false}""";
 
     private readonly GitCommand _git;
 
@@ -40,7 +28,7 @@ public sealed class GitBranchTool : ITool
     }
 
     /// <summary>Creates the tool over a shared shell process host.</summary>
-    /// <param name="processes">The registry that owns the Git access.</param>
+    /// <param name="processes">The registry that owns the Git read.</param>
     /// <param name="gitFileName">The Git executable, normally <c>git</c>.</param>
     public GitBranchTool(ShellProcessRegistry processes, string gitFileName = GitCommand.DefaultFileName)
     {
@@ -52,11 +40,11 @@ public sealed class GitBranchTool : ITool
     /// <inheritdoc />
     public ToolDefinition Definition { get; } = new(
         Name,
-        "List, create or delete Git branches (git branch). Destructive and approval-gated for create/delete. Branch names are validated; deleting the checked-out branch is refused.",
+        "List Git branches (git branch). Read-only, so it is available in Plan and Review like git_status and git_diff. The current branch is marked with '*'. Use git_branch_write to create or delete a branch.",
         Schema);
 
     /// <inheritdoc />
-    public ToolSafety Safety => ToolSafety.Destructive;
+    public ToolSafety Safety => ToolSafety.ReadOnly;
 
     /// <inheritdoc />
     public async ValueTask<ToolResult> ExecuteAsync(
@@ -68,24 +56,9 @@ public sealed class GitBranchTool : ITool
         ArgumentNullException.ThrowIfNull(context);
 
         using var arguments = ToolArgumentReader.Parse(Name, toolCall.ArgumentsJson);
-        var op = (arguments.GetOptionalString("op") ?? List).Trim().ToLowerInvariant();
         var timeout = TimeSpan.FromSeconds(
             arguments.GetOptionalInt("timeout_seconds", GitCommand.DefaultTimeoutSeconds, minimum: 1, maximum: 120));
 
-        return op switch
-        {
-            List => await RunListAsync(toolCall, context, timeout, cancellationToken).ConfigureAwait(false),
-            Create or Delete => await RunWriteAsync(toolCall, arguments.GetOptionalString("name"), op, context, timeout, cancellationToken).ConfigureAwait(false),
-            _ => ToolResult.Failure(toolCall.Id, Name, $"op must be '{List}', '{Create}' or '{Delete}', not '{op}'."),
-        };
-    }
-
-    private async ValueTask<ToolResult> RunListAsync(
-        ToolCall toolCall,
-        ToolInvocationContext context,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
-    {
         GitOutcome outcome;
         try
         {
@@ -114,88 +87,4 @@ public sealed class GitBranchTool : ITool
         var bounded = TextLimits.Bound(text, TextLimits.MaxCommandOutputChars, out var truncated);
         return ToolResult.Success(toolCall.Id, Name, bounded) with { IsTruncated = truncated };
     }
-
-    private async ValueTask<ToolResult> RunWriteAsync(
-        ToolCall toolCall,
-        string? rawName,
-        string op,
-        ToolInvocationContext context,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
-    {
-        var name = rawName?.Trim();
-        if (string.IsNullOrEmpty(name))
-        {
-            return ToolResult.Failure(toolCall.Id, Name, $"{op} requires a name.");
-        }
-
-        if (name[0] == '-' || name.AsSpan().IndexOfAny(Forbidden) >= 0 || name.Contains("..", StringComparison.Ordinal)
-            || name.Contains("@{", StringComparison.Ordinal) || name.Contains("//", StringComparison.Ordinal)
-            || name.StartsWith('/') || name.EndsWith('/') || name.EndsWith('.'))
-        {
-            return ToolResult.Failure(toolCall.Id, Name, $"'{name}' is not a valid branch name.");
-        }
-
-        string current;
-        GitOutcome check;
-        try
-        {
-            check = await _git.RunAsync(context.Workspace, ["check-ref-format", name], timeout, cancellationToken)
-                .ConfigureAwait(false);
-            var head = await _git.RunAsync(context.Workspace, ["rev-parse", "--abbrev-ref", "HEAD"], timeout, cancellationToken)
-                .ConfigureAwait(false);
-            current = head.ExitCode == 0 ? head.Output.Trim() : string.Empty;
-        }
-        catch (InvalidOperationException ex)
-        {
-            return ToolResult.Failure(toolCall.Id, Name, ex.Message);
-        }
-
-        if (check.ExitCode != 0)
-        {
-            return ToolResult.Failure(toolCall.Id, Name, $"'{name}' is not a valid branch name.");
-        }
-
-        if (op == Delete && string.Equals(name, current, StringComparison.Ordinal))
-        {
-            return ToolResult.Failure(toolCall.Id, Name, $"refusing to delete the checked-out branch '{name}'.");
-        }
-
-        var command = op == Create
-            ? new List<string> { "branch", name }
-            : ["branch", "-d", name];
-
-        GitOutcome outcome;
-        try
-        {
-            outcome = await _git.RunAsync(context.Workspace, command, timeout, cancellationToken, write: true)
-                .ConfigureAwait(false);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return ToolResult.Failure(toolCall.Id, Name, ex.Message);
-        }
-
-        if (outcome.TimedOut)
-        {
-            return ToolResult.Failure(
-                toolCall.Id,
-                Name,
-                string.Create(CultureInfo.InvariantCulture, $"git branch did not finish within {timeout.TotalSeconds:0} seconds."));
-        }
-
-        if (outcome.ExitCode != 0)
-        {
-            return ToolResult.Failure(toolCall.Id, Name, GitStatusTool.Failure("branch", outcome));
-        }
-
-        var verb = op == Create ? "created" : "deleted";
-        var summary = string.Create(CultureInfo.InvariantCulture, $"{verb} branch {name}");
-        return ToolResult.Success(
-            toolCall.Id,
-            Name,
-            summary,
-            new ToolEffect(ToolEffectKind.CommandRun, string.Concat("git branch ", name)));
-    }
 }
-

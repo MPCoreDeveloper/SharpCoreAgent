@@ -237,6 +237,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool>(provider => new GitStageTool(provider.GetRequiredService<ShellProcessRegistry>()));
         services.AddSingleton<ITool>(provider => new GitCommitTool(provider.GetRequiredService<ShellProcessRegistry>()));
         services.AddSingleton<ITool>(provider => new GitBranchTool(provider.GetRequiredService<ShellProcessRegistry>()));
+        services.AddSingleton<ITool>(provider => new GitBranchWriteTool(provider.GetRequiredService<ShellProcessRegistry>()));
     }
 
     /// <summary>

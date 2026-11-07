@@ -28,7 +28,7 @@ Three independent slices, each shippable, testable and reviewable on its own, in
 
 | Slice | Ships | Safety |
 |---|---|---|
-| 1 · Git write tools | `git_stage`, `git_commit`, `git_branch` | `Destructive`, approval-gated |
+| 1 · Git write tools | `git_branch` (read), `git_stage`, `git_commit`, `git_branch_write` (write) | `ReadOnly` / `Destructive`, approval-gated |
 | 2 · Targeted verification | `dotnet_verify` gains `filter` and `no_build` | unchanged `Destructive` |
 | 3 · Project memory | `project_memory` (read) + `remember` (write) | `ReadOnly` / `Destructive` |
 
@@ -64,8 +64,8 @@ commit appears in `git log`; an `ask` session prompts before the write; a `reado
 
 A session needs to know its branch, create one, or (rarely) delete one it created, without a shell.
 
-**Independent test**: `git_branch` lists branches and creates one behind the approval gate; deleting is refused in
-`readonly` and prompts in `ask`.
+**Independent test**: `git_branch` lists branches (read-only, available in Plan and Review); `git_branch_write`
+creates one behind the approval gate; deleting is refused in `readonly` and prompts in `ask`.
 
 ### 3. Run the failing test, not the whole suite (Priority: P2)
 
@@ -98,8 +98,8 @@ store is bounded, git-ignored and never read automatically as ambient authority.
   of `Destructive`, and recorded effects — the same contract as every existing tool (`001-coding-agent-core`).
 - **FR-002**: The argv is fixed and the model supplies only data: `git_stage` takes one or more workspace-relative
   paths (or a closed "all tracked changes" scope); `git_commit` takes a bounded message and a closed scope;
-  `git_branch` takes a closed operation (`list`, `create`, `delete`) and a single branch name. No arbitrary Git
-  command, option, revision expression or `-c` config injection is accepted.
+  `git_branch_write` takes a closed operation (`create`, `delete`) and a single branch name, and `git_branch` is a
+  fixed `--list` read. No arbitrary Git command, option, revision expression or `-c` config injection is accepted.
 - **FR-003**: A path or branch name passes `PathSafety.TryResolve` (or an equivalent name confinement) before Git
   starts, and is always placed after `--`. A name or path outside the workspace is refused before any write.
 - **FR-004**: Writes run through the existing `ShellProcessRegistry` with no new `Process.Start` (Principle III),
@@ -110,8 +110,8 @@ store is bounded, git-ignored and never read automatically as ambient authority.
   semantics (`y`/`t`/`a`) apply unchanged.
 - **FR-006**: `git_commit` proposes, and the developer can refuse, the message; the commit author identity comes
   from the repository/user config, never from a model-supplied `-c user.name/user.email`.
-- **FR-007**: `git_branch list` is the read-only half of one `Destructive` tool but is surfaced to Plan/Review the
-  way `git_status`/`git_diff` are, without granting the write half.
+- **FR-007**: `git_branch` (listing) is `ReadOnly`, so it is surfaced to Plan/Review the way `git_status`/`git_diff`
+  are, without granting a write path; creating and deleting is the separate `Destructive` `git_branch_write`.
 - **FR-008**: Failure, timeout, non-repository workspace and missing-executable paths return stable error results
   (never exceptions), matching `git_status`/`git_diff`.
 - **FR-009**: `--no-git` removes the new tools together with the existing two and their prompt rule, so a host that
