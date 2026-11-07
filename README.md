@@ -205,6 +205,7 @@ sharpcoreagent setup                        the preferences, asked for one at a 
 sharpcoreagent mcp serve [options]          this workspace's index as an MCP server on stdio
 sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
 sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
+sharpcoreagent serve [options]               this conversation as a chat page on 127.0.0.1
 sharpcoreagent ide agent [--write]           the profile that puts this agent in an editor's picker
 sharpcoreagent ide tasks [--write]           the task that rebuilds the index, for .vscode/tasks.json
 sharpcoreagent --help | --version
@@ -956,6 +957,31 @@ left open overnight cannot start a walk in a repository nobody is watching. `--r
 hostile page cannot reach it by DNS rebinding, and no answer is cached. Ctrl+C stops it at `0`; a port
 nothing can bind exits `2` with the port named. Opening the URL is your action: nothing is started for
 you.
+
+### Chat in a browser
+
+`serve` is chat with its terminal replaced: the same workspace, model, tools and transcript, answered on
+a loopback page instead of at a prompt.
+
+```powershell
+sharpcoreagent index                  # once: the first turn reads the index
+sharpcoreagent serve                  # http://127.0.0.1:<port>/ — the URL is the first line printed
+sharpcoreagent serve --port 8080      # a port you chose
+sharpcoreagent serve --json           # one object with the URL, for a launcher script
+```
+
+The page streams the turn as it happens — assistant text, reasoning, and each tool call with its output
+and any diff it would write — over a server-sent event stream at `GET /api/events`, which carries the
+same JSON lines `run --json` prints. `POST /api/turn` sends a prompt, `POST /api/approval` answers a
+destructive tool (once, this tool, every tool, or no), `GET /api/state` reports the model, approval mode
+and spend, and `POST /api/settings` switches the approval mode or plan/act. It is one agent loop: a
+terminal and the page drive the same conversation, so a turn started in a browser and one approved at
+the keyboard are the same turn.
+
+It is loopback-only by construction — any `Host` header that is not `127.0.0.1:<port>` is refused `403`
+with an empty body, any other path is `404`, and every answer is `no-store`. Nothing is published to a
+network and no browser is opened for you. Ctrl+C stops it at `0`; a port nothing can bind exits `2` with
+the port named, exactly as `ui --serve` does.
 
 ### In the picker
 

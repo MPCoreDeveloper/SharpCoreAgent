@@ -36,6 +36,7 @@ internal static class HelpText
           sharpcoreagent mcp config --client <name>    the block that adds it to claude, vscode, visualstudio or codex
           sharpcoreagent mcp bench [options]           the twelve fixture questions, measured against the source
           sharpcoreagent ui --serve [options]          this workspace's index as a page on 127.0.0.1
+          sharpcoreagent serve [options]               this conversation as a chat page on 127.0.0.1
           sharpcoreagent ide agent [--write]           the agent profile that puts the index in an editor's picker
           sharpcoreagent ide prompt [--write]          the reusable prompt for .github/prompts
           sharpcoreagent ide instructions [--write]    the repository-wide instructions for .github/copilot-instructions.md
@@ -266,6 +267,23 @@ internal static class HelpText
           Visual Studio browser window both render it. Ctrl+C ends the panel at 0; a port nothing can bind
           ends it at 2, with the port named and --port as the fix.
 
+        Web UI
+          sharpcoreagent serve [options]               a chat page for this conversation, until Ctrl+C
+          --port <n>               serve       0           the port to bind; 0 picks a free one
+          --json                   serve       off         the object naming the URL, then the page keeps serving
+
+          serve is chat in a browser: it opens the workspace, the model and the tools chat opens, then answers a page
+          on 127.0.0.1. GET / is the page and GET /api/events is a server-sent stream of the same events the terminal
+          renders — assistant text, reasoning, tool calls and their output. POST /api/turn sends a prompt, POST
+          /api/approval answers a destructive tool (once, this tool, every tool, or no), GET /api/state reports the
+          model, approval mode and spend, and POST /api/settings switches the approval mode or plan/act. The page is
+          one client of the one agent loop, so a terminal and a browser drive the same session.
+
+          It is loopback-only by construction: any Host header that is not 127.0.0.1:<port> is refused 403 with an
+          empty body, any other path is 404, and every answer is no-store. Nothing is published to a network and no
+          browser is opened for you — open the URL in VS Code's Simple Browser or a Visual Studio browser window.
+          Ctrl+C ends it at 0; a port nothing can bind ends it at 2, with the port named and --port as the fix.
+
         Ide
           sharpcoreagent ide agent [options]          the profile that puts this server's tools in an editor's picker
           sharpcoreagent ide tasks [options]          the one task that rebuilds the index, for .vscode/tasks.json
@@ -311,7 +329,7 @@ internal static class HelpText
           prefix; its keys win over the environment, and a blank value counts as unset.
 
         Exit codes
-          0  the turn completed, or mcp serve reached end of input, or the panel stopped, or an ide file was written
+          0  the turn completed, or mcp serve reached end of input, or the panel or serve stopped, or an ide file was written
           1  the turn failed: provider error, tool crash or unexpected exception
           2  the command line could not be understood
           3  a credential is missing, or the credential file cannot be read
@@ -334,6 +352,8 @@ internal static class HelpText
           sharpcoreagent ui --serve
           sharpcoreagent ui --serve --port 8080 --refresh
           sharpcoreagent ui --serve --json
+          sharpcoreagent serve
+          sharpcoreagent serve --port 8080 --json
           sharpcoreagent ide agent --write
           sharpcoreagent ide tasks --write
         """;

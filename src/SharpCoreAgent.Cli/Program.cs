@@ -115,6 +115,10 @@ internal static class Program
                     Environment.GetEnvironmentVariable,
                     Console.Out,
                     Console.Error),
+
+                // The web UI. Ctrl+C cancels the token, the listener and any in-flight turn stop, and the command
+                // answers 0: a developer who ended a server they started did not ask for a failure code.
+                CliCommand.Serve => await ServeCommand.ExecuteAsync(options, scope, settingsPath).ConfigureAwait(false),
                 _ => await ChatCommand.ExecuteAsync(options, scope, settingsPath).ConfigureAwait(false),
             };
         }

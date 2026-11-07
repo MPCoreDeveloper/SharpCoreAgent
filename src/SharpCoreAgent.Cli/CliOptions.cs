@@ -45,6 +45,9 @@ internal enum CliCommand
     /// <summary>Serve this workspace's index as a page on a loopback port.</summary>
     Ui,
 
+    /// <summary>Serve this conversation as a chat page on a loopback port: a turn, a stream, a prompt again.</summary>
+    Serve,
+
     /// <summary>Write the files that put this workspace's index inside an editor.</summary>
     Ide,
 }
@@ -717,7 +720,7 @@ internal sealed record CliOptions
         // only where a session exists: `models` and `config` never open a workspace, and `index` describes
         // exactly one tree. Its roots come after the ones typed here, in the order given, so the command line
         // wins the order without either list being re-sorted.
-        if (parsed.Command is CliCommand.Run or CliCommand.Chat)
+        if (parsed.Command is CliCommand.Run or CliCommand.Chat or CliCommand.Serve)
         {
             parsed = parsed with
             {
@@ -1067,9 +1070,9 @@ internal sealed record CliOptions
             throw new CliUsageException("--check is only valid with the credentials command.");
         }
 
-        if (options.NoVerify && command is not (CliCommand.Run or CliCommand.Chat))
+        if (options.NoVerify && command is not (CliCommand.Run or CliCommand.Chat or CliCommand.Serve))
         {
-            throw new CliUsageException("--no-verify applies to run and chat only.");
+            throw new CliUsageException("--no-verify applies to run, chat and serve only.");
         }
 
         if (options.Force && command != CliCommand.Ide)
@@ -1090,7 +1093,7 @@ internal sealed record CliOptions
         // The panel's flags are refused everywhere else for the reason every misplaced flag is: a developer who typed
         // `--port 8080` and watched a turn start would believe something is listening on 8080. `ui` is exempt because
         // that is the command that reads them.
-        if (command is not CliCommand.Ui)
+        if (command is not (CliCommand.Ui or CliCommand.Serve))
         {
             RejectUiFlags(options);
         }
@@ -1277,6 +1280,11 @@ internal sealed record CliOptions
             case CliCommand.Ui:
                 // Its own flags are the whole command, so the refusals live in FinishUi where the action is known.
                 return FinishUi(options, positionals);
+
+            case CliCommand.Serve:
+                // A conversation on a loopback port: it runs a turn like chat, so it keeps chat's flags, and the one
+                // thing it adds is --port. FinishServe refuses the flags that describe a different command.
+                return FinishServe(options, positionals);
 
             case CliCommand.Ide:
                 // The same reason: which flags apply depends on the action, and the action is the first operand.
@@ -1524,6 +1532,52 @@ internal sealed record CliOptions
         }
 
         return options with { Command = CliCommand.Ui };
+    }
+
+    /// <summary>
+    /// Reads <c>serve</c>: a conversation on a loopback port, run like <c>chat</c> but driven by a browser.
+    /// </summary>
+    /// <param name="options">The options the flags produced.</param>
+    /// <param name="positionals">The arguments after the command.</param>
+    /// <returns>The options with the command.</returns>
+    /// <exception cref="CliUsageException">A positional, a picture flag or a panel flag was given.</exception>
+    /// <remarks>
+    /// <c>serve</c> starts a turn and keeps a transcript exactly as <c>chat</c> does, so it keeps every flag chat keeps and
+    /// is dispatched with <c>run</c>/<c>chat</c> for the roots and web-allow check. It adds one thing — a loopback port,
+    /// which is <c>--port</c>, shared with <c>ui</c> — and refuses the two flags that only make sense on the read-only
+    /// panel (<c>--serve</c>, <c>--refresh</c>) because the command name already says "serve".
+    /// </remarks>
+    private static CliOptions FinishServe(CliOptions options, List<string> positionals)
+    {
+        RejectIndexFlags(options);
+
+        if (positionals.Count > 0)
+        {
+            throw new CliUsageException(
+                $"serve does not take '{positionals[0]}'.",
+                "Start it with 'sharpcoreagent serve' and open the URL it prints.");
+        }
+
+        if (options.Resume && options.SessionPath is not null)
+        {
+            throw new CliUsageException("--resume and --session name the same transcript; use one.");
+        }
+
+        if (options.Images.Count > 0)
+        {
+            throw new CliUsageException(
+                "--image applies to run; the web UI attaches pictures per turn.",
+                "Send a picture from the page, or use 'sharpcoreagent run \"...\" --image <path>'.");
+        }
+
+        if (options.UiServe || options.UiRefresh)
+        {
+            throw new CliUsageException(
+                "serve is the command; --serve and --refresh belong to 'ui'.",
+                "Use 'sharpcoreagent ui --serve' for the read-only index panel.");
+        }
+
+        return options with { Command = CliCommand.Serve };
     }
 
     /// <summary>
@@ -2589,6 +2643,11 @@ internal sealed record CliOptions
             return CliCommand.Credentials;
         }
 
+        if (Is(argument, "serve"))
+        {
+            return CliCommand.Serve;
+        }
+
         if (Is(argument, "help"))
         {
             return CliCommand.Help;
@@ -2601,7 +2660,7 @@ internal sealed record CliOptions
 
         throw new CliUsageException(
             $"'{argument}' is not a command.",
-            "Commands are run, chat, models, credentials, index, setup, config, mcp, ui and ide.");
+            "Commands are run, chat, serve, models, credentials, index, setup, config, mcp, ui and ide.");
     }
 
     private static string TakeValue(string[] args, ref int index, string name)
