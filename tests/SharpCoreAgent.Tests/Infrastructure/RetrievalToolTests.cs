@@ -167,6 +167,51 @@ public sealed class RetrievalToolTests : IDisposable
     }
 
     [Fact]
+    public async Task FindCuesRendersCitationAndTarget()
+    {
+        var index = new FakeIndex
+        {
+            Cues = [Cue(CueKinds.Route, "src/app.js", 12, "app.get", "/users", "public")],
+        };
+
+        var result = await Execute(new FindCuesTool(index), """{"kind":"route"}""");
+
+        Assert.False(result.IsError);
+        Assert.Contains("1 cue (route)", result.Content, StringComparison.Ordinal);
+        Assert.Contains("1) route · app.get · /users", result.Content, StringComparison.Ordinal);
+        Assert.Contains("src/app.js:12", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FindCuesSaysWhenNothingMatched()
+    {
+        var result = await Execute(new FindCuesTool(new FakeIndex()), """{"kind":"test"}""");
+
+        Assert.False(result.IsError);
+        Assert.Equal("no test cues found in the index (412 files)", result.Content);
+    }
+
+    [Fact]
+    public async Task FindCuesRejectsAnUnknownKind()
+    {
+        var tool = new FindCuesTool(new FakeIndex());
+
+        await Assert.ThrowsAsync<ToolArgumentException>(async () =>
+        {
+            await Execute(tool, """{"kind":"graphql"}""");
+        });
+    }
+
+    [Fact]
+    public void FindCuesAdvertisesItsKinds()
+    {
+        var tool = new FindCuesTool(new FakeIndex());
+
+        Assert.Contains("\"dependency_injection\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"database_call\"", tool.Definition.ParametersSchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FindSymbolCountsTheMatchTiers()
     {
         var index = new FakeIndex
@@ -307,6 +352,7 @@ public sealed class RetrievalToolTests : IDisposable
     [InlineData("find_symbol")]
     [InlineData("find_references")]
     [InlineData("find_docs")]
+    [InlineData("find_cues")]
     [InlineData("code_context")]
     [InlineData("index_status")]
     public void EveryRetrievalToolIsReadOnly(string name)
@@ -318,6 +364,7 @@ public sealed class RetrievalToolTests : IDisposable
             "find_symbol" => new FindSymbolTool(index),
             "find_references" => new FindReferencesTool(index),
             "find_docs" => new FindDocsTool(index),
+            "find_cues" => new FindCuesTool(index),
             "code_context" => new CodeContextTool(index),
             _ => new IndexStatusTool(index),
         };
@@ -397,6 +444,17 @@ public sealed class RetrievalToolTests : IDisposable
         Text = text,
     };
 
+    private static CodeCueRef Cue(string kind, string path, int line, string target, string? detail, string? symbol) => new()
+    {
+        Kind = kind,
+        Path = path,
+        Line = line,
+        Target = target,
+        Detail = detail,
+        Symbol = symbol,
+        Snippet = "app.get('/users')",
+    };
+
     /// <summary>
     /// A stand-in for the index that answers with whatever a test hands it.
     /// </summary>
@@ -468,6 +526,14 @@ public sealed class RetrievalToolTests : IDisposable
             string text,
             int maxResults,
             CancellationToken cancellationToken) => ValueTask.FromResult(Docs);
+
+        public IReadOnlyList<CodeCueRef> Cues { get; set; } = [];
+
+        public ValueTask<IReadOnlyList<CodeCueRef>> FindCuesAsync(
+            string kind,
+            string? text,
+            int maxResults,
+            CancellationToken cancellationToken) => ValueTask.FromResult(Cues);
 
         public ValueTask<CodeContext> GetContextAsync(
             string target,

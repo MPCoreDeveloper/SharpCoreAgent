@@ -309,6 +309,21 @@ internal sealed class SharpCoreDbCodeIndex : ICodeIndex, IDisposable
     }
 
     /// <inheritdoc />
+    public ValueTask<IReadOnlyList<CodeCueRef>> FindCuesAsync(
+        string kind,
+        string? text,
+        int maxResults,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var snapshot = TrySnapshot();
+        return ValueTask.FromResult(snapshot is null
+            ? []
+            : CueRetriever.Find(snapshot, kind, text, maxResults));
+    }
+
+    /// <inheritdoc />
     public ValueTask<CodeContext> GetContextAsync(
         string target,
         int hops,

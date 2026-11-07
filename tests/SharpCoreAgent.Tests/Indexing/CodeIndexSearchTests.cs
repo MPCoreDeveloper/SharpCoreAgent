@@ -87,6 +87,21 @@ public sealed class CodeIndexSearchTests
         Assert.Empty(byForeignLanguage);
     }
 
+    [Fact]
+    public async Task FindCuesScansTheIndexedSource()
+    {
+        using var sandbox = ToolTestWorkspace.Create();
+        WriteCorpus(sandbox);
+        await BuildAsync(sandbox);
+
+        using var index = SharpCoreDbCodeIndex.For(sandbox.Workspace);
+        var routes = await index.FindCuesAsync(CueKinds.Route, null, 10, TestContext.Current.CancellationToken);
+        var databases = await index.FindCuesAsync(CueKinds.DatabaseCall, null, 10, TestContext.Current.CancellationToken);
+
+        Assert.Contains(routes, cue => cue.Detail == "/users");
+        Assert.Contains(databases, cue => cue.Target == "db.query");
+    }
+
     private const string CircleSource = """
         namespace Demo.Geometry;
 
@@ -113,11 +128,20 @@ public sealed class CodeIndexSearchTests
         The Circle type is immutable.
         """;
 
+    private const string AppSource = """
+        const app = express();
+
+        app.get('/users', requireAuth);
+        db.query('select * from users');
+        describe('users', () => {});
+        """;
+
     private static void WriteCorpus(ToolTestWorkspace sandbox)
     {
         sandbox.Write("src/Geometry/Circle.cs", CircleSource);
         sandbox.Write("src/Geometry/Square.cs", SquareSource);
         sandbox.Write("docs/notes.md", NotesSource);
+        sandbox.Write("src/app.js", AppSource);
     }
 
     private static async Task BuildAsync(ToolTestWorkspace sandbox)

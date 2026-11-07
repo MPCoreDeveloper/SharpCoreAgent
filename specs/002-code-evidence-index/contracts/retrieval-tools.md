@@ -1,6 +1,6 @@
 # Contract: Retrieval Tools
 
-**Scope**: six tools in `SharpCoreAgent.Infrastructure.Tools`, each implementing `ITool` exactly as
+**Scope**: seven tools in `SharpCoreAgent.Infrastructure.Tools`, each implementing `ITool` exactly as
 `specs/001-coding-agent-core/contracts/tools.md` requires, each bound to `ICodeIndex` and to nothing
 storage-shaped.
 
@@ -33,6 +33,7 @@ them opens a database, none of them knows what SharpCoreDB is.
 | `find_references` | ReadOnly | `Read` | `symbol` (required), `direction?` (callers\|callees\|both, default callers), `max_results?` (1–100, default 40) |
 | `code_context` | ReadOnly | `Read` | `target` (required: path or symbol), `hops?` (1–3, default 1), `k?` (1–12, default 8) |
 | `find_docs` | ReadOnly | `Read` | `query` (required), `max_results?` (1–50, default 20) |
+| `find_cues` | ReadOnly | `Read` | `kind?` (any\|route\|test\|dependency_injection\|database_call, default any), `text?`, `max_results?` (1–100, default 40) |
 | `index_status` | ReadOnly | `Read` | none |
 
 ### JSON Schemas (exact strings returned to the model)
@@ -60,6 +61,11 @@ them opens a database, none of them knows what SharpCoreDB is.
 `find_docs`
 ```json
 {"type":"object","properties":{"query":{"type":"string","description":"Words or a phrase to find in documentation headings or text."},"max_results":{"type":"integer","minimum":1,"maximum":50,"description":"Defaults to 20."}},"required":["query"],"additionalProperties":false}
+```
+
+`find_cues`
+```json
+{"type":"object","properties":{"kind":{"type":"string","enum":["any","route","test","dependency_injection","database_call"],"description":"Which framework cue to find. Defaults to any."},"text":{"type":"string","description":"Optional text a cue's target, path or captured detail must contain."},"max_results":{"type":"integer","minimum":1,"maximum":100,"description":"Defaults to 40."}},"additionalProperties":false}
 ```
 
 `index_status`
@@ -160,8 +166,9 @@ services.AddSingleton<ITool, FindReferencesTool>();
 services.AddSingleton<ITool, CodeContextTool>();
 services.AddSingleton<ITool, IndexStatusTool>();
 services.AddSingleton<ITool, FindDocsTool>();
+services.AddSingleton<ITool, FindCuesTool>();
 ```
 
-The six tools are registered in `AddSharpCoreAgentTools` beside the workspace, shell and code-intelligence
-tools; the system prompt tells the model which question each one answers (see `PromptLibrary`).
+The seven tools are registered in `AddSharpCoreAgentTools` beside the workspace, shell and code-intelligence
+tools; the system prompt names the core ones and every tool's own description explains the rest (see `PromptLibrary`).
 

@@ -218,6 +218,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITool, CodeContextTool>();
         services.AddSingleton<ITool, IndexStatusTool>();
         services.AddSingleton<ITool, FindDocsTool>();
+        services.AddSingleton<ITool, FindCuesTool>();
 
         // Built once from the registered tools; ToolRegistry rejects duplicate names, which turns a
         // copy-pasted registration into a startup failure instead of a model-visible ambiguity.

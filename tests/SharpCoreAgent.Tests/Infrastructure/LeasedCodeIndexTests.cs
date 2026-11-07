@@ -134,6 +134,13 @@ public sealed class LeasedCodeIndexTests
             CancellationToken cancellationToken) =>
             Answer<IReadOnlyList<CodeDocRef>>([]);
 
+        public ValueTask<IReadOnlyList<CodeCueRef>> FindCuesAsync(
+            string kind,
+            string? text,
+            int maxResults,
+            CancellationToken cancellationToken) =>
+            Answer<IReadOnlyList<CodeCueRef>>([]);
+
         public ValueTask<CodeContext> GetContextAsync(
             string target,
             int hops,

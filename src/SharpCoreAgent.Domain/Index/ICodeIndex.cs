@@ -83,6 +83,24 @@ public interface ICodeIndex
     ValueTask<IReadOnlyList<CodeDocRef>> FindDocsAsync(string text, int maxResults, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds framework cues — routes, tests, dependency-injection registrations and database calls — in the source
+    /// text the index already holds, as cited candidates.
+    /// </summary>
+    /// <param name="kind">One of <see cref="CueKinds"/>, case-insensitive.</param>
+    /// <param name="text">An optional term the cue's target, path or captured detail must contain.</param>
+    /// <param name="maxResults">The hard cap on returned cues; implementations may cap it lower.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    /// <returns>
+    /// The cues, ordered by path then line; possibly empty. Each is a candidate — a regular-expression hit over
+    /// source — and names the written expression rather than a resolved symbol.
+    /// </returns>
+    ValueTask<IReadOnlyList<CodeCueRef>> FindCuesAsync(
+        string kind,
+        string? text,
+        int maxResults,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Explains what sits around one file or declaration.
     /// </summary>
     /// <param name="target">A workspace-relative path, or a symbol name.</param>

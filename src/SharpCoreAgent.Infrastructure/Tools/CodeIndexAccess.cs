@@ -116,6 +116,40 @@ internal static class CodeIndexAccess
     internal static string? EvidenceKindName(string? value, IReadOnlyList<string> allowed, string toolName, string field) =>
         ChoiceName(value, allowed, CodeQuery.AnyEvidenceKind, toolName, field);
 
+    /// <summary>
+    /// Validates a cue <c>kind</c> against the closed list <see cref="CueKinds"/> defines, keeping "any" as a value.
+    /// </summary>
+    /// <param name="value">The argument as the model wrote it, or <see langword="null"/>.</param>
+    /// <param name="toolName">The tool name, used in the error message.</param>
+    /// <param name="field">The parameter name, used in the error message.</param>
+    /// <returns>The canonical kind, defaulting to <see cref="CueKinds.Any"/> for a blank argument.</returns>
+    /// <exception cref="ToolArgumentException">The value is not one of <see cref="CueKinds.Supported"/>.</exception>
+    /// <remarks>
+    /// Unlike <see cref="KindName"/> this keeps "any" rather than collapsing it to <see langword="null"/>: for a cue the
+    /// "any kind" request is itself a meaningful, selected value the retriever compares ordinally, not the absence of a
+    /// filter.
+    /// </remarks>
+    internal static string CueKindName(string? value, string toolName, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return CueKinds.Any;
+        }
+
+        var trimmed = value.Trim();
+
+        if (CueKinds.Supported.FirstOrDefault(candidate => string.Equals(candidate, trimmed, StringComparison.OrdinalIgnoreCase))
+            is { } canonical)
+        {
+            return canonical;
+        }
+
+        throw new ToolArgumentException(
+            toolName,
+            field,
+            $"must be one of {string.Join(", ", CueKinds.Supported)}, but was '{trimmed}'");
+    }
+
     private static string? ChoiceName(
         string? value,
         IReadOnlyList<string> allowed,
